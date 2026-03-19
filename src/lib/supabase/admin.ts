@@ -21,9 +21,6 @@ export function getSupabaseAdminClient() {
       persistSession: false,
       autoRefreshToken: false,
     },
-    db: {
-      schema: "public",
-    },
     global: {
       headers: {
         "X-Client-Info": "koaptix-home-frontend-starter",
