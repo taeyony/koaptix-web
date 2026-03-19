@@ -1,0 +1,24 @@
+/* [project]/src/app/globals.css [app-client] (css) */
+html {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*, :before, :after {
+  box-sizing: inherit;
+}
+
+body {
+  color: #0f172a;
+  background: #f8fafc;
+  margin: 0;
+  font-family: Inter, Pretendard, -apple-system, BlinkMacSystemFont, Segoe UI, Arial, sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/*# sourceMappingURL=src_app_globals_0p2ml0n.css.map*/

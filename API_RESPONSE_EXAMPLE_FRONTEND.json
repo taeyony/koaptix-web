@@ -1,0 +1,77 @@
+{
+  "ok": true,
+  "data": {
+    "indexCard": {
+      "snapshot_date": "2025-01-31",
+      "index_code": "KOAPTIX_SEOUL",
+      "universe_code": "SEOUL_ALL",
+      "index_name": "KOAPTIX 서울",
+      "base_date": "2024-07-31",
+      "base_value": 1000.0,
+      "index_value": 1084.2331,
+      "prev_month_snapshot_date": "2024-12-31",
+      "prev_month_index_value": 1072.5223,
+      "change_1m": 11.7108,
+      "change_pct_1m": 1.0919,
+      "movement_1m": "up",
+      "base_market_cap_krw": 432100000000000,
+      "total_market_cap_krw": 468767984455483,
+      "prev_month_total_market_cap_krw": 463718123000000,
+      "market_cap_change_1m": 5049861455483,
+      "market_cap_change_pct_1m": 1.0889,
+      "component_complex_count": 501
+    },
+    "chart": [
+      {
+        "snapshot_date": "2024-07-31",
+        "index_value": 1000.0,
+        "change_1m": null,
+        "change_pct_1m": null,
+        "total_market_cap_krw": 432100000000000,
+        "component_complex_count": 479
+      },
+      {
+        "snapshot_date": "2024-08-31",
+        "index_value": 1008.1333,
+        "change_1m": 8.1333,
+        "change_pct_1m": 0.8133,
+        "total_market_cap_krw": 435614000000000,
+        "component_complex_count": 484
+      },
+      {
+        "snapshot_date": "2024-09-30",
+        "index_value": 1019.5571,
+        "change_1m": 11.4238,
+        "change_pct_1m": 1.1331,
+        "total_market_cap_krw": 440549000000000,
+        "component_complex_count": 489
+      }
+    ],
+    "topRanks": [
+      {
+        "rank_all": 1,
+        "tier_code": "S",
+        "tier_label": "S-tier",
+        "complex_id": 4216,
+        "apt_name_ko": "반포자이",
+        "sigungu_name": "서초구",
+        "legal_dong_name": "반포동",
+        "address_road": "신반포로 219",
+        "address_jibun": "반포동 20-43",
+        "market_cap_krw": 15746987666765,
+        "market_cap_trillion_krw": 15.7469,
+        "market_cap_share_pct": 3.3592,
+        "previous_rank_all": 1,
+        "rank_delta_1d": 0,
+        "rank_movement": "same",
+        "priced_household_ratio": 0.82,
+        "coverage_status": "good"
+      }
+    ],
+    "topN": 50,
+    "chartPoints": 12,
+    "top50Count": 50,
+    "totalRankedComplexes": 501,
+    "fetchedAt": "2026-03-19T12:34:56.000Z"
+  }
+}

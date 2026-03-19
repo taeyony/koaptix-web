@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 1, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/taeyo/Desktop/business/koaptix-web/src/app/globals.css"],"sourcesContent":["html {\n  box-sizing: border-box;\n  -webkit-font-smoothing: antialiased;\n  -moz-osx-font-smoothing: grayscale;\n}\n\n*,\n*::before,\n*::after {\n  box-sizing: inherit;\n}\n\nbody {\n  margin: 0;\n  font-family:\n    Inter,\n    Pretendard,\n    -apple-system,\n    BlinkMacSystemFont,\n    \"Segoe UI\",\n    Arial,\n    sans-serif;\n  background: #f8fafc;\n  color: #0f172a;\n}\n\na {\n  color: inherit;\n  text-decoration: none;\n}\n"],"names":[],"mappings":"AAAA;;;;;;AAMA;;;;AAMA;;;;;;;AAcA"}}]
+}
