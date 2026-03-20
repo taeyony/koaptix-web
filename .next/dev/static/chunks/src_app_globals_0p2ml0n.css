@@ -79,6 +79,10 @@
   grid-template-columns: 40px minmax(0, 1fr) auto;
 }
 
+.grid-cols-\[44px_minmax\(0\,1fr\)_auto\] {
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+}
+
 .flex-col {
   flex-direction: column;
 }
@@ -117,6 +121,11 @@
 .border-b {
   border-bottom-style: var(--tw-border-style);
   border-bottom-width: 1px;
+}
+
+.border-dashed {
+  --tw-border-style: dashed;
+  border-style: dashed;
 }
 
 .bg-\[\#0b1118\] {
