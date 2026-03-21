@@ -1,81 +1,42 @@
 import { MarketChartCard } from "../components/home/MarketChartCard";
-import { RankingCard } from "../components/home/RankingCard";
-import { mapLatestRankBoardRows } from "../lib/koaptix/mappers";
-import { getLatestRankBoard } from "../lib/koaptix/queries";
+import { RankingBoardClient } from "../components/home/RankingBoardClient";
+import { mapLatestRankBoardRows, mapHomeKpiToKpiCards, mapIndexChartData } from "../lib/koaptix/mappers"; // 👈 매퍼 추가!
+import { getLatestRankBoard, getHomeKpi, getIndexChart } from "../lib/koaptix/queries";             // 👈 쿼리 추가!
 import type { HomePageData } from "../lib/koaptix/types";
 
 async function getHomeData(): Promise<HomePageData> {
   try {
-    const rankingRows = await getLatestRankBoard(50);
+    // 💡 잼이사의 비기 2탄: 랭킹, KPI, 차트 데이터를 '3개 동시(병렬)'에 가져옵니다! 속도 쾌감!
+    const [rankingRows, kpiRow, chartRows] = await Promise.all([
+      getLatestRankBoard(50),
+      getHomeKpi(),
+      getIndexChart(), // 👈 차트 일꾼 추가!
+    ]);
 
     return {
-      kpis: [
-        { label: "Market Cap", value: "1,239.74", subValue: "+4.39 (+0.36%)" },
-        { label: "Listed Units", value: "501개", subValue: "24년 7월 기준" },
-      ],
-      index: {
-        valueLabel: "1,239.74",
-        changePct: 0.36,
-        chartData: [
-          { label: "07.31", value: 1000 },
-          { label: "08.31", value: 1080 },
-          { label: "09.30", value: 1120 },
-          { label: "10.31", value: 1180 },
-          { label: "11.30", value: 1210 },
-          { label: "12.31", value: 1230 },
-          { label: "01.31", value: 1239 },
-        ],
-      },
+      kpis: mapHomeKpiToKpiCards(kpiRow),
+      index: mapIndexChartData(chartRows), // 👈 가짜 데이터를 지우고, 진짜 포장된 차트 데이터를 꽂습니다!
       rankings: mapLatestRankBoardRows(rankingRows),
       rankingsError: null,
     };
   } catch (error) {
-    console.error("[KOAPTIX] Failed to load latest rank board:", error);
-
+    console.error("[KOAPTIX] Failed to load home data:", error);
     return {
       kpis: [
-        { label: "Market Cap", value: "1,239.74", subValue: "+4.39 (+0.36%)" },
-        { label: "Listed Units", value: "501개", subValue: "24년 7월 기준" },
+        { label: "Market Cap", value: "ERROR", subValue: "데이터 연결 실패" },
+        { label: "Listed Units", value: "ERROR", subValue: "데이터 연결 실패" },
       ],
-      index: {
-        valueLabel: "1,239.74",
-        changePct: 0.36,
-        chartData: [
-          { label: "07.31", value: 1000 },
-          { label: "08.31", value: 1080 },
-          { label: "09.30", value: 1120 },
-          { label: "10.31", value: 1180 },
-          { label: "11.30", value: 1210 },
-          { label: "12.31", value: 1230 },
-          { label: "01.31", value: 1239 },
-        ],
-      },
+      index: { valueLabel: "-", changePct: 0, chartData: [] }, // 에러 시 빈 차트
       rankings: [],
-      rankingsError:
-        error instanceof Error
-          ? error.message
-          : "랭킹 데이터를 불러오지 못했습니다.",
+      rankingsError: error instanceof Error ? error.message : "데이터 로드 실패",
     };
   }
 }
 
+// ... 아래 export default async function Page() 부분은 기존과 동일하게 그대로 두시면 됩니다! ...
+
 export default async function Page() {
   const home = await getHomeData();
-
-  const rankingStatus = home.rankingsError
-    ? {
-        label: "DB ERROR",
-        className: "border-rose-400/20 bg-rose-400/10 text-rose-300",
-      }
-    : home.rankings.length > 0
-      ? {
-          label: "LIVE",
-          className: "border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
-        }
-      : {
-          label: "EMPTY",
-          className: "border-amber-400/20 bg-amber-400/10 text-amber-300",
-        };
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#05070b] text-[#eaf2ff]">
@@ -132,41 +93,7 @@ export default async function Page() {
           </div>
 
           <div className="min-w-0 lg:col-span-5">
-            <section className="overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_50px_rgba(0,0,0,0.3)]">
-              <div className="border-b border-white/5 px-3 py-3 sm:px-4 sm:py-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/70 sm:text-xs">
-                        LEADERS BOARD
-                      </p>
-                      <span
-                        className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium tracking-[0.18em] ${rankingStatus.className}`}
-                      >
-                        {rankingStatus.label}
-                      </span>
-                    </div>
-                    <h2 className="mt-1 truncate text-lg font-semibold tracking-tight sm:text-xl">
-                      Top 50 Rankings
-                    </h2>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-2 p-2 sm:gap-3 sm:p-3 lg:max-h-[600px] lg:overflow-y-auto">
-                {home.rankings.length > 0 ? (
-                  home.rankings.map((item) => (
-                    <RankingCard key={item.complexId} item={item} />
-                  ))
-                ) : (
-                  <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55">
-                    {home.rankingsError
-                      ? "랭킹 데이터를 불러오지 못했다. Supabase env, view 접근 권한, RLS를 점검해라."
-                      : "현재 표시할 랭킹 데이터가 없다."}
-                  </div>
-                )}
-              </div>
-            </section>
+            <RankingBoardClient items={home.rankings} />
           </div>
         </section>
       </div>
