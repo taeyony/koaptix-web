@@ -88,6 +88,6 @@ export type DbHomeKpiRow = {
   base_date: string | null;
 };
 export type DbIndexChartRow = {
-  date_label: string | null;
-  index_value: number | null;
+  snapshot_date: string | null;
+  total_market_cap: number | null;
 };

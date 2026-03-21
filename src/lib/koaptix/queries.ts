@@ -96,9 +96,9 @@ import type { DbIndexChartRow } from "./types";
 export async function getIndexChart(): Promise<DbIndexChartRow[]> {
   const supabase = createServerSupabase();
   const { data, error } = await supabase
-    .from("v_koaptix_index_chart")
+    .from("v_koaptix_total_market_cap_history") // 👈 지차장이 만든 최신 시계열 뷰로 교체!
     .select("*")
-    .order("date_label", { ascending: true });
+    .order("snapshot_date", { ascending: true });
 
   if (error) {
     console.error("Failed to fetch chart data:", error);

@@ -162,13 +162,14 @@ export function mapIndexChartData(rows: DbIndexChartRow[]) {
 
   // 1. 차트에 들어갈 [날짜, 값] 배열 만들기
   const chartData = rows.map((row) => {
-    const d = row.date_label ? new Date(row.date_label) : new Date();
-    // "01.31" 형태로 날짜 포맷팅
+    const d = row.snapshot_date ? new Date(row.snapshot_date) : new Date();
     const label = `${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
-    return {
-      label,
-      value: Number(row.index_value) || 0,
-    };
+    
+    // 💡 시가총액 원 단위를 '조' 단위로 변환해서 차트에 꽂습니다!
+    const TRILLION = 1_000_000_000_000;
+    const value = row.total_market_cap ? Number(row.total_market_cap) / TRILLION : 0;
+    
+    return { label, value };
   });
 
   // 2. 최신 지수 및 전일 대비 증감률(%) 계산
@@ -183,7 +184,7 @@ export function mapIndexChartData(rows: DbIndexChartRow[]) {
   }
 
   return {
-    valueLabel: latestValue.toFixed(2), // 소수점 2자리까지
+    valueLabel: latestValue.toFixed(2), // 예: 468.77
     changePct: Number(changePct.toFixed(2)),
     chartData,
   };

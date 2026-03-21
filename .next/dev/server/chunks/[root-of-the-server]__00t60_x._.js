@@ -112,7 +112,8 @@ async function getHomeKpi() {
 }
 async function getIndexChart() {
     const supabase = createServerSupabase();
-    const { data, error } = await supabase.from("v_koaptix_index_chart").select("*").order("date_label", {
+    const { data, error } = await supabase.from("v_koaptix_total_market_cap_history") // 👈 지차장이 만든 최신 시계열 뷰로 교체!
+    .select("*").order("snapshot_date", {
         ascending: true
     });
     if (error) {
@@ -295,12 +296,14 @@ function mapIndexChartData(rows) {
     }
     // 1. 차트에 들어갈 [날짜, 값] 배열 만들기
     const chartData = rows.map((row)=>{
-        const d = row.date_label ? new Date(row.date_label) : new Date();
-        // "01.31" 형태로 날짜 포맷팅
+        const d = row.snapshot_date ? new Date(row.snapshot_date) : new Date();
         const label = `${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+        // 💡 시가총액 원 단위를 '조' 단위로 변환해서 차트에 꽂습니다!
+        const TRILLION = 1_000_000_000_000;
+        const value = row.total_market_cap ? Number(row.total_market_cap) / TRILLION : 0;
         return {
             label,
-            value: Number(row.index_value) || 0
+            value
         };
     });
     // 2. 최신 지수 및 전일 대비 증감률(%) 계산

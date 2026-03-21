@@ -39,14 +39,6 @@
   position: relative;
 }
 
-.isolate {
-  isolation: isolate;
-}
-
-.z-\[9999\] {
-  z-index: 9999;
-}
-
 .mx-auto {
   margin-inline: auto;
 }
@@ -71,20 +63,8 @@
   height: 100%;
 }
 
-.max-h-\[85vh\] {
-  max-height: 85vh;
-}
-
-.max-h-\[calc\(85vh-100px\)\] {
-  max-height: calc(85vh - 100px);
-}
-
 .min-h-screen {
   min-height: 100vh;
-}
-
-.w-4\/5 {
-  width: 80%;
 }
 
 .w-full {
@@ -123,10 +103,6 @@
   align-items: flex-end;
 }
 
-.items-start {
-  align-items: flex-start;
-}
-
 .justify-between {
   justify-content: space-between;
 }
@@ -153,10 +129,6 @@
   overflow-y: auto;
 }
 
-.rounded-full {
-  border-radius: 3.40282e38px;
-}
-
 .border {
   border-style: var(--tw-border-style);
   border-width: 1px;
@@ -174,11 +146,6 @@
 
 .bg-\[\#0b1118\] {
   background-color: #0b1118;
-}
-
-.bg-\[\#0b1118\]\/95 {
-  background-color: #0b1118f2;
-  background-color: lab(4.80257% -.814669 -5.14644 / .95);
 }
 
 .bg-\[\#05070b\] {
@@ -228,11 +195,6 @@
   font-variant-numeric: var(--tw-ordinal, ) var(--tw-slashed-zero, ) var(--tw-numeric-figure, ) var(--tw-numeric-spacing, ) var(--tw-numeric-fraction, );
 }
 
-.shadow-\[0_-10px_50px_rgba\(0\,0\,0\,0\.45\)\] {
-  --tw-shadow: 0 -10px 50px var(--tw-shadow-color, #00000073);
-  box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
-}
-
 .shadow-\[0_0_0_1px_rgba\(255\,255\,255\,0\.03\)\,0_18px_50px_rgba\(0\,0\,0\,0\.3\)\] {
   --tw-shadow: 0 0 0 1px var(--tw-shadow-color, #ffffff08), 0 18px 50px var(--tw-shadow-color, #0000004d);
   box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
@@ -249,20 +211,9 @@
   transition-duration: var(--tw-duration, 0s);
 }
 
-.transition-opacity {
-  transition-property: opacity;
-  transition-timing-function: var(--tw-ease, ease);
-  transition-duration: var(--tw-duration, 0s);
-}
-
 .outline-none {
   --tw-outline-style: none;
   outline-style: none;
-}
-
-.last\:border-b-0:last-child {
-  border-bottom-style: var(--tw-border-style);
-  border-bottom-width: 0;
 }
 
 @media (hover: hover) {
