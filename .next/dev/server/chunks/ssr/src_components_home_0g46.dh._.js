@@ -400,51 +400,38 @@ function formatMarketCapKrw(value) {
     if (!Number.isFinite(value) || value <= 0) return "-";
     const TRILLION = 1_000_000_000_000;
     const HUNDRED_MILLION = 100_000_000;
-    if (value >= TRILLION) {
-        const amount = value / TRILLION;
-        const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
-        return `${amount.toFixed(digits)}조원`;
-    }
-    if (value >= HUNDRED_MILLION) {
-        const amount = value / HUNDRED_MILLION;
-        const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
-        return `${amount.toFixed(digits)}억원`;
-    }
+    if (value >= TRILLION) return `${(value / TRILLION).toFixed(value / TRILLION >= 100 ? 0 : value / TRILLION >= 10 ? 1 : 2)}조원`;
+    if (value >= HUNDRED_MILLION) return `${(value / HUNDRED_MILLION).toFixed(value / HUNDRED_MILLION >= 100 ? 0 : value / HUNDRED_MILLION >= 10 ? 1 : 2)}억원`;
     return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
 function formatCount(value) {
-    if (value == null) return "-";
-    return `${new Intl.NumberFormat("ko-KR").format(value)}개`;
+    return value == null ? "-" : `${new Intl.NumberFormat("ko-KR").format(value)}개`;
 }
 function formatPlainNumber(value) {
-    if (value == null) return "-";
-    return new Intl.NumberFormat("ko-KR").format(value);
+    return value == null ? "-" : new Intl.NumberFormat("ko-KR").format(value);
 }
 function formatYear(value) {
-    if (value == null) return "-";
-    return `${value}년`;
+    return value == null ? "-" : `${value}년`;
 }
 function formatUpdatedAt(value) {
     if (!value) return "-";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "-";
-    return new Intl.DateTimeFormat("ko-KR", {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? "-" : new Intl.DateTimeFormat("ko-KR", {
         year: "numeric",
         month: "2-digit",
         day: "2-digit"
-    }).format(date);
+    }).format(d);
 }
 function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
-    const [mounted, setMounted] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(false);
-    (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useEffect"])(()=>{
-        setMounted(true);
-    }, []);
+    const [sharePending, setSharePending] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(false);
+    const [toast, setToast] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(null);
+    const toastTimerRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useRef"])(null);
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useEffect"])(()=>{
         if (!open) return;
         const prevOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
-        const onKeyDown = (event)=>{
-            if (event.key === "Escape") onClose();
+        const onKeyDown = (e)=>{
+            if (e.key === "Escape") onClose();
         };
         window.addEventListener("keydown", onKeyDown);
         return ()=>{
@@ -455,7 +442,22 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
         open,
         onClose
     ]);
-    if (!open || !item || !mounted) return null;
+    function showToast(message, tone) {
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        setToast({
+            message,
+            tone
+        });
+        toastTimerRef.current = setTimeout(()=>setToast(null), 2200);
+    }
+    async function handleShare() {
+        if ("TURBOPACK compile-time truthy", 1) return;
+        //TURBOPACK unreachable
+        ;
+        const shareTitle = undefined;
+        const shareUrl = undefined;
+    }
+    if (!open || !item) return null;
     const title = detail?.name ?? item.name;
     const location = detail?.locationLabel ?? item.locationLabel ?? "위치 정보 없음";
     const rank = detail?.rank ?? item.rank;
@@ -486,7 +488,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                 onClick: onClose
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 83,
+                lineNumber: 91,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
@@ -525,7 +527,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                         children: "COMPLEX DETAIL"
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 89,
+                                        lineNumber: 97,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -537,7 +539,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                         children: title
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 90,
+                                        lineNumber: 98,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -549,35 +551,110 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                         children: location
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 91,
+                                        lineNumber: 99,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                lineNumber: 88,
+                                lineNumber: 96,
                                 columnNumber: 11
                             }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                                onClick: onClose,
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 style: {
-                                    padding: '8px 16px',
-                                    backgroundColor: 'rgba(255,255,255,0.1)',
-                                    borderRadius: '8px',
-                                    color: 'white',
-                                    border: 'none',
-                                    cursor: 'pointer'
+                                    display: 'flex',
+                                    gap: '8px'
                                 },
-                                children: "닫기"
-                            }, void 0, false, {
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                        onClick: handleShare,
+                                        disabled: sharePending,
+                                        style: {
+                                            padding: '8px 16px',
+                                            backgroundColor: 'rgba(103,232,249,0.1)',
+                                            border: '1px solid rgba(103,232,249,0.2)',
+                                            borderRadius: '8px',
+                                            color: '#cffafe',
+                                            cursor: sharePending ? 'not-allowed' : 'pointer',
+                                            fontWeight: 'bold',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                        },
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
+                                                width: "16",
+                                                height: "16",
+                                                viewBox: "0 0 24 24",
+                                                fill: "none",
+                                                stroke: "currentColor",
+                                                strokeWidth: "2",
+                                                strokeLinecap: "round",
+                                                strokeLinejoin: "round",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
+                                                        d: "M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                        lineNumber: 103,
+                                                        columnNumber: 158
+                                                    }, this),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("polyline", {
+                                                        points: "16 6 12 2 8 6"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                        lineNumber: 103,
+                                                        columnNumber: 217
+                                                    }, this),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("line", {
+                                                        x1: "12",
+                                                        y1: "2",
+                                                        x2: "12",
+                                                        y2: "15"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                        lineNumber: 103,
+                                                        columnNumber: 261
+                                                    }, this)
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                lineNumber: 103,
+                                                columnNumber: 15
+                                            }, this),
+                                            sharePending ? "공유 중..." : "공유하기"
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                        lineNumber: 102,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                        onClick: onClose,
+                                        style: {
+                                            padding: '8px 16px',
+                                            backgroundColor: 'rgba(255,255,255,0.1)',
+                                            borderRadius: '8px',
+                                            color: 'white',
+                                            border: 'none',
+                                            cursor: 'pointer'
+                                        },
+                                        children: "닫기"
+                                    }, void 0, false, {
+                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                        lineNumber: 106,
+                                        columnNumber: 13
+                                    }, this)
+                                ]
+                            }, void 0, true, {
                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                lineNumber: 93,
+                                lineNumber: 101,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                        lineNumber: 87,
+                        lineNumber: 95,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -604,7 +681,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                         children: "현재 순위"
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 98,
+                                        lineNumber: 112,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -619,13 +696,13 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 99,
+                                        lineNumber: 113,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                lineNumber: 97,
+                                lineNumber: 111,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -644,7 +721,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                         children: "시가총액"
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 102,
+                                        lineNumber: 116,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -656,19 +733,19 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                         children: formatMarketCapKrw(marketCap)
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 103,
+                                        lineNumber: 117,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                lineNumber: 101,
+                                lineNumber: 115,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                        lineNumber: 96,
+                        lineNumber: 110,
                         columnNumber: 9
                     }, this),
                     error ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -682,7 +759,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                         children: error
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                        lineNumber: 107,
+                        lineNumber: 121,
                         columnNumber: 18
                     }, this) : null,
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -701,7 +778,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                             children: "상세 데이터를 불러오는 중입니다..."
                         }, void 0, false, {
                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                            lineNumber: 111,
+                            lineNumber: 125,
                             columnNumber: 13
                         }, this) : detail ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                             style: {
@@ -725,7 +802,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                             children: "세대수"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 115,
+                                            lineNumber: 129,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -735,13 +812,13 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                             children: formatCount(detail.householdCount)
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 115,
+                                            lineNumber: 129,
                                             columnNumber: 62
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                    lineNumber: 114,
+                                    lineNumber: 128,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -759,7 +836,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                             children: "준공연도"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 118,
+                                            lineNumber: 132,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -769,13 +846,13 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                             children: formatYear(detail.approvalYear)
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 118,
+                                            lineNumber: 132,
                                             columnNumber: 63
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                    lineNumber: 117,
+                                    lineNumber: 131,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -793,7 +870,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                             children: "주차대수"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 121,
+                                            lineNumber: 135,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -803,13 +880,13 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                             children: formatCount(detail.parkingCount)
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 121,
+                                            lineNumber: 135,
                                             columnNumber: 63
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                    lineNumber: 120,
+                                    lineNumber: 134,
                                     columnNumber: 15
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -825,7 +902,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                             children: "데이터 기준일"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 124,
+                                            lineNumber: 138,
                                             columnNumber: 17
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -835,19 +912,19 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                             children: formatUpdatedAt(detail.updatedAt)
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 124,
+                                            lineNumber: 138,
                                             columnNumber: 66
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                    lineNumber: 123,
+                                    lineNumber: 137,
                                     columnNumber: 15
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                            lineNumber: 113,
+                            lineNumber: 127,
                             columnNumber: 13
                         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                             style: {
@@ -858,24 +935,46 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                             children: "상세 데이터가 없습니다."
                         }, void 0, false, {
                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                            lineNumber: 128,
+                            lineNumber: 142,
                             columnNumber: 13
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                        lineNumber: 109,
+                        lineNumber: 123,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 85,
+                lineNumber: 93,
                 columnNumber: 7
+            }, this),
+            toast && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                style: {
+                    position: 'fixed',
+                    bottom: '24px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 9999999,
+                    padding: '12px 24px',
+                    borderRadius: '30px',
+                    backgroundColor: toast.tone === 'success' ? '#047857' : '#be123c',
+                    color: 'white',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+                    transition: 'all 0.3s ease'
+                },
+                children: toast.message
+            }, void 0, false, {
+                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                lineNumber: 149,
+                columnNumber: 9
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-        lineNumber: 81,
+        lineNumber: 90,
         columnNumber: 5
     }, this);
 }
@@ -889,9 +988,11 @@ __turbopack_context__.s([
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime.js [app-ssr] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react.js [app-ssr] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/navigation.js [app-ssr] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$home$2f$RankingCard$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/components/home/RankingCard.tsx [app-ssr] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$home$2f$ComplexDetailSheet$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/components/home/ComplexDetailSheet.tsx [app-ssr] (ecmascript)");
 "use client";
+;
 ;
 ;
 ;
@@ -914,12 +1015,29 @@ const SORT_OPTIONS = [
         label: "이름순"
     }
 ];
-function RankingBoardClient({ items: initialItems }) {
-    const [items, setItems] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(initialItems);
-    const [loadingMore, setLoadingMore] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(false);
-    const [hasMore, setHasMore] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(initialItems.length >= 40);
+function createFallbackItem(complexId) {
+    return {
+        complexId,
+        name: "단지 정보 불러오는 중",
+        rank: 0,
+        marketCapKrw: 0,
+        marketCapTrillionKrw: null,
+        rankDelta1d: 0,
+        sigunguName: "",
+        legalDongName: "",
+        locationLabel: "",
+        searchText: complexId.toLowerCase()
+    };
+}
+function RankingBoardClient({ items, boardError = null }) {
+    const pathname = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["usePathname"])();
+    const searchParams = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useSearchParams"])();
+    const searchParamsKey = searchParams.toString();
+    const complexIdFromUrl = searchParams.get("complexId");
     const [query, setQuery] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])("");
     const [sortKey, setSortKey] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])("rank_asc");
+    // 💡 잼이사가 살려낸 지역 필터!
+    const [districtFilter, setDistrictFilter] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])("전체");
     const [sheetOpen, setSheetOpen] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(false);
     const [selectedItem, setSelectedItem] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(null);
     const [detail, setDetail] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(null);
@@ -931,11 +1049,27 @@ function RankingBoardClient({ items: initialItems }) {
             abortRef.current?.abort();
         };
     }, []);
+    // 💡 잼이사가 살려낸 구(District) 추출 로직!
+    const uniqueDistricts = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useMemo"])(()=>{
+        const districts = new Set();
+        items.forEach((item)=>{
+            const gu = item.locationLabel?.split(' ')[0];
+            if (gu && gu.endsWith('구')) districts.add(gu);
+        });
+        return [
+            "전체",
+            ...Array.from(districts).sort()
+        ];
+    }, [
+        items
+    ]);
     const normalizedQuery = query.trim().toLowerCase();
     const filteredItems = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useMemo"])(()=>{
         const searched = items.filter((item)=>{
-            if (!normalizedQuery) return true;
-            return item.searchText.includes(normalizedQuery);
+            if (normalizedQuery && !item.searchText.includes(normalizedQuery)) return false;
+            // 💡 잼이사가 살려낸 필터 적용 로직!
+            if (districtFilter !== "전체" && !item.locationLabel.startsWith(districtFilter)) return false;
+            return true;
         });
         return [
             ...searched
@@ -955,110 +1089,176 @@ function RankingBoardClient({ items: initialItems }) {
     }, [
         items,
         normalizedQuery,
+        districtFilter,
         sortKey
     ]);
-    async function loadMore() {
-        if (loadingMore || !hasMore) return;
-        setLoadingMore(true);
-        try {
-            const response = await fetch(`/api/rankings?offset=${items.length}&limit=50`);
-            const payload = await response.json();
-            if (payload.data) {
-                setItems((prev)=>[
-                        ...prev,
-                        ...payload.data
-                    ]);
-                if (payload.data.length < 50) {
-                    setHasMore(false);
-                }
-            }
-        } catch (error) {
-            console.error("더보기 로딩 실패:", error);
-        } finally{
-            setLoadingMore(false);
-        }
-    }
-    async function openDetail(item) {
+    const buildUrlWithComplexId = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useCallback"])((complexId)=>{
+        const nextParams = new URLSearchParams(searchParamsKey);
+        nextParams.set("complexId", complexId);
+        const queryString = nextParams.toString();
+        return queryString ? `${pathname}?${queryString}` : pathname;
+    }, [
+        pathname,
+        searchParamsKey
+    ]);
+    const buildUrlWithoutComplexId = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useCallback"])(()=>{
+        const nextParams = new URLSearchParams(searchParamsKey);
+        nextParams.delete("complexId");
+        const queryString = nextParams.toString();
+        return queryString ? `${pathname}?${queryString}` : pathname;
+    }, [
+        pathname,
+        searchParamsKey
+    ]);
+    const requestDetail = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useCallback"])(async (complexId)=>{
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const response = await fetch(`/api/complex-detail?complexId=${encodeURIComponent(complexId)}`, {
+            method: "GET",
+            signal: controller.signal,
+            cache: "no-store"
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error ?? "상세 정보를 불러오지 못했다.");
+        return payload.data;
+    }, []);
+    const openDetailByItem = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useCallback"])(async (item, options = {})=>{
+        const { syncUrl = true } = options;
+        if (sheetOpen && selectedItem?.complexId === item.complexId) return;
         setSelectedItem(item);
         setDetail(null);
         setDetailError(null);
         setDetailLoading(true);
         setSheetOpen(true);
-        abortRef.current?.abort();
-        const controller = new AbortController();
-        abortRef.current = controller;
+        if (syncUrl) {
+            const nextUrl = buildUrlWithComplexId(item.complexId);
+            const currentUrl = `${window.location.pathname}${window.location.search}`;
+            if (currentUrl !== nextUrl) window.history.pushState(null, "", nextUrl);
+        }
         try {
-            const response = await fetch(`/api/complex-detail?complexId=${encodeURIComponent(item.complexId)}`, {
-                method: "GET",
-                signal: controller.signal
-            });
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.error ?? "상세 정보를 불러오지 못했다.");
-            setDetail(payload.data ?? null);
+            const nextDetail = await requestDetail(item.complexId);
+            setDetail(nextDetail);
         } catch (error) {
             if (error instanceof DOMException && error.name === "AbortError") return;
             setDetailError(error instanceof Error ? error.message : "상세 정보를 불러오지 못했다.");
         } finally{
-            if (!controller.signal.aborted) setDetailLoading(false);
+            setDetailLoading(false);
         }
-    }
-    function closeDetail() {
+    }, [
+        buildUrlWithComplexId,
+        requestDetail,
+        selectedItem?.complexId,
+        sheetOpen
+    ]);
+    const openDetailByComplexId = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useCallback"])(async (complexId, options = {})=>{
+        const targetItem = items.find((item)=>item.complexId === complexId) ?? createFallbackItem(complexId);
+        await openDetailByItem(targetItem, options);
+    }, [
+        items,
+        openDetailByItem
+    ]);
+    const closeDetail = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useCallback"])((options = {})=>{
+        const { syncUrl = true } = options;
+        abortRef.current?.abort();
         setSheetOpen(false);
-    }
+        setSelectedItem(null);
+        setDetail(null);
+        setDetailError(null);
+        setDetailLoading(false);
+        if (syncUrl) {
+            const nextUrl = buildUrlWithoutComplexId();
+            const currentUrl = `${window.location.pathname}${window.location.search}`;
+            if (currentUrl !== nextUrl) window.history.replaceState(null, "", nextUrl);
+        }
+    }, [
+        buildUrlWithoutComplexId
+    ]);
+    (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useEffect"])(()=>{
+        if (!complexIdFromUrl) {
+            if (sheetOpen || selectedItem) closeDetail({
+                syncUrl: false
+            });
+            return;
+        }
+        if (sheetOpen && selectedItem?.complexId === complexIdFromUrl) return;
+        void openDetailByComplexId(complexIdFromUrl, {
+            syncUrl: false
+        });
+    }, [
+        closeDetail,
+        complexIdFromUrl,
+        openDetailByComplexId,
+        selectedItem,
+        sheetOpen
+    ]);
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
-                className: "overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_50px_rgba(0,0,0,0.3)] flex flex-col h-full lg:max-h-[800px]",
+                className: "overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_50px_rgba(0,0,0,0.3)]",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "border-b border-white/5 px-3 py-3 sm:px-4 sm:py-4 shrink-0",
+                        className: "border-b border-white/5 px-3 py-3 sm:px-4 sm:py-4",
                         children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                             className: "flex flex-col gap-3",
                             children: [
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: "min-w-0",
                                     children: [
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                            className: "text-[11px] uppercase tracking-[0.24em] text-cyan-300/70 sm:text-xs",
-                                            children: "LEADERS BOARD"
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 110,
-                                            columnNumber: 15
-                                        }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                                             className: "mt-1 truncate text-lg font-semibold tracking-tight sm:text-xl",
                                             children: "KOAPTIX 500 Rankings"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 111,
+                                            lineNumber: 161,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                             className: "mt-1 text-xs text-white/45 sm:text-sm",
-                                            children: "단지명·구·동 즉시 검색 / 클릭 시 상세 바텀 시트"
+                                            children: "단지명·구·동 즉시 검색 / 클릭 시 URL 동기화"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 112,
+                                            lineNumber: 162,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                    lineNumber: 109,
+                                    lineNumber: 160,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    className: "grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px]",
+                                    className: "grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_120px]",
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
                                             value: query,
                                             onChange: (e)=>setQuery(e.target.value),
-                                            placeholder: "단지명, 구, 동 검색 (현재 로드된 단지 내)",
-                                            className: "h-11 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-cyan-300/40"
+                                            placeholder: "단지명, 구, 동 검색",
+                                            className: "h-11 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-cyan-300/40"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 115,
+                                            lineNumber: 166,
+                                            columnNumber: 15
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
+                                            value: districtFilter,
+                                            onChange: (e)=>setDistrictFilter(e.target.value),
+                                            className: "h-11 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-cyan-300/40",
+                                            children: uniqueDistricts.map((gu)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
+                                                    value: gu,
+                                                    style: {
+                                                        backgroundColor: "#0b1118",
+                                                        color: "#ffffff"
+                                                    },
+                                                    children: gu
+                                                }, gu, false, {
+                                                    fileName: "[project]/src/components/home/RankingBoardClient.tsx",
+                                                    lineNumber: 171,
+                                                    columnNumber: 19
+                                                }, this))
+                                        }, void 0, false, {
+                                            fileName: "[project]/src/components/home/RankingBoardClient.tsx",
+                                            lineNumber: 169,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -1067,22 +1267,25 @@ function RankingBoardClient({ items: initialItems }) {
                                             className: "h-11 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-cyan-300/40",
                                             children: SORT_OPTIONS.map((option)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
                                                     value: option.value,
-                                                    className: "bg-[#0b1118]",
+                                                    style: {
+                                                        backgroundColor: "#0b1118",
+                                                        color: "#ffffff"
+                                                    },
                                                     children: option.label
                                                 }, option.value, false, {
                                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                                    lineNumber: 127,
+                                                    lineNumber: 177,
                                                     columnNumber: 19
                                                 }, this))
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 121,
+                                            lineNumber: 175,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                    lineNumber: 114,
+                                    lineNumber: 165,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1090,99 +1293,80 @@ function RankingBoardClient({ items: initialItems }) {
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                             children: [
-                                                "검색 결과 ",
+                                                "표시 ",
                                                 filteredItems.length,
                                                 "개"
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 132,
+                                            lineNumber: 183,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                             children: [
-                                                "현재 로드됨 ",
+                                                "전체 ",
                                                 items.length,
                                                 "개"
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 133,
+                                            lineNumber: 184,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                    lineNumber: 131,
+                                    lineNumber: 182,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                            lineNumber: 108,
+                            lineNumber: 159,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                        lineNumber: 107,
+                        lineNumber: 158,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "flex-1 overflow-y-auto p-2 sm:p-3 space-y-2 sm:space-y-3",
-                        children: [
-                            filteredItems.length > 0 ? filteredItems.map((item)=>{
-                                const isActive = sheetOpen && selectedItem?.complexId === item.complexId;
-                                return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    role: "button",
-                                    tabIndex: 0,
-                                    onClick: ()=>openDetail(item),
-                                    onKeyDown: (e)=>{
-                                        if (e.key === "Enter" || e.key === " ") {
-                                            e.preventDefault();
-                                            void openDetail(item);
-                                        }
-                                    },
-                                    className: `rounded-xl outline-none transition ${isActive ? "ring-2 ring-cyan-300/50" : "hover:ring-1 hover:ring-white/10 focus-visible:ring-2 focus-visible:ring-cyan-300/50"}`,
-                                    children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$home$2f$RankingCard$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["RankingCard"], {
-                                        item: item
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                        lineNumber: 155,
-                                        columnNumber: 19
-                                    }, this)
-                                }, item.complexId, false, {
+                        className: "grid grid-cols-1 gap-2 p-2 sm:gap-3 sm:p-3 lg:max-h-[600px] lg:overflow-y-auto",
+                        children: filteredItems.length > 0 ? filteredItems.map((item)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                role: "button",
+                                tabIndex: 0,
+                                onClick: ()=>void openDetailByItem(item, {
+                                        syncUrl: true
+                                    }),
+                                className: "rounded-xl outline-none transition hover:ring-1 hover:ring-white/10 cursor-pointer",
+                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$home$2f$RankingCard$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["RankingCard"], {
+                                    item: item
+                                }, void 0, false, {
                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                    lineNumber: 143,
+                                    lineNumber: 193,
                                     columnNumber: 17
-                                }, this);
-                            }) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55 text-center",
-                                children: "검색 결과가 없습니다."
-                            }, void 0, false, {
+                                }, this)
+                            }, item.complexId, false, {
                                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                lineNumber: 160,
-                                columnNumber: 13
-                            }, this),
-                            hasMore && !query && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                                onClick: loadMore,
-                                disabled: loadingMore,
-                                className: "w-full mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/10 py-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400/20 disabled:opacity-50",
-                                children: loadingMore ? "데이터를 불러오는 중입니다..." : "더보기 (Load More)"
-                            }, void 0, false, {
-                                fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                lineNumber: 166,
-                                columnNumber: 13
-                            }, this)
-                        ]
-                    }, void 0, true, {
+                                lineNumber: 192,
+                                columnNumber: 15
+                            }, this)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            className: "rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55 text-center",
+                            children: "검색 결과가 없습니다."
+                        }, void 0, false, {
+                            fileName: "[project]/src/components/home/RankingBoardClient.tsx",
+                            lineNumber: 197,
+                            columnNumber: 13
+                        }, this)
+                    }, void 0, false, {
                         fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                        lineNumber: 138,
+                        lineNumber: 189,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                lineNumber: 106,
+                lineNumber: 157,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$home$2f$ComplexDetailSheet$2e$tsx__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["ComplexDetailSheet"], {
@@ -1191,10 +1375,12 @@ function RankingBoardClient({ items: initialItems }) {
                 detail: detail,
                 loading: detailLoading,
                 error: detailError,
-                onClose: closeDetail
+                onClose: ()=>closeDetail({
+                        syncUrl: true
+                    })
             }, void 0, false, {
                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                lineNumber: 177,
+                lineNumber: 202,
                 columnNumber: 7
             }, this)
         ]
