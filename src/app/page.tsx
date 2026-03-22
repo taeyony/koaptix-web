@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react"; // 💡 잼이사가 추가한 부분 1: 방어막 부품 가져오기
 import { MarketChartCard } from "../components/home/MarketChartCard";
 import { RankingBoardClient } from "../components/home/RankingBoardClient";
 import { buildComplexMetadata } from "../lib/koaptix/metadata";
@@ -19,7 +20,6 @@ export async function generateMetadata({ searchParams }: { searchParams?: HomeSe
 
 async function getHomeData(): Promise<HomePageData> {
   try {
-    // 💡 잼이사가 복구한 실데이터 3종 세트 병합 로직!
     const [rankingRows, kpiRow, chartRows] = await Promise.all([
       getLatestRankBoard(50),
       getHomeKpi(),
@@ -76,7 +76,10 @@ export default async function Page() {
             <MarketChartCard title="KOAPTIX 500" valueLabel={home.index.valueLabel} changePct={home.index.changePct} data={home.index.chartData} />
           </div>
           <div className="min-w-0 lg:col-span-5">
-            <RankingBoardClient items={home.rankings} boardError={home.rankingsError ?? null} />
+            {/* 💡 잼이사가 추가한 부분 2: 랭킹 보드 주변에 Suspense 방어막 치기! */}
+            <Suspense fallback={<div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-10 text-center text-sm text-white/55">랭킹 보드 로딩 중...</div>}>
+              <RankingBoardClient items={home.rankings} boardError={home.rankingsError ?? null} />
+            </Suspense>
           </div>
         </section>
       </div>
