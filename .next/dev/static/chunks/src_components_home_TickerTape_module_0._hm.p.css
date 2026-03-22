@@ -1,0 +1,61 @@
+/* [project]/src/components/home/TickerTape.module.css [app-client] (css) */
+.TickerTape-module__0nKooW__viewport {
+  flex: auto;
+  position: relative;
+  overflow: hidden;
+}
+
+.TickerTape-module__0nKooW__track {
+  will-change: transform;
+  width: max-content;
+  animation: 38s linear infinite TickerTape-module__0nKooW__tickerTape;
+  display: flex;
+}
+
+.TickerTape-module__0nKooW__group {
+  flex-shrink: 0;
+  align-items: center;
+  display: flex;
+}
+
+.TickerTape-module__0nKooW__item {
+  white-space: nowrap;
+  border-right: 1px solid #67e8f924;
+  align-items: center;
+  gap: .75rem;
+  margin-right: 1.75rem;
+  padding-right: 1.75rem;
+  display: flex;
+}
+
+.TickerTape-module__0nKooW__dot {
+  background: #6ee7b7;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  width: .42rem;
+  height: .42rem;
+  box-shadow: 0 0 14px #6ee7b7f2;
+}
+
+.TickerTape-module__0nKooW__track:hover {
+  animation-play-state: paused;
+}
+
+@keyframes TickerTape-module__0nKooW__tickerTape {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .TickerTape-module__0nKooW__track {
+    animation: none;
+    transform: translateX(0);
+  }
+}
+
+/*# sourceMappingURL=src_components_home_TickerTape_module_0._hm.p.css.map*/
