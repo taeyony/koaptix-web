@@ -1,9 +1,5 @@
-/* Tailwind 디자인 엔진을 깨우는 마법의 주문 3줄 */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-/* 잼이사의 보험: 테일윈드가 졸고 있어도 강제로 칠해버리는 기본 배경색! */
 body {
   background-color: #05070b;
   color: #eaf2ff;

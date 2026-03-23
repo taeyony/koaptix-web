@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 1, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/taeyo/Desktop/business/koaptix-web/src/app/globals.css"],"sourcesContent":["@import \"tailwindcss\";\n\nbody {\n  background-color: #05070b;\n  color: #eaf2ff;\n}"],"names":[],"mappings":"AAEA"}}]
+}
