@@ -2,18 +2,17 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { HapiPhilosophyTrigger } from "../components/home/HapiPhilosophyTrigger";
 import { MarketChartCard } from "../components/home/MarketChartCard";
-import { MarketHeatmap } from "../components/home/MarketHeatmap"; // 💡 신규 부품 1
+import { MarketHeatmap } from "../components/home/MarketHeatmap";
 import { RankingBoardClient } from "../components/home/RankingBoardClient";
 import { TickerTape } from "../components/home/TickerTape";
-import { TopMovers } from "../components/home/TopMovers"; // 💡 신규 부품 2
-import { buildComplexMetadata } from "../lib/koaptix/metadata";
+import { TopMovers } from "../components/home/TopMovers";
 
-// 🚨 잼이사가 사수한 찐 데이터 파이프라인!
+import { buildComplexMetadata } from "../lib/koaptix/metadata";
 import { mapLatestRankBoardRows, mapHomeKpiToKpiCards, mapIndexChartData } from "../lib/koaptix/mappers";
 import { getLatestRankBoard, getHomeKpi, getIndexChart } from "../lib/koaptix/queries";
 import type { HomePageData } from "../lib/koaptix/types";
 
-type HomeSearchParams = Promise<{ complexId?: string | string[] | undefined }> | { complexId?: string | string[] | undefined };
+type HomeSearchParams = Promise<{ [key: string]: string | string[] | undefined }> | { [key: string]: string | string[] | undefined };
 
 function pickFirst(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -26,13 +25,11 @@ export async function generateMetadata({ searchParams }: { searchParams?: HomeSe
 
 async function getHomeData(): Promise<HomePageData> {
   try {
-    // 🚨 잼이사가 사수한 찐 데이터 3종 세트 호출 로직!
     const [rankingRows, kpiRow, chartRows] = await Promise.all([
       getLatestRankBoard(50),
       getHomeKpi(),
       getIndexChart(),
     ]);
-
     return {
       kpis: mapHomeKpiToKpiCards(kpiRow),
       index: mapIndexChartData(chartRows),
@@ -50,16 +47,23 @@ async function getHomeData(): Promise<HomePageData> {
   }
 }
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams?: HomeSearchParams }) {
   const home = await getHomeData();
+  const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
+  const district = pickFirst(resolvedSearchParams.district);
+
+  const filteredRankings = district
+    ? home.rankings.filter((item) => 
+        item.sigunguName?.includes(district) || 
+        item.locationLabel?.includes(district)
+      )
+    : home.rankings;
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#05070b] text-[#eaf2ff]">
       <TickerTape items={["KOAPTIX 500 LIVE", "자본의 흐름을 읽는 자만이 살아남는다", "오늘의 급등 단지: 반포자이 ▲", "HAPI 그룹 제공"]} />
 
       <div className="mx-auto w-full max-w-[1440px] px-3 pb-8 pt-3 sm:px-4 sm:pb-10 sm:pt-4 lg:px-6 lg:pb-12">
-        
-        {/* 헤더 영역 */}
         <section className="mb-3 grid gap-3 sm:mb-4 sm:gap-4">
           <div className="overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_50px_rgba(0,0,0,0.3)]">
             <div className="border-b border-white/5 px-3 py-3 sm:px-4 sm:py-4 lg:px-5">
@@ -87,7 +91,6 @@ export default async function Page() {
           </div>
         </section>
 
-        {/* 💡 신규 추가: 1단 대시보드 (히트맵 + 핫단지) */}
         <section className="mb-3 grid gap-3 sm:mb-4 sm:gap-4 lg:grid-cols-12">
           <div className="min-w-0 lg:col-span-7">
             <MarketHeatmap items={home.rankings} />
@@ -97,19 +100,16 @@ export default async function Page() {
           </div>
         </section>
 
-        {/* 2단 대시보드 (차트 + 랭킹보드) */}
-        <section className="grid gap-3 sm:gap-4 lg:grid-cols-12">
+        <section id="ranking-board-section" className="grid gap-3 sm:gap-4 lg:grid-cols-12">
           <div className="min-w-0 lg:col-span-7">
             <MarketChartCard title="KOAPTIX 500" valueLabel={home.index.valueLabel} changePct={home.index.changePct} data={home.index.chartData} />
           </div>
           <div className="min-w-0 lg:col-span-5">
-            {/* 🚨 잼이사가 사수한 Vercel 배포 방어막! */}
             <Suspense fallback={<div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-10 text-center text-sm text-white/55">랭킹 보드 로딩 중...</div>}>
-              <RankingBoardClient items={home.rankings} boardError={home.rankingsError ?? null} />
+              <RankingBoardClient key={`board-${district || 'all'}`} items={filteredRankings} boardError={home.rankingsError ?? null} />
             </Suspense>
           </div>
         </section>
-
       </div>
     </main>
   );
