@@ -1,6 +1,5 @@
 import { HomeHero } from "./HomeHero";
 import { IndexSparkline } from "./IndexSparkline";
-import { RankBoard } from "./RankBoard";
 import type { KoaptixHomeApiData } from "../../types/koaptix";
 
 export function HomeShell({ data }: { data: KoaptixHomeApiData }) {
