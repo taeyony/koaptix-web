@@ -1,1 +1,10 @@
-{}
+{
+  "[project]/src/components/home/ComplexHistoryMiniChart.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/src/components/home/ComplexHistoryMiniChart.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/node_modules_0wa-vtj._.js",
+      "static/chunks/src_components_home_ComplexHistoryMiniChart_tsx_0r8~iuj._.js",
+      "static/chunks/src_components_home_ComplexHistoryMiniChart_tsx_0wzt35a._.js"
+    ]
+  }
+}

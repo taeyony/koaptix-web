@@ -346,3 +346,30 @@ export async function getHomeKpi() {
     return null;
   }
 }
+import type { DbComplexChartHistoryRow } from "./types";
+
+export async function getComplexChartHistory(
+  complexId: string | number,
+  options: { days?: number } = {}
+): Promise<DbComplexChartHistoryRow[]> {
+  const supabase = createServerSupabase();
+  const safeDays = Math.max(90, Math.min(options.days ?? 180, 180));
+
+  const anchorDate = await getWeeklyAnchorDate(supabase);
+  const startDate = shiftSeoulDateString(anchorDate, -safeDays);
+
+  const { data, error } = await supabase
+    .from("complex_rank_history")
+    .select("snapshot_date, complex_id, market_cap_krw, rank_all")
+    .eq("complex_id", normalizeComplexId(complexId))
+    .gte("snapshot_date", startDate)
+    .lte("snapshot_date", anchorDate)
+    .order("snapshot_date", { ascending: true })
+    .limit(Math.min(safeDays + 14, 240));
+
+  if (error) {
+    throw new Error(`Failed to fetch complex chart history: ${error.message}`);
+  }
+
+  return (data ?? []) as DbComplexChartHistoryRow[];
+}

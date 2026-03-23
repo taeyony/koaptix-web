@@ -1,7 +1,26 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
-import type { ComplexDetail, RankingItem } from "../../lib/koaptix/types";
+import type {
+  ComplexDetail,
+  HistoryChartPoint,
+  RankingItem,
+} from "../../lib/koaptix/types";
+
+// 💡 잼이사의 지연 로딩 마법 (차트는 바텀 시트 열릴 때만 다운로드 됨!)
+const ComplexHistoryMiniChart = dynamic(
+  () =>
+    import("./ComplexHistoryMiniChart").then(
+      (mod) => mod.ComplexHistoryMiniChart
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[220px] w-full animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]" />
+    ),
+  }
+);
 
 type ComplexDetailSheetProps = {
   open: boolean;
@@ -17,6 +36,7 @@ type ToastState = {
   tone: "success" | "error";
 } | null;
 
+// --- 포맷팅 헬퍼 함수들 ---
 function formatMarketCapKrw(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "-";
 
@@ -163,6 +183,14 @@ export function ComplexDetailSheet({
   const [toast, setToast] = useState<ToastState>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // 💡 페이즈 16: 차트 관련 상태
+  const [chartData, setChartData] = useState<HistoryChartPoint[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
+
+  const chartAbortRef = useRef<AbortController | null>(null);
+  const chartCacheRef = useRef<Record<string, HistoryChartPoint[]>>({});
+
   useEffect(() => {
     if (!open) return;
 
@@ -185,11 +213,88 @@ export function ComplexDetailSheet({
 
   useEffect(() => {
     return () => {
+      chartAbortRef.current?.abort();
+
       if (toastTimerRef.current) {
         clearTimeout(toastTimerRef.current);
       }
     };
   }, []);
+
+  // 💡 차트 데이터 패치 로직
+  useEffect(() => {
+    if (!open || !item?.complexId) return;
+
+    const complexId = item.complexId;
+    const cached = chartCacheRef.current[complexId];
+
+    if (cached) {
+      setChartData(cached);
+      setChartError(null);
+      setChartLoading(false);
+      return;
+    }
+
+    chartAbortRef.current?.abort();
+    const controller = new AbortController();
+    chartAbortRef.current = controller;
+
+    setChartData([]);
+    setChartError(null);
+    setChartLoading(true);
+
+    (async () => {
+      const response = await fetch(
+        `/api/complex-history?complexId=${encodeURIComponent(
+          complexId
+        )}&mode=weekly&days=180`,
+        {
+          method: "GET",
+          signal: controller.signal,
+          cache: "no-store",
+        }
+      );
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          payload.error ?? "히스토리 차트를 불러오지 못했다."
+        );
+      }
+
+      const nextData = Array.isArray(payload.data)
+        ? (payload.data as HistoryChartPoint[])
+        : [];
+
+      chartCacheRef.current[complexId] = nextData;
+      setChartData(nextData);
+    })()
+      .catch((fetchError) => {
+        if (
+          fetchError instanceof DOMException &&
+          fetchError.name === "AbortError"
+        ) {
+          return;
+        }
+
+        setChartData([]);
+        setChartError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : "히스토리 차트를 불러오지 못했다."
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setChartLoading(false);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [open, item?.complexId]);
 
   function showToast(message: string, tone: "success" | "error") {
     if (toastTimerRef.current) {
@@ -257,8 +362,7 @@ export function ComplexDetailSheet({
   const marketCap = detail?.marketCapKrw ?? item.marketCapKrw;
   const rankDelta7d = detail?.rankDelta7d ?? item.rankDelta7d;
   const marketCapDelta7d = detail?.marketCapDelta7d ?? item.marketCapDelta7d;
-  const marketCapDeltaPct7d =
-    detail?.marketCapDeltaPct7d ?? item.marketCapDeltaPct7d;
+  const marketCapDeltaPct7d = detail?.marketCapDeltaPct7d ?? item.marketCapDeltaPct7d;
   const historySnapshotDate = detail?.historySnapshotDate ?? item.historySnapshotDate;
 
   return (
@@ -273,9 +377,9 @@ export function ComplexDetailSheet({
           role="dialog"
           aria-modal="true"
           aria-labelledby="complex-detail-title"
-          className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
+          className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl flex flex-col"
         >
-          <div className="border-b border-white/5 bg-[#0b1118]/95 px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pt-4">
+          <div className="border-b border-white/5 bg-[#0b1118]/95 px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pt-4 shrink-0">
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/10 md:hidden" />
 
             <div className="flex items-start justify-between gap-3">
@@ -303,7 +407,7 @@ export function ComplexDetailSheet({
                   aria-label="공유하기"
                 >
                   <ShareIcon />
-                  <span>{sharePending ? "공유 중..." : "공유하기"}</span>
+                  <span className="hidden sm:inline">{sharePending ? "공유 중..." : "공유하기"}</span>
                 </button>
 
                 <button
@@ -317,7 +421,7 @@ export function ComplexDetailSheet({
             </div>
           </div>
 
-          <div className="max-h-[calc(85vh-100px)] overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
+          <div className="overflow-y-auto px-4 pb-6 pt-4 sm:px-5 flex-1">
             {error ? (
               <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
                 {error}
@@ -337,6 +441,45 @@ export function ComplexDetailSheet({
                 value={formatPercent(marketCapDeltaPct7d)}
                 tone={momentumTone(marketCapDeltaPct7d)}
               />
+            </div>
+
+            {/* 💡 페이즈 16: 히스토리 네온 차트 삽입부 */}
+            <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">
+              <div className="border-b border-white/5 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70">
+                      CAP FLOW HISTORY
+                    </p>
+                    <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">
+                      최근 6개월 시가총액 흐름
+                    </h4>
+                    <p className="mt-1 text-xs text-white/45">
+                      주간 점 기준으로 노이즈를 걷어낸 모멘텀 라인
+                    </p>
+                  </div>
+
+                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-white/60">
+                    Weekly View
+                  </span>
+                </div>
+              </div>
+
+              <div className="px-3 py-3 sm:px-4">
+                {chartError ? (
+                  <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-sm text-rose-200">
+                    {chartError}
+                  </div>
+                ) : chartLoading ? (
+                  <div className="h-[220px] w-full animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]" />
+                ) : chartData.length > 0 ? (
+                  <ComplexHistoryMiniChart data={chartData} />
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55">
+                    차트를 그릴 히스토리 데이터가 아직 충분하지 않다.
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-2">

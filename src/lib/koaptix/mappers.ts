@@ -268,3 +268,52 @@ export function mapHomeKpiToKpiCards(row: any): KpiItem[] {
     },
   ];
 }
+import type {
+  ComplexChartMode,
+  DbComplexChartHistoryRow,
+  HistoryChartPoint,
+} from "./types";
+
+type NormalizedComplexHistoryRow = {
+  snapshotDate: string;
+  value: number;
+};
+
+function normalizeComplexHistoryRows(
+  rows: DbComplexChartHistoryRow[]
+): NormalizedComplexHistoryRow[] {
+  return rows
+    .map((row) => ({
+      snapshotDate: row.snapshot_date,
+      value: toNumber(row.market_cap_krw, 0),
+    }))
+    .filter((row) => row.snapshotDate.length > 0 && row.value > 0)
+    .sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate));
+}
+
+export function mapComplexChartHistoryRows(
+  rows: DbComplexChartHistoryRow[],
+  options: {
+    mode?: ComplexChartMode;
+    maxPoints?: number;
+  } = {}
+): HistoryChartPoint[] {
+  const mode = options.mode ?? "weekly";
+  const maxPoints = options.maxPoints ?? (mode === "weekly" ? 26 : 60);
+
+  const normalized = normalizeComplexHistoryRows(rows);
+  if (normalized.length === 0) {
+    return [];
+  }
+
+  const series =
+    mode === "ma7"
+      ? applyMovingAverage(normalized, 7)
+      : selectWeeklyRows(normalized);
+
+  return series.slice(-maxPoints).map((row) => ({
+    snapshotDate: row.snapshotDate,
+    label: formatChartLabel(row.snapshotDate),
+    value: row.value,
+  }));
+}

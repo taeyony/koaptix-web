@@ -39,6 +39,8 @@ module.exports = mod;
 "use strict";
 
 __turbopack_context__.s([
+    "getComplexChartHistory",
+    ()=>getComplexChartHistory,
     "getComplexDetailById",
     ()=>getComplexDetailById,
     "getHomeKpi",
@@ -266,11 +268,26 @@ async function getHomeKpi() {
         return null;
     }
 }
+async function getComplexChartHistory(complexId, options = {}) {
+    const supabase = createServerSupabase();
+    const safeDays = Math.max(90, Math.min(options.days ?? 180, 180));
+    const anchorDate = await getWeeklyAnchorDate(supabase);
+    const startDate = shiftSeoulDateString(anchorDate, -safeDays);
+    const { data, error } = await supabase.from("complex_rank_history").select("snapshot_date, complex_id, market_cap_krw, rank_all").eq("complex_id", normalizeComplexId(complexId)).gte("snapshot_date", startDate).lte("snapshot_date", anchorDate).order("snapshot_date", {
+        ascending: true
+    }).limit(Math.min(safeDays + 14, 240));
+    if (error) {
+        throw new Error(`Failed to fetch complex chart history: ${error.message}`);
+    }
+    return data ?? [];
+}
 }),
 "[project]/src/lib/koaptix/mappers.ts [app-route] (ecmascript)", ((__turbopack_context__) => {
 "use strict";
 
 __turbopack_context__.s([
+    "mapComplexChartHistoryRows",
+    ()=>mapComplexChartHistoryRows,
     "mapComplexDetailRow",
     ()=>mapComplexDetailRow,
     "mapHomeKpiToKpiCards",
@@ -461,6 +478,26 @@ function mapHomeKpiToKpiCards(row) {
             subValue: "2025년 1월 기준"
         }
     ];
+}
+function normalizeComplexHistoryRows(rows) {
+    return rows.map((row)=>({
+            snapshotDate: row.snapshot_date,
+            value: toNumber(row.market_cap_krw, 0)
+        })).filter((row)=>row.snapshotDate.length > 0 && row.value > 0).sort((a, b)=>a.snapshotDate.localeCompare(b.snapshotDate));
+}
+function mapComplexChartHistoryRows(rows, options = {}) {
+    const mode = options.mode ?? "weekly";
+    const maxPoints = options.maxPoints ?? (mode === "weekly" ? 26 : 60);
+    const normalized = normalizeComplexHistoryRows(rows);
+    if (normalized.length === 0) {
+        return [];
+    }
+    const series = mode === "ma7" ? applyMovingAverage(normalized, 7) : selectWeeklyRows(normalized);
+    return series.slice(-maxPoints).map((row)=>({
+            snapshotDate: row.snapshotDate,
+            label: formatChartLabel(row.snapshotDate),
+            value: row.value
+        }));
 }
 }),
 "[project]/src/app/api/complex-detail/route.ts [app-route] (ecmascript)", ((__turbopack_context__) => {

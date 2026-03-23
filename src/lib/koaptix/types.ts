@@ -121,3 +121,17 @@ export type HomePageData = {
   rankings: RankingItem[];
   rankingsError?: string | null;
 };
+export type ComplexChartMode = "weekly" | "ma7";
+
+export type DbComplexChartHistoryRow = {
+  snapshot_date: string;
+  complex_id: number | string | null;
+  market_cap_krw: number | string | null;
+  rank_all: number | null;
+};
+
+export type HistoryChartPoint = {
+  snapshotDate: string;
+  label: string;
+  value: number;
+};

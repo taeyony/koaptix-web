@@ -261,21 +261,22 @@ export function MarketHeatmap({ items }: { items: RankingItem[] }) {
                     </span>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-black/20 bg-black/20 px-3 py-2">
-                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
+                    <div className="min-w-0 rounded-xl border border-black/20 bg-black/20 px-2 py-2 sm:px-3">
+                      {/* truncate 추가 및 글자 간격(tracking) 축소! */}
+                      <p className="truncate text-[9px] uppercase tracking-wider text-white/40 sm:text-[10px]">
                         Momentum (W)
                       </p>
-                      <p className={`mt-1 text-sm font-semibold ${tone.delta}`}>
+                      <p className={`mt-1 truncate text-xs font-semibold sm:text-sm ${tone.delta}`}>
                         {formatSignedDelta(bucket.averageDelta)}
                       </p>
                     </div>
 
-                    <div className="rounded-xl border border-black/20 bg-black/20 px-3 py-2 text-right">
-                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">
+                    <div className="min-w-0 rounded-xl border border-black/20 bg-black/20 px-2 py-2 text-right sm:px-3">
+                      <p className="truncate text-[9px] uppercase tracking-wider text-white/40 sm:text-[10px]">
                         Listings
                       </p>
-                      <p className="mt-1 text-sm font-semibold text-white">
+                      <p className="mt-1 truncate text-xs font-semibold text-white sm:text-sm">
                         {bucket.itemCount}개
                       </p>
                     </div>

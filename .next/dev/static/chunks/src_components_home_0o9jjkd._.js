@@ -1753,25 +1753,25 @@ function MarketHeatmap({ items }) {
                                     columnNumber: 19
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    className: "mt-4 grid grid-cols-2 gap-3",
+                                    className: "mt-4 grid grid-cols-2 gap-2 sm:gap-3",
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                            className: "rounded-xl border border-black/20 bg-black/20 px-3 py-2",
+                                            className: "min-w-0 rounded-xl border border-black/20 bg-black/20 px-2 py-2 sm:px-3",
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                                    className: "text-[10px] uppercase tracking-[0.16em] text-white/40",
+                                                    className: "truncate text-[9px] uppercase tracking-wider text-white/40 sm:text-[10px]",
                                                     children: "Momentum (W)"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                                    lineNumber: 266,
+                                                    lineNumber: 267,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                                    className: `mt-1 text-sm font-semibold ${tone.delta}`,
+                                                    className: `mt-1 truncate text-xs font-semibold sm:text-sm ${tone.delta}`,
                                                     children: formatSignedDelta(bucket.averageDelta)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                                    lineNumber: 269,
+                                                    lineNumber: 270,
                                                     columnNumber: 23
                                                 }, this)
                                             ]
@@ -1781,31 +1781,31 @@ function MarketHeatmap({ items }) {
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                            className: "rounded-xl border border-black/20 bg-black/20 px-3 py-2 text-right",
+                                            className: "min-w-0 rounded-xl border border-black/20 bg-black/20 px-2 py-2 text-right sm:px-3",
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                                    className: "text-[10px] uppercase tracking-[0.16em] text-white/40",
+                                                    className: "truncate text-[9px] uppercase tracking-wider text-white/40 sm:text-[10px]",
                                                     children: "Listings"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                                    lineNumber: 275,
+                                                    lineNumber: 276,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                                    className: "mt-1 text-sm font-semibold text-white",
+                                                    className: "mt-1 truncate text-xs font-semibold text-white sm:text-sm",
                                                     children: [
                                                         bucket.itemCount,
                                                         "개"
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                                    lineNumber: 278,
+                                                    lineNumber: 279,
                                                     columnNumber: 23
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                            lineNumber: 274,
+                                            lineNumber: 275,
                                             columnNumber: 21
                                         }, this)
                                     ]
@@ -1823,12 +1823,12 @@ function MarketHeatmap({ items }) {
                                         }
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                        lineNumber: 285,
+                                        lineNumber: 286,
                                         columnNumber: 21
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 284,
+                                    lineNumber: 285,
                                     columnNumber: 19
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1842,7 +1842,7 @@ function MarketHeatmap({ items }) {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                            lineNumber: 292,
+                                            lineNumber: 293,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1850,13 +1850,13 @@ function MarketHeatmap({ items }) {
                                             children: "Click to filter"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                            lineNumber: 295,
+                                            lineNumber: 296,
                                             columnNumber: 21
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 291,
+                                    lineNumber: 292,
                                     columnNumber: 19
                                 }, this)
                             ]
@@ -1875,7 +1875,7 @@ function MarketHeatmap({ items }) {
                     children: "현재 히트맵을 그릴 랭킹 데이터가 없다."
                 }, void 0, false, {
                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                    lineNumber: 304,
+                    lineNumber: 305,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
@@ -2057,11 +2057,32 @@ __turbopack_context__.s([
     ()=>ComplexDetailSheet
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/compiled/react/jsx-dev-runtime.js [app-client] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$shared$2f$lib$2f$app$2d$dynamic$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/shared/lib/app-dynamic.js [app-client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/compiled/react/index.js [app-client] (ecmascript)");
+;
 ;
 var _s = __turbopack_context__.k.signature();
 "use client";
 ;
+;
+// 💡 잼이사의 지연 로딩 마법 (차트는 바텀 시트 열릴 때만 다운로드 됨!)
+const ComplexHistoryMiniChart = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$shared$2f$lib$2f$app$2d$dynamic$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["default"])(()=>__turbopack_context__.A("[project]/src/components/home/ComplexHistoryMiniChart.tsx [app-client] (ecmascript, next/dynamic entry, async loader)").then((mod)=>mod.ComplexHistoryMiniChart), {
+    loadableGenerated: {
+        modules: [
+            "[project]/src/components/home/ComplexHistoryMiniChart.tsx [app-client] (ecmascript, next/dynamic entry)"
+        ]
+    },
+    ssr: false,
+    loading: ()=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+            className: "h-[220px] w-full animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]"
+        }, void 0, false, {
+            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+            lineNumber: 20,
+            columnNumber: 7
+        }, ("TURBOPACK compile-time value", void 0))
+});
+_c = ComplexHistoryMiniChart;
+// --- 포맷팅 헬퍼 함수들 ---
 function formatMarketCapKrw(value) {
     if (!Number.isFinite(value) || value <= 0) return "-";
     const TRILLION = 1_000_000_000_000;
@@ -2134,7 +2155,7 @@ function Metric({ label, value, tone }) {
                 children: label
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 110,
+                lineNumber: 130,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2142,17 +2163,17 @@ function Metric({ label, value, tone }) {
                 children: value
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 113,
+                lineNumber: 133,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-        lineNumber: 109,
+        lineNumber: 129,
         columnNumber: 5
     }, this);
 }
-_c = Metric;
+_c1 = Metric;
 function DetailRow({ label, value }) {
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
         className: "flex items-center justify-between gap-4 border-b border-white/5 py-3 last:border-b-0",
@@ -2162,7 +2183,7 @@ function DetailRow({ label, value }) {
                 children: label
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 129,
+                lineNumber: 149,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -2170,17 +2191,17 @@ function DetailRow({ label, value }) {
                 children: value
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 130,
+                lineNumber: 150,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-        lineNumber: 128,
+        lineNumber: 148,
         columnNumber: 5
     }, this);
 }
-_c1 = DetailRow;
+_c2 = DetailRow;
 function ShareIcon() {
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
         "aria-hidden": "true",
@@ -2196,36 +2217,42 @@ function ShareIcon() {
                 d: "M7 12v7a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-7"
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 147,
+                lineNumber: 167,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
                 d: "M12 3v12"
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 148,
+                lineNumber: 168,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
                 d: "m8 7 4-4 4 4"
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 149,
+                lineNumber: 169,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-        lineNumber: 137,
+        lineNumber: 157,
         columnNumber: 5
     }, this);
 }
-_c2 = ShareIcon;
+_c3 = ShareIcon;
 function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
     _s();
     const [sharePending, setSharePending] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const [toast, setToast] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
     const toastTimerRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
+    // 💡 페이즈 16: 차트 관련 상태
+    const [chartData, setChartData] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]);
+    const [chartLoading, setChartLoading] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
+    const [chartError, setChartError] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null);
+    const chartAbortRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
+    const chartCacheRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])({});
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "ComplexDetailSheet.useEffect": ()=>{
             if (!open) return;
@@ -2254,6 +2281,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
         "ComplexDetailSheet.useEffect": ()=>{
             return ({
                 "ComplexDetailSheet.useEffect": ()=>{
+                    chartAbortRef.current?.abort();
                     if (toastTimerRef.current) {
                         clearTimeout(toastTimerRef.current);
                     }
@@ -2261,6 +2289,64 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
             })["ComplexDetailSheet.useEffect"];
         }
     }["ComplexDetailSheet.useEffect"], []);
+    // 💡 차트 데이터 패치 로직
+    (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
+        "ComplexDetailSheet.useEffect": ()=>{
+            if (!open || !item?.complexId) return;
+            const complexId = item.complexId;
+            const cached = chartCacheRef.current[complexId];
+            if (cached) {
+                setChartData(cached);
+                setChartError(null);
+                setChartLoading(false);
+                return;
+            }
+            chartAbortRef.current?.abort();
+            const controller = new AbortController();
+            chartAbortRef.current = controller;
+            setChartData([]);
+            setChartError(null);
+            setChartLoading(true);
+            ({
+                "ComplexDetailSheet.useEffect": async ()=>{
+                    const response = await fetch(`/api/complex-history?complexId=${encodeURIComponent(complexId)}&mode=weekly&days=180`, {
+                        method: "GET",
+                        signal: controller.signal,
+                        cache: "no-store"
+                    });
+                    const payload = await response.json();
+                    if (!response.ok) {
+                        throw new Error(payload.error ?? "히스토리 차트를 불러오지 못했다.");
+                    }
+                    const nextData = Array.isArray(payload.data) ? payload.data : [];
+                    chartCacheRef.current[complexId] = nextData;
+                    setChartData(nextData);
+                }
+            })["ComplexDetailSheet.useEffect"]().catch({
+                "ComplexDetailSheet.useEffect": (fetchError)=>{
+                    if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
+                        return;
+                    }
+                    setChartData([]);
+                    setChartError(fetchError instanceof Error ? fetchError.message : "히스토리 차트를 불러오지 못했다.");
+                }
+            }["ComplexDetailSheet.useEffect"]).finally({
+                "ComplexDetailSheet.useEffect": ()=>{
+                    if (!controller.signal.aborted) {
+                        setChartLoading(false);
+                    }
+                }
+            }["ComplexDetailSheet.useEffect"]);
+            return ({
+                "ComplexDetailSheet.useEffect": ()=>{
+                    controller.abort();
+                }
+            })["ComplexDetailSheet.useEffect"];
+        }
+    }["ComplexDetailSheet.useEffect"], [
+        open,
+        item?.complexId
+    ]);
     function showToast(message, tone) {
         if (toastTimerRef.current) {
             clearTimeout(toastTimerRef.current);
@@ -2327,23 +2413,23 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                         onClick: onClose
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                        lineNumber: 267,
+                        lineNumber: 371,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
                         role: "dialog",
                         "aria-modal": "true",
                         "aria-labelledby": "complex-detail-title",
-                        className: "absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl",
+                        className: "absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl flex flex-col",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "border-b border-white/5 bg-[#0b1118]/95 px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pt-4",
+                                className: "border-b border-white/5 bg-[#0b1118]/95 px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pt-4 shrink-0",
                                 children: [
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                         className: "mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/10 md:hidden"
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 279,
+                                        lineNumber: 383,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2357,7 +2443,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                         children: "COMPLEX DETAIL"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                        lineNumber: 283,
+                                                        lineNumber: 387,
                                                         columnNumber: 17
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -2366,7 +2452,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                         children: title
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                        lineNumber: 286,
+                                                        lineNumber: 390,
                                                         columnNumber: 17
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -2374,13 +2460,13 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                         children: location
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                        lineNumber: 292,
+                                                        lineNumber: 396,
                                                         columnNumber: 17
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                lineNumber: 282,
+                                                lineNumber: 386,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2395,20 +2481,21 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                         children: [
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(ShareIcon, {}, void 0, false, {
                                                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                                lineNumber: 305,
+                                                                lineNumber: 409,
                                                                 columnNumber: 19
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                className: "hidden sm:inline",
                                                                 children: sharePending ? "공유 중..." : "공유하기"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                                lineNumber: 306,
+                                                                lineNumber: 410,
                                                                 columnNumber: 19
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                        lineNumber: 298,
+                                                        lineNumber: 402,
                                                         columnNumber: 17
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -2418,36 +2505,36 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                         children: "닫기"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                        lineNumber: 309,
+                                                        lineNumber: 413,
                                                         columnNumber: 17
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                lineNumber: 297,
+                                                lineNumber: 401,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 281,
+                                        lineNumber: 385,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                lineNumber: 278,
+                                lineNumber: 382,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "max-h-[calc(85vh-100px)] overflow-y-auto px-4 pb-6 pt-4 sm:px-5",
+                                className: "overflow-y-auto px-4 pb-6 pt-4 sm:px-5 flex-1",
                                 children: [
                                     error ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                         className: "mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200",
                                         children: error
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 322,
+                                        lineNumber: 426,
                                         columnNumber: 15
                                     }, this) : null,
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2458,7 +2545,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                 value: `#${formatPlainNumber(rank)}`
                                             }, void 0, false, {
                                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                lineNumber: 328,
+                                                lineNumber: 432,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Metric, {
@@ -2466,7 +2553,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                 value: formatMarketCapKrw(marketCap)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                lineNumber: 329,
+                                                lineNumber: 433,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Metric, {
@@ -2475,7 +2562,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                 tone: rankDeltaTone(rankDelta7d)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                lineNumber: 330,
+                                                lineNumber: 434,
                                                 columnNumber: 15
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(Metric, {
@@ -2484,13 +2571,113 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                 tone: momentumTone(marketCapDeltaPct7d)
                                             }, void 0, false, {
                                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                lineNumber: 335,
+                                                lineNumber: 439,
                                                 columnNumber: 15
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 327,
+                                        lineNumber: 431,
+                                        columnNumber: 13
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "border-b border-white/5 px-4 py-3",
+                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "flex items-start justify-between gap-3",
+                                                    children: [
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                            className: "min-w-0",
+                                                            children: [
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                                    className: "text-[11px] uppercase tracking-[0.22em] text-cyan-300/70",
+                                                                    children: "CAP FLOW HISTORY"
+                                                                }, void 0, false, {
+                                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                                    lineNumber: 451,
+                                                                    columnNumber: 21
+                                                                }, this),
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h4", {
+                                                                    className: "mt-1 text-sm font-semibold text-white sm:text-base",
+                                                                    children: "최근 6개월 시가총액 흐름"
+                                                                }, void 0, false, {
+                                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                                    lineNumber: 454,
+                                                                    columnNumber: 21
+                                                                }, this),
+                                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                                    className: "mt-1 text-xs text-white/45",
+                                                                    children: "주간 점 기준으로 노이즈를 걷어낸 모멘텀 라인"
+                                                                }, void 0, false, {
+                                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                                    lineNumber: 457,
+                                                                    columnNumber: 21
+                                                                }, this)
+                                                            ]
+                                                        }, void 0, true, {
+                                                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                            lineNumber: 450,
+                                                            columnNumber: 19
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                            className: "shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-white/60",
+                                                            children: "Weekly View"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                            lineNumber: 462,
+                                                            columnNumber: 19
+                                                        }, this)
+                                                    ]
+                                                }, void 0, true, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 449,
+                                                    columnNumber: 17
+                                                }, this)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                lineNumber: 448,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "px-3 py-3 sm:px-4",
+                                                children: chartError ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-sm text-rose-200",
+                                                    children: chartError
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 470,
+                                                    columnNumber: 19
+                                                }, this) : chartLoading ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "h-[220px] w-full animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 474,
+                                                    columnNumber: 19
+                                                }, this) : chartData.length > 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(ComplexHistoryMiniChart, {
+                                                    data: chartData
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 476,
+                                                    columnNumber: 19
+                                                }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55",
+                                                    children: "차트를 그릴 히스토리 데이터가 아직 충분하지 않다."
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 478,
+                                                    columnNumber: 19
+                                                }, this)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                lineNumber: 468,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                        lineNumber: 447,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2502,34 +2689,34 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                     className: "h-4 w-24 animate-pulse rounded bg-white/10"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 345,
+                                                    lineNumber: 488,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                     className: "h-4 w-full animate-pulse rounded bg-white/10"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 346,
+                                                    lineNumber: 489,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                     className: "h-4 w-4/5 animate-pulse rounded bg-white/10"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 347,
+                                                    lineNumber: 490,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                                     className: "h-4 w-3/5 animate-pulse rounded bg-white/10"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 348,
+                                                    lineNumber: 491,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 344,
+                                            lineNumber: 487,
                                             columnNumber: 17
                                         }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Fragment"], {
                                             children: [
@@ -2538,7 +2725,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                     value: `${formatSignedNumber(marketCapDelta7d)}원`
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 352,
+                                                    lineNumber: 495,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
@@ -2546,7 +2733,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                     value: historySnapshotDate ?? "-"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 356,
+                                                    lineNumber: 499,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
@@ -2554,7 +2741,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                     value: formatCount(detail?.householdCount)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 360,
+                                                    lineNumber: 503,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
@@ -2562,7 +2749,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                     value: formatYear(detail?.approvalYear)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 364,
+                                                    lineNumber: 507,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
@@ -2570,7 +2757,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                     value: detail?.ageYears != null ? `${detail.ageYears}년차` : "-"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 368,
+                                                    lineNumber: 511,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
@@ -2578,7 +2765,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                     value: formatCount(detail?.buildingCount)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 374,
+                                                    lineNumber: 517,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
@@ -2586,7 +2773,7 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                     value: formatCount(detail?.parkingCount)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 378,
+                                                    lineNumber: 521,
                                                     columnNumber: 19
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
@@ -2594,32 +2781,32 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                                                     value: formatUpdatedAt(detail?.updatedAt)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                    lineNumber: 382,
+                                                    lineNumber: 525,
                                                     columnNumber: 19
                                                 }, this)
                                             ]
                                         }, void 0, true)
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 342,
+                                        lineNumber: 485,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                lineNumber: 320,
+                                lineNumber: 424,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                        lineNumber: 272,
+                        lineNumber: 376,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 266,
+                lineNumber: 370,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -2631,24 +2818,25 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
                     children: toast.message
                 }, void 0, false, {
                     fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                    lineNumber: 399,
+                    lineNumber: 542,
                     columnNumber: 11
                 }, this) : null
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 393,
+                lineNumber: 536,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true);
 }
-_s(ComplexDetailSheet, "RLm/2gs3QCxt2Gr+G+O5lc03azM=");
-_c3 = ComplexDetailSheet;
-var _c, _c1, _c2, _c3;
-__turbopack_context__.k.register(_c, "Metric");
-__turbopack_context__.k.register(_c1, "DetailRow");
-__turbopack_context__.k.register(_c2, "ShareIcon");
-__turbopack_context__.k.register(_c3, "ComplexDetailSheet");
+_s(ComplexDetailSheet, "iWd8pIqvbMaJnpLaxGqU1h1zhrc=");
+_c4 = ComplexDetailSheet;
+var _c, _c1, _c2, _c3, _c4;
+__turbopack_context__.k.register(_c, "ComplexHistoryMiniChart");
+__turbopack_context__.k.register(_c1, "Metric");
+__turbopack_context__.k.register(_c2, "DetailRow");
+__turbopack_context__.k.register(_c3, "ShareIcon");
+__turbopack_context__.k.register(_c4, "ComplexDetailSheet");
 if (typeof globalThis.$RefreshHelpers$ === 'object' && globalThis.$RefreshHelpers !== null) {
     __turbopack_context__.k.registerExports(__turbopack_context__.m, globalThis.$RefreshHelpers$);
 }
@@ -3221,7 +3409,12 @@ function createFallbackItem(complexId) {
         sigunguName: "",
         legalDongName: "",
         locationLabel: "",
-        searchText: complexId.toLowerCase()
+        searchText: complexId.toLowerCase(),
+        historySnapshotDate: null,
+        rankDelta7d: 0,
+        marketCapDelta7d: 0,
+        marketCapDeltaPct7d: 0,
+        deltaWindow: "7d"
     };
 }
 function RankingBoardClient({ items: initialItems, boardError = null }) {
@@ -3510,7 +3703,7 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                             children: "KOAPTIX 500 Rankings"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 232,
+                                            lineNumber: 237,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3518,13 +3711,13 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                             children: "단지명·구·동 검색 / 클릭 시 URL 동기화 / VS 클릭 시 비교 담기"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 233,
+                                            lineNumber: 238,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                    lineNumber: 231,
+                                    lineNumber: 236,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3538,7 +3731,7 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                             className: "w-full bg-transparent py-2.5 pl-3 pr-3 text-sm text-white outline-none placeholder:text-white/28"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 237,
+                                            lineNumber: 242,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -3554,12 +3747,12 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                                     children: gu
                                                 }, gu, false, {
                                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                                    lineNumber: 247,
+                                                    lineNumber: 252,
                                                     columnNumber: 19
                                                 }, this))
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 245,
+                                            lineNumber: 250,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -3575,18 +3768,18 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                                     children: option.label
                                                 }, option.value, false, {
                                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                                    lineNumber: 253,
+                                                    lineNumber: 258,
                                                     columnNumber: 19
                                                 }, this))
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 251,
+                                            lineNumber: 256,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                    lineNumber: 236,
+                                    lineNumber: 241,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3600,7 +3793,7 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 259,
+                                            lineNumber: 264,
                                             columnNumber: 15
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3611,24 +3804,24 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 260,
+                                            lineNumber: 265,
                                             columnNumber: 15
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                    lineNumber: 258,
+                                    lineNumber: 263,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                            lineNumber: 230,
+                            lineNumber: 235,
                             columnNumber: 11
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                        lineNumber: 229,
+                        lineNumber: 234,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3651,12 +3844,12 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                                 item: item
                                             }, void 0, false, {
                                                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                                lineNumber: 274,
+                                                lineNumber: 279,
                                                 columnNumber: 21
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 273,
+                                            lineNumber: 278,
                                             columnNumber: 19
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -3672,7 +3865,7 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                                     children: isCompared ? "✓" : "VS"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                                    lineNumber: 278,
+                                                    lineNumber: 283,
                                                     columnNumber: 21
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3680,19 +3873,19 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                                     children: isCompared ? "담김" : "추가"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                                    lineNumber: 279,
+                                                    lineNumber: 284,
                                                     columnNumber: 21
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                            lineNumber: 277,
+                                            lineNumber: 282,
                                             columnNumber: 19
                                         }, this)
                                     ]
                                 }, item.complexId, true, {
                                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                    lineNumber: 272,
+                                    lineNumber: 277,
                                     columnNumber: 17
                                 }, this);
                             }) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3700,7 +3893,7 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                 children: "검색 결과가 없습니다."
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                lineNumber: 285,
+                                lineNumber: 290,
                                 columnNumber: 13
                             }, this),
                             hasMore && !query && districtFilter === "전체" && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -3710,19 +3903,19 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                 children: loadingMore ? "데이터를 불러오는 중입니다..." : "더보기 (Load More)"
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                lineNumber: 290,
+                                lineNumber: 295,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                        lineNumber: 265,
+                        lineNumber: 270,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                lineNumber: 228,
+                lineNumber: 233,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$home$2f$ComplexDetailSheet$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["ComplexDetailSheet"], {
@@ -3736,7 +3929,7 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                     })
             }, void 0, false, {
                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                lineNumber: 301,
+                lineNumber: 306,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3776,7 +3969,7 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                 children: "COMPARISON CART"
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                lineNumber: 329,
+                                lineNumber: 334,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3792,13 +3985,13 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                lineNumber: 330,
+                                lineNumber: 335,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                        lineNumber: 328,
+                        lineNumber: 333,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3820,7 +4013,7 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                 children: "초기화"
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                lineNumber: 333,
+                                lineNumber: 338,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -3838,19 +4031,19 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                                 children: "비교하기"
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                                lineNumber: 334,
+                                lineNumber: 339,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                        lineNumber: 332,
+                        lineNumber: 337,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                lineNumber: 304,
+                lineNumber: 309,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3874,12 +4067,12 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                     children: compareToast
                 }, void 0, false, {
                     fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                    lineNumber: 339,
+                    lineNumber: 344,
                     columnNumber: 25
                 }, this) : null
             }, void 0, false, {
                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                lineNumber: 338,
+                lineNumber: 343,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$home$2f$ComparisonSheet$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["ComparisonSheet"], {
@@ -3889,7 +4082,7 @@ function RankingBoardClient({ items: initialItems, boardError = null }) {
                 onClear: clearCompareSelection
             }, void 0, false, {
                 fileName: "[project]/src/components/home/RankingBoardClient.tsx",
-                lineNumber: 342,
+                lineNumber: 347,
                 columnNumber: 7
             }, this)
         ]
