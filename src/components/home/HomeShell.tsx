@@ -34,7 +34,6 @@ export function HomeShell({ data }: { data: KoaptixHomeApiData }) {
 
         <HomeHero card={data.indexCard} />
         <IndexSparkline points={data.chart} />
-        <RankBoard items={data.topRanks} totalRankedComplexes={data.totalRankedComplexes} />
       </div>
     </main>
   );
