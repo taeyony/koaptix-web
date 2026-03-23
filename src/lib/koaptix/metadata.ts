@@ -26,16 +26,22 @@ function formatMarketCapKrw(value: number): string {
   return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
 
-function formatRankDelta(delta: number): string {
-  if (delta > 0) return `▲ +${delta}`;
-  if (delta < 0) return `▼ ${delta}`;
-  return "— 0";
+function formatWeeklyRankDelta(delta: number): string {
+  if (delta > 0) return `순위 상승 ▲ +${delta}`;
+  if (delta < 0) return `순위 하락 ▼ ${delta}`;
+  return "순위 보합 — 0";
+}
+
+function formatMomentumW(value: number): string {
+  if (value > 0) return `Momentum (W) +${value.toFixed(2)}%`;
+  if (value < 0) return `Momentum (W) ${value.toFixed(2)}%`;
+  return "Momentum (W) 0.00%";
 }
 
 function getDefaultMetadata(): Metadata {
   const title = "KOAPTIX | 서울 아파트 랭킹 보드";
   const description =
-    "서울 아파트 단지의 실시간 순위와 시가총액을 KOAPTIX 보드에서 확인해라.";
+    "서울 아파트 단지의 최근 7일 기준 랭킹 변화와 시가총액 흐름을 KOAPTIX 보드에서 확인한다.";
 
   return {
     metadataBase: METADATA_BASE,
@@ -77,7 +83,8 @@ export async function buildComplexMetadata(
       `현재 #${detail.rank}`,
       `시가총액 ${formatMarketCapKrw(detail.marketCapKrw)}`,
       detail.locationLabel,
-      `전일 ${formatRankDelta(detail.rankDelta1d)}`,
+      `최근 7일 기준 ${formatWeeklyRankDelta(detail.rankDelta7d)}`,
+      formatMomentumW(detail.marketCapDeltaPct7d),
     ]
       .filter(Boolean)
       .join(" · ");
@@ -104,7 +111,7 @@ export async function buildComplexMetadata(
             url: ogImagePath,
             width: 1200,
             height: 630,
-            alt: `${detail.name} KOAPTIX share card`,
+            alt: `${detail.name} KOAPTIX weekly share card`,
           },
         ],
       },

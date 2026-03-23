@@ -12,68 +12,238 @@ type ComplexDetailSheetProps = {
   onClose: () => void;
 };
 
-function formatMarketCapKrw(value: number) {
+type ToastState = {
+  message: string;
+  tone: "success" | "error";
+} | null;
+
+function formatMarketCapKrw(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "-";
+
   const TRILLION = 1_000_000_000_000;
   const HUNDRED_MILLION = 100_000_000;
-  if (value >= TRILLION) return `${(value / TRILLION).toFixed(value / TRILLION >= 100 ? 0 : value / TRILLION >= 10 ? 1 : 2)}조원`;
-  if (value >= HUNDRED_MILLION) return `${(value / HUNDRED_MILLION).toFixed(value / HUNDRED_MILLION >= 100 ? 0 : value / HUNDRED_MILLION >= 10 ? 1 : 2)}억원`;
+
+  if (value >= TRILLION) {
+    const amount = value / TRILLION;
+    const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
+    return `${amount.toFixed(digits)}조원`;
+  }
+
+  if (value >= HUNDRED_MILLION) {
+    const amount = value / HUNDRED_MILLION;
+    const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
+    return `${amount.toFixed(digits)}억원`;
+  }
+
   return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
 
-function formatCount(value: number | null | undefined) { return value == null ? "-" : `${new Intl.NumberFormat("ko-KR").format(value)}개`; }
-function formatPlainNumber(value: number | null | undefined) { return value == null ? "-" : new Intl.NumberFormat("ko-KR").format(value); }
-function formatYear(value: number | null | undefined) { return value == null ? "-" : `${value}년`; }
-function formatUpdatedAt(value: string | null | undefined) {
-  if (!value) return "-";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "-" : new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+function formatSignedNumber(value: number): string {
+  if (value > 0) return `+${new Intl.NumberFormat("ko-KR").format(value)}`;
+  if (value < 0) return new Intl.NumberFormat("ko-KR").format(value);
+  return "0";
 }
 
-export function ComplexDetailSheet({ open, item, detail, loading, error, onClose }: ComplexDetailSheetProps) {
+function formatPercent(value: number): string {
+  if (value > 0) return `+${value.toFixed(2)}%`;
+  if (value < 0) return `${value.toFixed(2)}%`;
+  return "0.00%";
+}
+
+function formatRankDelta(delta: number): string {
+  if (delta > 0) return `▲ +${delta}`;
+  if (delta < 0) return `▼ ${delta}`;
+  return "— 0";
+}
+
+function rankDeltaTone(delta: number): string {
+  if (delta > 0) return "text-emerald-400";
+  if (delta < 0) return "text-rose-400";
+  return "text-white/45";
+}
+
+function momentumTone(value: number): string {
+  if (value > 0) return "text-cyan-200";
+  if (value < 0) return "text-fuchsia-200";
+  return "text-white/45";
+}
+
+function formatCount(value: number | null | undefined): string {
+  if (value == null) return "-";
+  return `${new Intl.NumberFormat("ko-KR").format(value)}개`;
+}
+
+function formatPlainNumber(value: number | null | undefined): string {
+  if (value == null) return "-";
+  return new Intl.NumberFormat("ko-KR").format(value);
+}
+
+function formatYear(value: number | null | undefined): string {
+  if (value == null) return "-";
+  return `${value}년`;
+}
+
+function formatUpdatedAt(value: string | null | undefined): string {
+  if (!value) return "-";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function Metric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3 sm:p-4">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-white/40 sm:text-xs">
+        {label}
+      </p>
+      <p className={`mt-1 text-base font-semibold tabular-nums sm:text-lg ${tone ?? ""}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-white/5 py-3 last:border-b-0">
+      <span className="text-sm text-white/45">{label}</span>
+      <span className="text-right text-sm font-medium text-white">{value}</span>
+    </div>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M7 12v7a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-7" />
+      <path d="M12 3v12" />
+      <path d="m8 7 4-4 4 4" />
+    </svg>
+  );
+}
+
+export function ComplexDetailSheet({
+  open,
+  item,
+  detail,
+  loading,
+  error,
+  onClose,
+}: ComplexDetailSheetProps) {
   const [sharePending, setSharePending] = useState(false);
-  const [toast, setToast] = useState<{ message: string; tone: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!open) return;
+
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
     window.addEventListener("keydown", onKeyDown);
+
     return () => {
       document.body.style.overflow = prevOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [open, onClose]);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
   function showToast(message: string, tone: "success" | "error") {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+
     setToast({ message, tone });
-    toastTimerRef.current = setTimeout(() => setToast(null), 2200);
+
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+    }, 2200);
   }
 
   async function handleShare() {
     if (!item || typeof window === "undefined") return;
+
     const shareTitle = detail?.name ?? item.name;
     const shareUrl = window.location.href;
 
+    if (!shareUrl) {
+      showToast("공유 링크를 만들지 못했다.", "error");
+      return;
+    }
+
     setSharePending(true);
+
     try {
-      if (typeof navigator !== "undefined" && navigator.share) {
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
         try {
-          await navigator.share({ title: shareTitle, url: shareUrl });
+          await navigator.share({
+            title: shareTitle,
+            url: shareUrl,
+          });
           return;
-        } catch (e) { if (e instanceof DOMException && e.name === "AbortError") return; }
+        } catch (shareError) {
+          if (shareError instanceof DOMException && shareError.name === "AbortError") {
+            return;
+          }
+        }
       }
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
+
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard &&
+        typeof navigator.clipboard.writeText === "function"
+      ) {
         await navigator.clipboard.writeText(shareUrl);
         showToast("링크가 복사되었습니다!", "success");
         return;
       }
-      showToast("공유를 지원하지 않는 브라우저입니다.", "error");
+
+      showToast("이 브라우저에서는 링크 공유를 지원하지 않는다.", "error");
     } catch {
-      showToast("공유에 실패했습니다.", "error");
+      showToast("링크를 복사하지 못했다. 다시 시도해라.", "error");
     } finally {
       setSharePending(false);
     }
@@ -82,74 +252,161 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
   if (!open || !item) return null;
 
   const title = detail?.name ?? item.name;
-  const location = detail?.locationLabel ?? item.locationLabel ?? "위치 정보 없음";
+  const location = (detail?.locationLabel ?? item.locationLabel) || "위치 정보 없음";
   const rank = detail?.rank ?? item.rank;
   const marketCap = detail?.marketCapKrw ?? item.marketCapKrw;
+  const rankDelta7d = detail?.rankDelta7d ?? item.rankDelta7d;
+  const marketCapDelta7d = detail?.marketCapDelta7d ?? item.marketCapDelta7d;
+  const marketCapDeltaPct7d =
+    detail?.marketCapDeltaPct7d ?? item.marketCapDeltaPct7d;
+  const historySnapshotDate = detail?.historySnapshotDate ?? item.historySnapshotDate;
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999999, backgroundColor: 'rgba(0, 0, 0, 0.8)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}>
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onClick={onClose} />
+    <>
+      <div className="fixed inset-0 z-50">
+        <div
+          className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+          onClick={onClose}
+        />
 
-      <section style={{ position: 'relative', width: '100%', maxWidth: '640px', backgroundColor: '#0b1118', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', border: '1px solid #22d3ee', boxShadow: '0 -10px 50px rgba(0,0,0,0.8)', padding: '24px', color: 'white', maxHeight: '85vh', overflowY: 'auto' }}>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-          <div>
-            <p style={{ color: '#67e8f9', fontSize: '12px', letterSpacing: '2px', margin: '0 0 4px 0' }}>COMPLEX DETAIL</p>
-            <h3 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0 }}>{title}</h3>
-            <p style={{ color: '#94a3b8', fontSize: '14px', marginTop: '4px' }}>{location}</p>
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={handleShare} disabled={sharePending} style={{ padding: '8px 16px', backgroundColor: 'rgba(103,232,249,0.1)', border: '1px solid rgba(103,232,249,0.2)', borderRadius: '8px', color: '#cffafe', cursor: sharePending ? 'not-allowed' : 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
-              {sharePending ? "공유 중..." : "공유하기"}
-            </button>
-            <button onClick={onClose} style={{ padding: '8px 16px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', border: 'none', cursor: 'pointer' }}>닫기</button>
-          </div>
-        </div>
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="complex-detail-title"
+          className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
+        >
+          <div className="border-b border-white/5 bg-[#0b1118]/95 px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pt-4">
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/10 md:hidden" />
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '16px' }}>
-            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 4px 0' }}>현재 순위</p>
-            <p style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>#{formatPlainNumber(rank)}</p>
-          </div>
-          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '16px' }}>
-            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 4px 0' }}>시가총액</p>
-            <p style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>{formatMarketCapKrw(marketCap)}</p>
-          </div>
-        </div>
-
-        {error ? <div style={{ color: '#fda4af', padding: '12px', background: 'rgba(244, 63, 94, 0.1)', borderRadius: '12px', marginBottom: '16px' }}>{error}</div> : null}
-
-        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '16px' }}>
-          {loading && !detail ? (
-            <p style={{ color: '#22d3ee', textAlign: 'center', margin: '20px 0', fontWeight: 'bold' }}>상세 데이터를 불러오는 중입니다...</p>
-          ) : detail ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
-                <span style={{ color: '#94a3b8' }}>세대수</span><span style={{ fontWeight: 'bold' }}>{formatCount(detail.householdCount)}</span>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/70 sm:text-xs">
+                  COMPLEX DETAIL
+                </p>
+                <h3
+                  id="complex-detail-title"
+                  className="mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl"
+                >
+                  {title}
+                </h3>
+                <p className="mt-1 truncate text-sm text-white/50 sm:text-[15px]">
+                  {location}
+                </p>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
-                <span style={{ color: '#94a3b8' }}>준공연도</span><span style={{ fontWeight: 'bold' }}>{formatYear(detail.approvalYear)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>
-                <span style={{ color: '#94a3b8' }}>주차대수</span><span style={{ fontWeight: 'bold' }}>{formatCount(detail.parkingCount)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#94a3b8' }}>데이터 기준일</span><span style={{ fontWeight: 'bold' }}>{formatUpdatedAt(detail.updatedAt)}</span>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleShare()}
+                  disabled={sharePending}
+                  className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-label="공유하기"
+                >
+                  <ShareIcon />
+                  <span>{sharePending ? "공유 중..." : "공유하기"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/70 transition hover:bg-white/[0.06]"
+                >
+                  닫기
+                </button>
               </div>
             </div>
-          ) : (
-            <p style={{ color: '#94a3b8', textAlign: 'center', margin: '20px 0' }}>상세 데이터가 없습니다.</p>
-          )}
-        </div>
-      </section>
+          </div>
 
-      {/* 💡 잼이사가 예쁘게 꾸민 토스트 알림! */}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', zIndex: 9999999, padding: '12px 24px', borderRadius: '30px', backgroundColor: toast.tone === 'success' ? '#047857' : '#be123c', color: 'white', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', transition: 'all 0.3s ease' }}>
-          {toast.message}
-        </div>
-      )}
-    </div>
+          <div className="max-h-[calc(85vh-100px)] overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
+            {error ? (
+              <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+                {error}
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              <Metric label="현재 순위" value={`#${formatPlainNumber(rank)}`} />
+              <Metric label="시가총액" value={formatMarketCapKrw(marketCap)} />
+              <Metric
+                label="주간 순위 변동"
+                value={formatRankDelta(rankDelta7d)}
+                tone={rankDeltaTone(rankDelta7d)}
+              />
+              <Metric
+                label="Momentum (W)"
+                value={formatPercent(marketCapDeltaPct7d)}
+                tone={momentumTone(marketCapDeltaPct7d)}
+              />
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-2">
+              {loading && !detail ? (
+                <div className="space-y-3 py-2">
+                  <div className="h-4 w-24 animate-pulse rounded bg-white/10" />
+                  <div className="h-4 w-full animate-pulse rounded bg-white/10" />
+                  <div className="h-4 w-4/5 animate-pulse rounded bg-white/10" />
+                  <div className="h-4 w-3/5 animate-pulse rounded bg-white/10" />
+                </div>
+              ) : (
+                <>
+                  <DetailRow
+                    label="최근 7일 시총 변동"
+                    value={`${formatSignedNumber(marketCapDelta7d)}원`}
+                  />
+                  <DetailRow
+                    label="비교 기준 스냅샷"
+                    value={historySnapshotDate ?? "-"}
+                  />
+                  <DetailRow
+                    label="세대수"
+                    value={formatCount(detail?.householdCount)}
+                  />
+                  <DetailRow
+                    label="준공연도"
+                    value={formatYear(detail?.approvalYear)}
+                  />
+                  <DetailRow
+                    label="연식"
+                    value={
+                      detail?.ageYears != null ? `${detail.ageYears}년차` : "-"
+                    }
+                  />
+                  <DetailRow
+                    label="동 수"
+                    value={formatCount(detail?.buildingCount)}
+                  />
+                  <DetailRow
+                    label="주차대수"
+                    value={formatCount(detail?.parkingCount)}
+                  />
+                  <DetailRow
+                    label="데이터 기준일"
+                    value={formatUpdatedAt(detail?.updatedAt)}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4"
+      >
+        {toast ? (
+          <div
+            className={`rounded-full border px-4 py-2 text-sm font-medium shadow-[0_12px_30px_rgba(0,0,0,0.35)] backdrop-blur ${
+              toast.tone === "success"
+                ? "border-emerald-400/20 bg-emerald-400/12 text-emerald-100"
+                : "border-rose-400/20 bg-rose-400/12 text-rose-100"
+            }`}
+          >
+            {toast.message}
+          </div>
+        ) : null}
+      </div>
+    </>
   );
 }

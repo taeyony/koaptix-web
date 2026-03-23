@@ -769,9 +769,7 @@ __turbopack_context__.s([
     ()=>MarketHeatmap
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime.js [app-ssr] (ecmascript)");
-var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/navigation.js [app-ssr] (ecmascript)");
 "use client";
-;
 ;
 function formatMarketCapKrw(value) {
     if (!Number.isFinite(value) || value <= 0) return "-";
@@ -857,14 +855,14 @@ function buildDistrictBuckets(items) {
             totalDelta: 0,
             itemCount: 0,
             leadItemName: item.name,
-            leadItemDelta: item.rankDelta1d
+            leadItemDelta: item.rankDelta7d
         };
         current.totalMarketCap += item.marketCapKrw;
-        current.totalDelta += item.rankDelta1d;
+        current.totalDelta += item.rankDelta7d;
         current.itemCount += 1;
-        if (Math.abs(item.rankDelta1d) > Math.abs(current.leadItemDelta)) {
+        if (Math.abs(item.rankDelta7d) > Math.abs(current.leadItemDelta)) {
             current.leadItemName = item.name;
-            current.leadItemDelta = item.rankDelta1d;
+            current.leadItemDelta = item.rankDelta7d;
         }
         grouped.set(districtName, current);
     }
@@ -873,47 +871,38 @@ function buildDistrictBuckets(items) {
         const averageDelta = bucket.itemCount > 0 ? bucket.totalDelta / bucket.itemCount : 0;
         const sharePct = totalMarketCap > 0 ? bucket.totalMarketCap / totalMarketCap * 100 : 0;
         return {
-            ...bucket,
+            name: bucket.name,
+            totalMarketCap: bucket.totalMarketCap,
             averageDelta,
+            totalDelta: bucket.totalDelta,
+            itemCount: bucket.itemCount,
             sharePct,
             leadSignal: `${bucket.leadItemName} ${formatSignedDelta(bucket.leadItemDelta)}`,
             spanClass: getSpanClass(sharePct)
         };
     }).sort((a, b)=>b.totalMarketCap - a.totalMarketCap);
 }
+function buildUrlWithDistrict(districtName) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("district", districtName);
+    const queryString = params.toString();
+    return `${window.location.pathname}${queryString ? `?${queryString}` : ""}${window.location.hash}`;
+}
+function pushDistrictToUrl(districtName) {
+    const nextUrl = buildUrlWithDistrict(districtName);
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (currentUrl !== nextUrl) {
+        window.history.pushState(null, "", nextUrl);
+    }
+}
+function handleDistrictKeyDown(event, districtName) {
+    if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        pushDistrictToUrl(districtName);
+    }
+}
 function MarketHeatmap({ items }) {
     const buckets = buildDistrictBuckets(items);
-    const router = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useRouter"])();
-    const pathname = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["usePathname"])();
-    const searchParams = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useSearchParams"])();
-    // 💡 현재 선택된 구를 파악합니다!
-    const currentDistrict = searchParams.get("district");
-    function handleDistrictClick(districtName) {
-        const params = new URLSearchParams(searchParams.toString());
-        // 💡 잼이사의 토글 로직: 이미 선택된 구를 다시 누르면 해제!
-        if (params.get("district") === districtName) {
-            params.delete("district");
-        } else {
-            params.set("district", districtName);
-        }
-        router.push(`${pathname}?${params.toString()}`, {
-            scroll: false
-        });
-        // 스크롤 모터 (해제할 땐 스크롤 안 함)
-        if (params.get("district")) {
-            setTimeout(()=>{
-                document.getElementById("ranking-board-section")?.scrollIntoView({
-                    behavior: "smooth"
-                });
-            }, 100);
-        }
-    }
-    function handleDistrictKeyDown(event, districtName) {
-        if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            handleDistrictClick(districtName);
-        }
-    }
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
         className: "overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_50px_rgba(0,0,0,0.3)]",
         children: [
@@ -930,7 +919,7 @@ function MarketHeatmap({ items }) {
                                     children: "DISTRICT HEATMAP"
                                 }, void 0, false, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 175,
+                                    lineNumber: 206,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
@@ -938,21 +927,21 @@ function MarketHeatmap({ items }) {
                                     children: "서울 자본 흐름 온도"
                                 }, void 0, false, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 176,
+                                    lineNumber: 209,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                     className: "mt-1 text-xs text-white/45 sm:text-sm",
-                                    children: "구별 시가총액 체급과 전주 대비 순위 압력을 동시에 본다"
+                                    children: "구별 시가총액 체급과 최근 7일 기준 순위 압력을 동시에 본다"
                                 }, void 0, false, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 177,
+                                    lineNumber: 212,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                            lineNumber: 174,
+                            lineNumber: 205,
                             columnNumber: 11
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -960,18 +949,18 @@ function MarketHeatmap({ items }) {
                             children: [
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                     className: "rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-cyan-100",
-                                    children: "Cyan = 상승 우위"
+                                    children: "Cyan = 주간 상승 우위"
                                 }, void 0, false, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 180,
+                                    lineNumber: 218,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                     className: "rounded-full border border-fuchsia-400/20 bg-fuchsia-400/10 px-2.5 py-1 text-fuchsia-100",
-                                    children: "Fuchsia = 하락 우위"
+                                    children: "Fuchsia = 주간 하락 압력"
                                 }, void 0, false, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 181,
+                                    lineNumber: 221,
                                     columnNumber: 13
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -979,24 +968,24 @@ function MarketHeatmap({ items }) {
                                     children: "Gray = 보합"
                                 }, void 0, false, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 182,
+                                    lineNumber: 224,
                                     columnNumber: 13
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                            lineNumber: 179,
+                            lineNumber: 217,
                             columnNumber: 11
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                    lineNumber: 173,
+                    lineNumber: 204,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                lineNumber: 172,
+                lineNumber: 203,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1005,16 +994,13 @@ function MarketHeatmap({ items }) {
                     className: "grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-12",
                     children: buckets.map((bucket)=>{
                         const tone = getTone(bucket.averageDelta);
-                        // 💡 선택된 구역에 테두리 빛 발산 효과!
-                        const isSelected = currentDistrict === bucket.name;
-                        const selectedRing = isSelected ? "ring-2 ring-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.2)] border-cyan-400/50" : "";
                         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("article", {
                             role: "button",
                             tabIndex: 0,
-                            "aria-label": `${bucket.name} 필터 토글`,
-                            onClick: ()=>handleDistrictClick(bucket.name),
+                            "aria-label": `${bucket.name} 필터 적용`,
+                            onClick: ()=>pushDistrictToUrl(bucket.name),
                             onKeyDown: (event)=>handleDistrictKeyDown(event, bucket.name),
-                            className: `col-span-1 cursor-pointer rounded-2xl border p-4 transition duration-200 outline-none ${bucket.spanClass} ${tone.card} ${tone.hover} ${selectedRing} hover:-translate-y-0.5`,
+                            className: `col-span-1 cursor-pointer rounded-2xl border p-4 transition duration-200 outline-none ${bucket.spanClass} ${tone.card} ${tone.hover} hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-cyan-300/50`,
                             children: [
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: "flex items-start justify-between gap-3",
@@ -1027,7 +1013,7 @@ function MarketHeatmap({ items }) {
                                                     children: bucket.name
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                                    lineNumber: 208,
+                                                    lineNumber: 249,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -1035,13 +1021,13 @@ function MarketHeatmap({ items }) {
                                                     children: formatMarketCapKrw(bucket.totalMarketCap)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                                    lineNumber: 209,
+                                                    lineNumber: 252,
                                                     columnNumber: 23
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                            lineNumber: 207,
+                                            lineNumber: 248,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1052,13 +1038,13 @@ function MarketHeatmap({ items }) {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                            lineNumber: 211,
+                                            lineNumber: 257,
                                             columnNumber: 21
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 206,
+                                    lineNumber: 247,
                                     columnNumber: 19
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1069,10 +1055,10 @@ function MarketHeatmap({ items }) {
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                                     className: "text-[10px] uppercase tracking-[0.16em] text-white/40",
-                                                    children: "Avg Delta"
+                                                    children: "Momentum (W)"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                                    lineNumber: 215,
+                                                    lineNumber: 266,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1080,13 +1066,13 @@ function MarketHeatmap({ items }) {
                                                     children: formatSignedDelta(bucket.averageDelta)
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                                    lineNumber: 216,
+                                                    lineNumber: 269,
                                                     columnNumber: 23
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                            lineNumber: 214,
+                                            lineNumber: 265,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1097,7 +1083,7 @@ function MarketHeatmap({ items }) {
                                                     children: "Listings"
                                                 }, void 0, false, {
                                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                                    lineNumber: 219,
+                                                    lineNumber: 275,
                                                     columnNumber: 23
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1108,19 +1094,19 @@ function MarketHeatmap({ items }) {
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                                    lineNumber: 220,
+                                                    lineNumber: 278,
                                                     columnNumber: 23
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                            lineNumber: 218,
+                                            lineNumber: 274,
                                             columnNumber: 21
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 213,
+                                    lineNumber: 264,
                                     columnNumber: 19
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1132,12 +1118,12 @@ function MarketHeatmap({ items }) {
                                         }
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                        lineNumber: 224,
+                                        lineNumber: 285,
                                         columnNumber: 21
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 223,
+                                    lineNumber: 284,
                                     columnNumber: 19
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1151,51 +1137,51 @@ function MarketHeatmap({ items }) {
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                            lineNumber: 227,
+                                            lineNumber: 292,
                                             columnNumber: 21
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            className: `shrink-0 text-[10px] uppercase tracking-[0.18em] ${isSelected ? 'text-cyan-300 font-bold' : 'text-cyan-300/50'}`,
-                                            children: isSelected ? "FILTER ACTIVE" : "Click to filter"
+                                            className: "shrink-0 text-[10px] uppercase tracking-[0.18em] text-cyan-300/70",
+                                            children: "Click to filter"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                            lineNumber: 229,
+                                            lineNumber: 295,
                                             columnNumber: 21
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                                    lineNumber: 226,
+                                    lineNumber: 291,
                                     columnNumber: 19
                                 }, this)
                             ]
                         }, bucket.name, true, {
                             fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                            lineNumber: 197,
+                            lineNumber: 238,
                             columnNumber: 17
                         }, this);
                     })
                 }, void 0, false, {
                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                    lineNumber: 188,
+                    lineNumber: 233,
                     columnNumber: 11
                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                     className: "rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55",
                     children: "현재 히트맵을 그릴 랭킹 데이터가 없다."
                 }, void 0, false, {
                     fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                    lineNumber: 238,
+                    lineNumber: 304,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-                lineNumber: 186,
+                lineNumber: 231,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/home/MarketHeatmap.tsx",
-        lineNumber: 171,
+        lineNumber: 202,
         columnNumber: 5
     }, this);
 }
@@ -1228,27 +1214,30 @@ function formatMarketCapKrw(value) {
     }
     return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
+function formatPercent(value) {
+    if (value > 0) return `+${value.toFixed(2)}%`;
+    if (value < 0) return `${value.toFixed(2)}%`;
+    return "0.00%";
+}
 function getRankDeltaTone(delta) {
-    if (delta > 0) {
-        return "text-emerald-400";
-    }
-    if (delta < 0) {
-        return "text-rose-400";
-    }
+    if (delta > 0) return "text-emerald-400";
+    if (delta < 0) return "text-rose-400";
+    return "text-white/45";
+}
+function getMomentumTone(value) {
+    if (value > 0) return "text-cyan-200";
+    if (value < 0) return "text-fuchsia-200";
     return "text-white/45";
 }
 function formatRankDelta(delta) {
-    if (delta > 0) {
-        return `▲ +${delta}`;
-    }
-    if (delta < 0) {
-        return `▼ ${delta}`;
-    }
+    if (delta > 0) return `▲ +${delta}`;
+    if (delta < 0) return `▼ ${delta}`;
     return "— 0";
 }
 function RankingCard({ item }) {
     const locationLabel = item.locationLabel || "위치 정보 없음";
-    const rankDeltaTone = getRankDeltaTone(item.rankDelta1d);
+    const rankDeltaTone = getRankDeltaTone(item.rankDelta7d);
+    const momentumTone = getMomentumTone(item.marketCapDeltaPct7d);
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("article", {
         className: "grid grid-cols-[44px_minmax(0,1fr)_auto] gap-3 rounded-xl border border-white/6 bg-white/[0.03] p-3 sm:grid-cols-[48px_minmax(0,1fr)_auto] sm:gap-4 sm:p-4",
         children: [
@@ -1260,7 +1249,7 @@ function RankingCard({ item }) {
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/RankingCard.tsx",
-                lineNumber: 58,
+                lineNumber: 59,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1271,7 +1260,7 @@ function RankingCard({ item }) {
                         children: item.name
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/RankingCard.tsx",
-                        lineNumber: 63,
+                        lineNumber: 64,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1279,13 +1268,13 @@ function RankingCard({ item }) {
                         children: locationLabel
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/RankingCard.tsx",
-                        lineNumber: 66,
+                        lineNumber: 67,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/RankingCard.tsx",
-                lineNumber: 62,
+                lineNumber: 63,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1296,7 +1285,7 @@ function RankingCard({ item }) {
                         children: "Market Cap"
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/RankingCard.tsx",
-                        lineNumber: 72,
+                        lineNumber: 73,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -1304,30 +1293,41 @@ function RankingCard({ item }) {
                         children: formatMarketCapKrw(item.marketCapKrw)
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/RankingCard.tsx",
-                        lineNumber: 75,
+                        lineNumber: 76,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                         className: `mt-1 text-xs font-medium sm:text-sm ${rankDeltaTone}`,
                         children: [
-                            "전일 ",
-                            formatRankDelta(item.rankDelta1d)
+                            "주간 순위 변동 ",
+                            formatRankDelta(item.rankDelta7d)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/RankingCard.tsx",
-                        lineNumber: 78,
+                        lineNumber: 79,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                        className: `mt-1 text-[11px] font-medium sm:text-xs ${momentumTone}`,
+                        children: [
+                            "Momentum (W) ",
+                            formatPercent(item.marketCapDeltaPct7d)
+                        ]
+                    }, void 0, true, {
+                        fileName: "[project]/src/components/home/RankingCard.tsx",
+                        lineNumber: 82,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/RankingCard.tsx",
-                lineNumber: 71,
+                lineNumber: 72,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/home/RankingCard.tsx",
-        lineNumber: 57,
+        lineNumber: 58,
         columnNumber: 5
     }, this);
 }
@@ -1348,27 +1348,157 @@ function formatMarketCapKrw(value) {
     if (!Number.isFinite(value) || value <= 0) return "-";
     const TRILLION = 1_000_000_000_000;
     const HUNDRED_MILLION = 100_000_000;
-    if (value >= TRILLION) return `${(value / TRILLION).toFixed(value / TRILLION >= 100 ? 0 : value / TRILLION >= 10 ? 1 : 2)}조원`;
-    if (value >= HUNDRED_MILLION) return `${(value / HUNDRED_MILLION).toFixed(value / HUNDRED_MILLION >= 100 ? 0 : value / HUNDRED_MILLION >= 10 ? 1 : 2)}억원`;
+    if (value >= TRILLION) {
+        const amount = value / TRILLION;
+        const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
+        return `${amount.toFixed(digits)}조원`;
+    }
+    if (value >= HUNDRED_MILLION) {
+        const amount = value / HUNDRED_MILLION;
+        const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
+        return `${amount.toFixed(digits)}억원`;
+    }
     return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
+function formatSignedNumber(value) {
+    if (value > 0) return `+${new Intl.NumberFormat("ko-KR").format(value)}`;
+    if (value < 0) return new Intl.NumberFormat("ko-KR").format(value);
+    return "0";
+}
+function formatPercent(value) {
+    if (value > 0) return `+${value.toFixed(2)}%`;
+    if (value < 0) return `${value.toFixed(2)}%`;
+    return "0.00%";
+}
+function formatRankDelta(delta) {
+    if (delta > 0) return `▲ +${delta}`;
+    if (delta < 0) return `▼ ${delta}`;
+    return "— 0";
+}
+function rankDeltaTone(delta) {
+    if (delta > 0) return "text-emerald-400";
+    if (delta < 0) return "text-rose-400";
+    return "text-white/45";
+}
+function momentumTone(value) {
+    if (value > 0) return "text-cyan-200";
+    if (value < 0) return "text-fuchsia-200";
+    return "text-white/45";
+}
 function formatCount(value) {
-    return value == null ? "-" : `${new Intl.NumberFormat("ko-KR").format(value)}개`;
+    if (value == null) return "-";
+    return `${new Intl.NumberFormat("ko-KR").format(value)}개`;
 }
 function formatPlainNumber(value) {
-    return value == null ? "-" : new Intl.NumberFormat("ko-KR").format(value);
+    if (value == null) return "-";
+    return new Intl.NumberFormat("ko-KR").format(value);
 }
 function formatYear(value) {
-    return value == null ? "-" : `${value}년`;
+    if (value == null) return "-";
+    return `${value}년`;
 }
 function formatUpdatedAt(value) {
     if (!value) return "-";
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? "-" : new Intl.DateTimeFormat("ko-KR", {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return new Intl.DateTimeFormat("ko-KR", {
         year: "numeric",
         month: "2-digit",
         day: "2-digit"
-    }).format(d);
+    }).format(date);
+}
+function Metric({ label, value, tone }) {
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+        className: "rounded-2xl border border-white/8 bg-white/[0.03] p-3 sm:p-4",
+        children: [
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                className: "text-[11px] uppercase tracking-[0.18em] text-white/40 sm:text-xs",
+                children: label
+            }, void 0, false, {
+                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                lineNumber: 110,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                className: `mt-1 text-base font-semibold tabular-nums sm:text-lg ${tone ?? ""}`,
+                children: value
+            }, void 0, false, {
+                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                lineNumber: 113,
+                columnNumber: 7
+            }, this)
+        ]
+    }, void 0, true, {
+        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+        lineNumber: 109,
+        columnNumber: 5
+    }, this);
+}
+function DetailRow({ label, value }) {
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+        className: "flex items-center justify-between gap-4 border-b border-white/5 py-3 last:border-b-0",
+        children: [
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                className: "text-sm text-white/45",
+                children: label
+            }, void 0, false, {
+                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                lineNumber: 129,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                className: "text-right text-sm font-medium text-white",
+                children: value
+            }, void 0, false, {
+                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                lineNumber: 130,
+                columnNumber: 7
+            }, this)
+        ]
+    }, void 0, true, {
+        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+        lineNumber: 128,
+        columnNumber: 5
+    }, this);
+}
+function ShareIcon() {
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
+        "aria-hidden": "true",
+        viewBox: "0 0 24 24",
+        className: "h-4 w-4",
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: "1.8",
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+        children: [
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
+                d: "M7 12v7a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-7"
+            }, void 0, false, {
+                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                lineNumber: 147,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
+                d: "M12 3v12"
+            }, void 0, false, {
+                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                lineNumber: 148,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
+                d: "m8 7 4-4 4 4"
+            }, void 0, false, {
+                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                lineNumber: 149,
+                columnNumber: 7
+            }, this)
+        ]
+    }, void 0, true, {
+        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+        lineNumber: 137,
+        columnNumber: 5
+    }, this);
 }
 function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
     const [sharePending, setSharePending] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])(false);
@@ -1378,8 +1508,10 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
         if (!open) return;
         const prevOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
-        const onKeyDown = (e)=>{
-            if (e.key === "Escape") onClose();
+        const onKeyDown = (event)=>{
+            if (event.key === "Escape") {
+                onClose();
+            }
         };
         window.addEventListener("keydown", onKeyDown);
         return ()=>{
@@ -1390,13 +1522,24 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
         open,
         onClose
     ]);
+    (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useEffect"])(()=>{
+        return ()=>{
+            if (toastTimerRef.current) {
+                clearTimeout(toastTimerRef.current);
+            }
+        };
+    }, []);
     function showToast(message, tone) {
-        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+        }
         setToast({
             message,
             tone
         });
-        toastTimerRef.current = setTimeout(()=>setToast(null), 2200);
+        toastTimerRef.current = setTimeout(()=>{
+            setToast(null);
+        }, 2200);
     }
     async function handleShare() {
         if ("TURBOPACK compile-time truthy", 1) return;
@@ -1407,524 +1550,337 @@ function ComplexDetailSheet({ open, item, detail, loading, error, onClose }) {
     }
     if (!open || !item) return null;
     const title = detail?.name ?? item.name;
-    const location = detail?.locationLabel ?? item.locationLabel ?? "위치 정보 없음";
+    const location = (detail?.locationLabel ?? item.locationLabel) || "위치 정보 없음";
     const rank = detail?.rank ?? item.rank;
     const marketCap = detail?.marketCapKrw ?? item.marketCapKrw;
-    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-        style: {
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 999999,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'flex-end',
-            alignItems: 'center'
-        },
+    const rankDelta7d = detail?.rankDelta7d ?? item.rankDelta7d;
+    const marketCapDelta7d = detail?.marketCapDelta7d ?? item.marketCapDelta7d;
+    const marketCapDeltaPct7d = detail?.marketCapDeltaPct7d ?? item.marketCapDeltaPct7d;
+    const historySnapshotDate = detail?.historySnapshotDate ?? item.historySnapshotDate;
+    return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                style: {
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0
-                },
-                onClick: onClose
-            }, void 0, false, {
-                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 91,
-                columnNumber: 7
-            }, this),
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
-                style: {
-                    position: 'relative',
-                    width: '100%',
-                    maxWidth: '640px',
-                    backgroundColor: '#0b1118',
-                    borderTopLeftRadius: '24px',
-                    borderTopRightRadius: '24px',
-                    border: '1px solid #22d3ee',
-                    boxShadow: '0 -10px 50px rgba(0,0,0,0.8)',
-                    padding: '24px',
-                    color: 'white',
-                    maxHeight: '85vh',
-                    overflowY: 'auto'
-                },
+                className: "fixed inset-0 z-50",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        style: {
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'flex-start',
-                            marginBottom: '20px'
-                        },
+                        className: "absolute inset-0 bg-black/70 backdrop-blur-sm",
+                        onClick: onClose
+                    }, void 0, false, {
+                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                        lineNumber: 267,
+                        columnNumber: 9
+                    }, this),
+                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
+                        role: "dialog",
+                        "aria-modal": "true",
+                        "aria-labelledby": "complex-detail-title",
+                        className: "absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "border-b border-white/5 bg-[#0b1118]/95 px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pt-4",
                                 children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                        style: {
-                                            color: '#67e8f9',
-                                            fontSize: '12px',
-                                            letterSpacing: '2px',
-                                            margin: '0 0 4px 0'
-                                        },
-                                        children: "COMPLEX DETAIL"
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/10 md:hidden"
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 97,
+                                        lineNumber: 279,
                                         columnNumber: 13
                                     }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
-                                        style: {
-                                            fontSize: '24px',
-                                            fontWeight: 'bold',
-                                            margin: 0
-                                        },
-                                        children: title
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 98,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                        style: {
-                                            color: '#94a3b8',
-                                            fontSize: '14px',
-                                            marginTop: '4px'
-                                        },
-                                        children: location
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 99,
-                                        columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                lineNumber: 96,
-                                columnNumber: 11
-                            }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                style: {
-                                    display: 'flex',
-                                    gap: '8px'
-                                },
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                                        onClick: handleShare,
-                                        disabled: sharePending,
-                                        style: {
-                                            padding: '8px 16px',
-                                            backgroundColor: 'rgba(103,232,249,0.1)',
-                                            border: '1px solid rgba(103,232,249,0.2)',
-                                            borderRadius: '8px',
-                                            color: '#cffafe',
-                                            cursor: sharePending ? 'not-allowed' : 'pointer',
-                                            fontWeight: 'bold',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '6px'
-                                        },
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "flex items-start justify-between gap-3",
                                         children: [
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
-                                                width: "16",
-                                                height: "16",
-                                                viewBox: "0 0 24 24",
-                                                fill: "none",
-                                                stroke: "currentColor",
-                                                strokeWidth: "2",
-                                                strokeLinecap: "round",
-                                                strokeLinejoin: "round",
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "min-w-0",
                                                 children: [
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
-                                                        d: "M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                        className: "text-[11px] uppercase tracking-[0.24em] text-cyan-300/70 sm:text-xs",
+                                                        children: "COMPLEX DETAIL"
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                        lineNumber: 103,
-                                                        columnNumber: 158
+                                                        lineNumber: 283,
+                                                        columnNumber: 17
                                                     }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("polyline", {
-                                                        points: "16 6 12 2 8 6"
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
+                                                        id: "complex-detail-title",
+                                                        className: "mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl",
+                                                        children: title
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                        lineNumber: 103,
-                                                        columnNumber: 217
+                                                        lineNumber: 286,
+                                                        columnNumber: 17
                                                     }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("line", {
-                                                        x1: "12",
-                                                        y1: "2",
-                                                        x2: "12",
-                                                        y2: "15"
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
+                                                        className: "mt-1 truncate text-sm text-white/50 sm:text-[15px]",
+                                                        children: location
                                                     }, void 0, false, {
                                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                        lineNumber: 103,
-                                                        columnNumber: 261
+                                                        lineNumber: 292,
+                                                        columnNumber: 17
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                                lineNumber: 103,
+                                                lineNumber: 282,
                                                 columnNumber: 15
                                             }, this),
-                                            sharePending ? "공유 중..." : "공유하기"
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                className: "flex shrink-0 items-center gap-2",
+                                                children: [
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                        type: "button",
+                                                        onClick: ()=>void handleShare(),
+                                                        disabled: sharePending,
+                                                        className: "inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60",
+                                                        "aria-label": "공유하기",
+                                                        children: [
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(ShareIcon, {}, void 0, false, {
+                                                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                                lineNumber: 305,
+                                                                columnNumber: 19
+                                                            }, this),
+                                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                                children: sharePending ? "공유 중..." : "공유하기"
+                                                            }, void 0, false, {
+                                                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                                lineNumber: 306,
+                                                                columnNumber: 19
+                                                            }, this)
+                                                        ]
+                                                    }, void 0, true, {
+                                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                        lineNumber: 298,
+                                                        columnNumber: 17
+                                                    }, this),
+                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                        type: "button",
+                                                        onClick: onClose,
+                                                        className: "rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/70 transition hover:bg-white/[0.06]",
+                                                        children: "닫기"
+                                                    }, void 0, false, {
+                                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                        lineNumber: 309,
+                                                        columnNumber: 17
+                                                    }, this)
+                                                ]
+                                            }, void 0, true, {
+                                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                lineNumber: 297,
+                                                columnNumber: 15
+                                            }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 102,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                                        onClick: onClose,
-                                        style: {
-                                            padding: '8px 16px',
-                                            backgroundColor: 'rgba(255,255,255,0.1)',
-                                            borderRadius: '8px',
-                                            color: 'white',
-                                            border: 'none',
-                                            cursor: 'pointer'
-                                        },
-                                        children: "닫기"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 106,
+                                        lineNumber: 281,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                lineNumber: 101,
-                                columnNumber: 11
-                            }, this)
-                        ]
-                    }, void 0, true, {
-                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                        lineNumber: 95,
-                        columnNumber: 9
-                    }, this),
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        style: {
-                            display: 'grid',
-                            gridTemplateColumns: '1fr 1fr',
-                            gap: '12px',
-                            marginBottom: '20px'
-                        },
-                        children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                style: {
-                                    background: 'rgba(255,255,255,0.05)',
-                                    padding: '16px',
-                                    borderRadius: '16px'
-                                },
-                                children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                        style: {
-                                            fontSize: '12px',
-                                            color: '#94a3b8',
-                                            margin: '0 0 4px 0'
-                                        },
-                                        children: "현재 순위"
-                                    }, void 0, false, {
-                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 112,
-                                        columnNumber: 13
-                                    }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                        style: {
-                                            fontSize: '18px',
-                                            fontWeight: 'bold',
-                                            margin: 0
-                                        },
-                                        children: [
-                                            "#",
-                                            formatPlainNumber(rank)
-                                        ]
-                                    }, void 0, true, {
-                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 113,
-                                        columnNumber: 13
-                                    }, this)
-                                ]
-                            }, void 0, true, {
-                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                lineNumber: 111,
+                                lineNumber: 278,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                style: {
-                                    background: 'rgba(255,255,255,0.05)',
-                                    padding: '16px',
-                                    borderRadius: '16px'
-                                },
+                                className: "max-h-[calc(85vh-100px)] overflow-y-auto px-4 pb-6 pt-4 sm:px-5",
                                 children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                        style: {
-                                            fontSize: '12px',
-                                            color: '#94a3b8',
-                                            margin: '0 0 4px 0'
-                                        },
-                                        children: "시가총액"
+                                    error ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200",
+                                        children: error
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 116,
+                                        lineNumber: 322,
+                                        columnNumber: 15
+                                    }, this) : null,
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "grid grid-cols-2 gap-2 sm:gap-3",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(Metric, {
+                                                label: "현재 순위",
+                                                value: `#${formatPlainNumber(rank)}`
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                lineNumber: 328,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(Metric, {
+                                                label: "시가총액",
+                                                value: formatMarketCapKrw(marketCap)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                lineNumber: 329,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(Metric, {
+                                                label: "주간 순위 변동",
+                                                value: formatRankDelta(rankDelta7d),
+                                                tone: rankDeltaTone(rankDelta7d)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                lineNumber: 330,
+                                                columnNumber: 15
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(Metric, {
+                                                label: "Momentum (W)",
+                                                value: formatPercent(marketCapDeltaPct7d),
+                                                tone: momentumTone(marketCapDeltaPct7d)
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                lineNumber: 335,
+                                                columnNumber: 15
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                        lineNumber: 327,
                                         columnNumber: 13
                                     }, this),
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                        style: {
-                                            fontSize: '18px',
-                                            fontWeight: 'bold',
-                                            margin: 0
-                                        },
-                                        children: formatMarketCapKrw(marketCap)
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                        className: "mt-4 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-2",
+                                        children: loading && !detail ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                            className: "space-y-3 py-2",
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "h-4 w-24 animate-pulse rounded bg-white/10"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 345,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "h-4 w-full animate-pulse rounded bg-white/10"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 346,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "h-4 w-4/5 animate-pulse rounded bg-white/10"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 347,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "h-4 w-3/5 animate-pulse rounded bg-white/10"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 348,
+                                                    columnNumber: 19
+                                                }, this)
+                                            ]
+                                        }, void 0, true, {
+                                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                            lineNumber: 344,
+                                            columnNumber: 17
+                                        }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Fragment"], {
+                                            children: [
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
+                                                    label: "최근 7일 시총 변동",
+                                                    value: `${formatSignedNumber(marketCapDelta7d)}원`
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 352,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
+                                                    label: "비교 기준 스냅샷",
+                                                    value: historySnapshotDate ?? "-"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 356,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
+                                                    label: "세대수",
+                                                    value: formatCount(detail?.householdCount)
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 360,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
+                                                    label: "준공연도",
+                                                    value: formatYear(detail?.approvalYear)
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 364,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
+                                                    label: "연식",
+                                                    value: detail?.ageYears != null ? `${detail.ageYears}년차` : "-"
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 368,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
+                                                    label: "동 수",
+                                                    value: formatCount(detail?.buildingCount)
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 374,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
+                                                    label: "주차대수",
+                                                    value: formatCount(detail?.parkingCount)
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 378,
+                                                    columnNumber: 19
+                                                }, this),
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(DetailRow, {
+                                                    label: "데이터 기준일",
+                                                    value: formatUpdatedAt(detail?.updatedAt)
+                                                }, void 0, false, {
+                                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                                                    lineNumber: 382,
+                                                    columnNumber: 19
+                                                }, this)
+                                            ]
+                                        }, void 0, true)
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                        lineNumber: 117,
+                                        lineNumber: 342,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                lineNumber: 115,
+                                lineNumber: 320,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                        lineNumber: 110,
-                        columnNumber: 9
-                    }, this),
-                    error ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        style: {
-                            color: '#fda4af',
-                            padding: '12px',
-                            background: 'rgba(244, 63, 94, 0.1)',
-                            borderRadius: '12px',
-                            marginBottom: '16px'
-                        },
-                        children: error
-                    }, void 0, false, {
-                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                        lineNumber: 121,
-                        columnNumber: 18
-                    }, this) : null,
-                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        style: {
-                            background: 'rgba(255,255,255,0.03)',
-                            padding: '16px',
-                            borderRadius: '16px'
-                        },
-                        children: loading && !detail ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                            style: {
-                                color: '#22d3ee',
-                                textAlign: 'center',
-                                margin: '20px 0',
-                                fontWeight: 'bold'
-                            },
-                            children: "상세 데이터를 불러오는 중입니다..."
-                        }, void 0, false, {
-                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                            lineNumber: 125,
-                            columnNumber: 13
-                        }, this) : detail ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                            style: {
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '12px'
-                            },
-                            children: [
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    style: {
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        borderBottom: '1px solid rgba(255,255,255,0.1)',
-                                        paddingBottom: '8px'
-                                    },
-                                    children: [
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            style: {
-                                                color: '#94a3b8'
-                                            },
-                                            children: "세대수"
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 129,
-                                            columnNumber: 17
-                                        }, this),
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            style: {
-                                                fontWeight: 'bold'
-                                            },
-                                            children: formatCount(detail.householdCount)
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 129,
-                                            columnNumber: 62
-                                        }, this)
-                                    ]
-                                }, void 0, true, {
-                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                    lineNumber: 128,
-                                    columnNumber: 15
-                                }, this),
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    style: {
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        borderBottom: '1px solid rgba(255,255,255,0.1)',
-                                        paddingBottom: '8px'
-                                    },
-                                    children: [
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            style: {
-                                                color: '#94a3b8'
-                                            },
-                                            children: "준공연도"
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 132,
-                                            columnNumber: 17
-                                        }, this),
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            style: {
-                                                fontWeight: 'bold'
-                                            },
-                                            children: formatYear(detail.approvalYear)
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 132,
-                                            columnNumber: 63
-                                        }, this)
-                                    ]
-                                }, void 0, true, {
-                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                    lineNumber: 131,
-                                    columnNumber: 15
-                                }, this),
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    style: {
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        borderBottom: '1px solid rgba(255,255,255,0.1)',
-                                        paddingBottom: '8px'
-                                    },
-                                    children: [
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            style: {
-                                                color: '#94a3b8'
-                                            },
-                                            children: "주차대수"
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 135,
-                                            columnNumber: 17
-                                        }, this),
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            style: {
-                                                fontWeight: 'bold'
-                                            },
-                                            children: formatCount(detail.parkingCount)
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 135,
-                                            columnNumber: 63
-                                        }, this)
-                                    ]
-                                }, void 0, true, {
-                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                    lineNumber: 134,
-                                    columnNumber: 15
-                                }, this),
-                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    style: {
-                                        display: 'flex',
-                                        justifyContent: 'space-between'
-                                    },
-                                    children: [
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            style: {
-                                                color: '#94a3b8'
-                                            },
-                                            children: "데이터 기준일"
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 138,
-                                            columnNumber: 17
-                                        }, this),
-                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                            style: {
-                                                fontWeight: 'bold'
-                                            },
-                                            children: formatUpdatedAt(detail.updatedAt)
-                                        }, void 0, false, {
-                                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                            lineNumber: 138,
-                                            columnNumber: 66
-                                        }, this)
-                                    ]
-                                }, void 0, true, {
-                                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                                    lineNumber: 137,
-                                    columnNumber: 15
-                                }, this)
-                            ]
-                        }, void 0, true, {
-                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                            lineNumber: 127,
-                            columnNumber: 13
-                        }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                            style: {
-                                color: '#94a3b8',
-                                textAlign: 'center',
-                                margin: '20px 0'
-                            },
-                            children: "상세 데이터가 없습니다."
-                        }, void 0, false, {
-                            fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                            lineNumber: 142,
-                            columnNumber: 13
-                        }, this)
-                    }, void 0, false, {
-                        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                        lineNumber: 123,
+                        lineNumber: 272,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 93,
+                lineNumber: 266,
                 columnNumber: 7
             }, this),
-            toast && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                style: {
-                    position: 'fixed',
-                    bottom: '24px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    zIndex: 9999999,
-                    padding: '12px 24px',
-                    borderRadius: '30px',
-                    backgroundColor: toast.tone === 'success' ? '#047857' : '#be123c',
-                    color: 'white',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
-                    transition: 'all 0.3s ease'
-                },
-                children: toast.message
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                "aria-live": "polite",
+                "aria-atomic": "true",
+                className: "pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4",
+                children: toast ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                    className: `rounded-full border px-4 py-2 text-sm font-medium shadow-[0_12px_30px_rgba(0,0,0,0.35)] backdrop-blur ${toast.tone === "success" ? "border-emerald-400/20 bg-emerald-400/12 text-emerald-100" : "border-rose-400/20 bg-rose-400/12 text-rose-100"}`,
+                    children: toast.message
+                }, void 0, false, {
+                    fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
+                    lineNumber: 399,
+                    columnNumber: 11
+                }, this) : null
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-                lineNumber: 149,
-                columnNumber: 9
+                lineNumber: 393,
+                columnNumber: 7
             }, this)
         ]
-    }, void 0, true, {
-        fileName: "[project]/src/components/home/ComplexDetailSheet.tsx",
-        lineNumber: 90,
-        columnNumber: 5
-    }, this);
+    }, void 0, true);
 }
 }),
 "[project]/src/components/home/ComparisonSheet.tsx [app-ssr] (ecmascript)", ((__turbopack_context__) => {
@@ -3265,9 +3221,7 @@ __turbopack_context__.s([
     ()=>TopMovers
 ]);
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime.js [app-ssr] (ecmascript)");
-var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/navigation.js [app-ssr] (ecmascript)");
 "use client";
-;
 ;
 function formatMarketCapKrw(value) {
     if (!Number.isFinite(value) || value <= 0) return "-";
@@ -3293,8 +3247,8 @@ function formatRankDelta(value) {
 function buildHotMovers(items) {
     return [
         ...items
-    ].filter((item)=>item.rankDelta1d > 0).sort((a, b)=>{
-        if (b.rankDelta1d !== a.rankDelta1d) return b.rankDelta1d - a.rankDelta1d;
+    ].filter((item)=>item.rankDelta7d > 0).sort((a, b)=>{
+        if (b.rankDelta7d !== a.rankDelta7d) return b.rankDelta7d - a.rankDelta7d;
         if (a.rank !== b.rank) return a.rank - b.rank;
         return b.marketCapKrw - a.marketCapKrw;
     }).slice(0, 3);
@@ -3302,25 +3256,39 @@ function buildHotMovers(items) {
 function buildColdDrops(items) {
     return [
         ...items
-    ].filter((item)=>item.rankDelta1d < 0).sort((a, b)=>{
-        if (a.rankDelta1d !== b.rankDelta1d) return a.rankDelta1d - b.rankDelta1d;
+    ].filter((item)=>item.rankDelta7d < 0).sort((a, b)=>{
+        if (a.rankDelta7d !== b.rankDelta7d) return a.rankDelta7d - b.rankDelta7d;
         if (a.rank !== b.rank) return a.rank - b.rank;
         return b.marketCapKrw - a.marketCapKrw;
     }).slice(0, 3);
 }
-function MoverRow({ item, tone, index, onClick }) {
+function buildUrlWithComplexId(complexId) {
+    const params = new URLSearchParams(window.location.search);
+    params.set("complexId", complexId);
+    const queryString = params.toString();
+    return `${window.location.pathname}${queryString ? `?${queryString}` : ""}${window.location.hash}`;
+}
+function pushComplexIdToUrl(complexId) {
+    const nextUrl = buildUrlWithComplexId(complexId);
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (currentUrl !== nextUrl) {
+        window.history.pushState(null, "", nextUrl);
+    }
+}
+function handleMoverKeyDown(event, complexId) {
+    if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        pushComplexIdToUrl(complexId);
+    }
+}
+function MoverRow({ item, tone, index }) {
     const isHot = tone === "hot";
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("article", {
         role: "button",
         tabIndex: 0,
         "aria-label": `${item.name} 상세 보기`,
-        onClick: ()=>onClick(item.complexId),
-        onKeyDown: (e)=>{
-            if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onClick(item.complexId);
-            }
-        },
+        onClick: ()=>pushComplexIdToUrl(item.complexId),
+        onKeyDown: (event)=>handleMoverKeyDown(event, item.complexId),
         className: `cursor-pointer rounded-2xl border p-3 transition duration-200 outline-none sm:p-4 ${isHot ? "border-cyan-300/18 bg-cyan-300/[0.08] hover:-translate-y-0.5 hover:shadow-[0_0_0_1px_rgba(34,211,238,0.18),0_0_24px_rgba(34,211,238,0.16)] hover:border-cyan-300/35 focus-visible:ring-2 focus-visible:ring-cyan-300/50" : "border-fuchsia-400/18 bg-fuchsia-400/[0.08] hover:-translate-y-0.5 hover:shadow-[0_0_0_1px_rgba(232,121,249,0.18),0_0_24px_rgba(232,121,249,0.16)] hover:border-fuchsia-400/35 focus-visible:ring-2 focus-visible:ring-fuchsia-300/50"}`,
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3337,7 +3305,7 @@ function MoverRow({ item, tone, index, onClick }) {
                                         children: index + 1
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                                        lineNumber: 85,
+                                        lineNumber: 109,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -3345,13 +3313,13 @@ function MoverRow({ item, tone, index, onClick }) {
                                         children: item.name
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                                        lineNumber: 88,
+                                        lineNumber: 119,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                                lineNumber: 84,
+                                lineNumber: 108,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3359,27 +3327,27 @@ function MoverRow({ item, tone, index, onClick }) {
                                 children: item.locationLabel || "위치 정보 없음"
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                                lineNumber: 90,
+                                lineNumber: 124,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                        lineNumber: 83,
+                        lineNumber: 107,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         className: `shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${isHot ? "border-cyan-300/20 bg-cyan-300/12 text-cyan-100" : "border-fuchsia-400/20 bg-fuchsia-400/12 text-fuchsia-100"}`,
-                        children: formatRankDelta(item.rankDelta1d)
+                        children: formatRankDelta(item.rankDelta7d)
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                        lineNumber: 92,
+                        lineNumber: 129,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                lineNumber: 82,
+                lineNumber: 106,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3393,7 +3361,7 @@ function MoverRow({ item, tone, index, onClick }) {
                                 children: "현재 순위"
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                                lineNumber: 98,
+                                lineNumber: 142,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3404,13 +3372,13 @@ function MoverRow({ item, tone, index, onClick }) {
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                                lineNumber: 99,
+                                lineNumber: 145,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                        lineNumber: 97,
+                        lineNumber: 141,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3421,7 +3389,7 @@ function MoverRow({ item, tone, index, onClick }) {
                                 children: "시가총액"
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                                lineNumber: 102,
+                                lineNumber: 149,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -3429,19 +3397,19 @@ function MoverRow({ item, tone, index, onClick }) {
                                 children: formatMarketCapKrw(item.marketCapKrw)
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                                lineNumber: 103,
+                                lineNumber: 152,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                        lineNumber: 101,
+                        lineNumber: 148,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                lineNumber: 96,
+                lineNumber: 140,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3452,7 +3420,7 @@ function MoverRow({ item, tone, index, onClick }) {
                         children: item.complexId
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                        lineNumber: 107,
+                        lineNumber: 159,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -3460,36 +3428,25 @@ function MoverRow({ item, tone, index, onClick }) {
                         children: "Open detail"
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                        lineNumber: 108,
+                        lineNumber: 162,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                lineNumber: 106,
+                lineNumber: 158,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/home/TopMovers.tsx",
-        lineNumber: 65,
+        lineNumber: 94,
         columnNumber: 5
     }, this);
 }
 function TopMovers({ items }) {
     const hotMovers = buildHotMovers(items);
     const coldDrops = buildColdDrops(items);
-    const router = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useRouter"])();
-    const pathname = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["usePathname"])();
-    const searchParams = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$navigation$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useSearchParams"])();
-    function handleMoverClick(complexId) {
-        const params = new URLSearchParams(searchParams.toString());
-        params.set("complexId", complexId);
-        params.set("id", complexId);
-        router.push(`${pathname}?${params.toString()}`, {
-            scroll: false
-        });
-    }
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("section", {
         className: "overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_50px_rgba(0,0,0,0.3)]",
         children: [
@@ -3501,29 +3458,29 @@ function TopMovers({ items }) {
                         children: "MOMENTUM FEED"
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                        lineNumber: 132,
+                        lineNumber: 181,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
                         className: "mt-1 truncate text-lg font-semibold tracking-tight sm:text-xl",
-                        children: "주간 핫 단지"
+                        children: "Weekly Hot"
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                        lineNumber: 133,
+                        lineNumber: 184,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                         className: "mt-1 text-xs text-white/45 sm:text-sm",
-                        children: "전주 대비 순위 급등·급락 단지를 즉시 스캔한다"
+                        children: "최근 7일 기준 순위 모멘텀과 압력을 즉시 스캔한다"
                     }, void 0, false, {
                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                        lineNumber: 134,
+                        lineNumber: 187,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                lineNumber: 131,
+                lineNumber: 180,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3537,24 +3494,24 @@ function TopMovers({ items }) {
                                 children: [
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
                                         className: "text-sm font-semibold uppercase tracking-[0.18em] text-cyan-100 sm:text-base",
-                                        children: "📈 HOT MOVERS"
+                                        children: "📈 MOMENTUM (W)"
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                                        lineNumber: 139,
+                                        lineNumber: 195,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                         className: "rounded-full border border-cyan-300/20 bg-cyan-300/12 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-cyan-100",
-                                        children: "Updraft"
+                                        children: "Weekly Updraft"
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                                        lineNumber: 140,
+                                        lineNumber: 198,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                                lineNumber: 138,
+                                lineNumber: 194,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3562,29 +3519,28 @@ function TopMovers({ items }) {
                                 children: hotMovers.length > 0 ? hotMovers.map((item, index)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MoverRow, {
                                         item: item,
                                         tone: "hot",
-                                        index: index,
-                                        onClick: handleMoverClick
+                                        index: index
                                     }, item.complexId, false, {
                                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                                        lineNumber: 144,
-                                        columnNumber: 46
+                                        lineNumber: 206,
+                                        columnNumber: 17
                                     }, this)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: "rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-4 text-sm text-white/50",
-                                    children: "이번 주 감지된 급등 단지가 없다."
+                                    children: "최근 7일 기준 뚜렷한 상승 모멘텀이 감지되지 않았다."
                                 }, void 0, false, {
                                     fileName: "[project]/src/components/home/TopMovers.tsx",
-                                    lineNumber: 146,
+                                    lineNumber: 214,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                                lineNumber: 142,
+                                lineNumber: 203,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                        lineNumber: 137,
+                        lineNumber: 193,
                         columnNumber: 9
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3595,24 +3551,24 @@ function TopMovers({ items }) {
                                 children: [
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
                                         className: "text-sm font-semibold uppercase tracking-[0.18em] text-fuchsia-100 sm:text-base",
-                                        children: "📉 COLD DROPS"
+                                        children: "📉 PRESSURE (W)"
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                                        lineNumber: 152,
+                                        lineNumber: 223,
                                         columnNumber: 13
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                         className: "rounded-full border border-fuchsia-400/20 bg-fuchsia-400/12 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-fuchsia-100",
-                                        children: "Downforce"
+                                        children: "Weekly Drag"
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                                        lineNumber: 153,
+                                        lineNumber: 226,
                                         columnNumber: 13
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                                lineNumber: 151,
+                                lineNumber: 222,
                                 columnNumber: 11
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -3620,41 +3576,40 @@ function TopMovers({ items }) {
                                 children: coldDrops.length > 0 ? coldDrops.map((item, index)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(MoverRow, {
                                         item: item,
                                         tone: "cold",
-                                        index: index,
-                                        onClick: handleMoverClick
+                                        index: index
                                     }, item.complexId, false, {
                                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                                        lineNumber: 157,
-                                        columnNumber: 46
+                                        lineNumber: 234,
+                                        columnNumber: 17
                                     }, this)) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: "rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-4 text-sm text-white/50",
-                                    children: "이번 주 감지된 급락 단지가 없다."
+                                    children: "최근 7일 기준 뚜렷한 하락 압력이 감지되지 않았다."
                                 }, void 0, false, {
                                     fileName: "[project]/src/components/home/TopMovers.tsx",
-                                    lineNumber: 159,
+                                    lineNumber: 242,
                                     columnNumber: 15
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                                lineNumber: 155,
+                                lineNumber: 231,
                                 columnNumber: 11
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/TopMovers.tsx",
-                        lineNumber: 150,
+                        lineNumber: 221,
                         columnNumber: 9
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/home/TopMovers.tsx",
-                lineNumber: 136,
+                lineNumber: 192,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/home/TopMovers.tsx",
-        lineNumber: 130,
+        lineNumber: 179,
         columnNumber: 5
     }, this);
 }

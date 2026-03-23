@@ -25,33 +25,34 @@ function formatMarketCapKrw(value: number): string {
   return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
 
+function formatPercent(value: number): string {
+  if (value > 0) return `+${value.toFixed(2)}%`;
+  if (value < 0) return `${value.toFixed(2)}%`;
+  return "0.00%";
+}
+
 function getRankDeltaTone(delta: number): string {
-  if (delta > 0) {
-    return "text-emerald-400";
-  }
+  if (delta > 0) return "text-emerald-400";
+  if (delta < 0) return "text-rose-400";
+  return "text-white/45";
+}
 
-  if (delta < 0) {
-    return "text-rose-400";
-  }
-
+function getMomentumTone(value: number): string {
+  if (value > 0) return "text-cyan-200";
+  if (value < 0) return "text-fuchsia-200";
   return "text-white/45";
 }
 
 function formatRankDelta(delta: number): string {
-  if (delta > 0) {
-    return `▲ +${delta}`;
-  }
-
-  if (delta < 0) {
-    return `▼ ${delta}`;
-  }
-
+  if (delta > 0) return `▲ +${delta}`;
+  if (delta < 0) return `▼ ${delta}`;
   return "— 0";
 }
 
 export function RankingCard({ item }: { item: RankingItem }) {
   const locationLabel = item.locationLabel || "위치 정보 없음";
-  const rankDeltaTone = getRankDeltaTone(item.rankDelta1d);
+  const rankDeltaTone = getRankDeltaTone(item.rankDelta7d);
+  const momentumTone = getMomentumTone(item.marketCapDeltaPct7d);
 
   return (
     <article className="grid grid-cols-[44px_minmax(0,1fr)_auto] gap-3 rounded-xl border border-white/6 bg-white/[0.03] p-3 sm:grid-cols-[48px_minmax(0,1fr)_auto] sm:gap-4 sm:p-4">
@@ -76,7 +77,10 @@ export function RankingCard({ item }: { item: RankingItem }) {
           {formatMarketCapKrw(item.marketCapKrw)}
         </p>
         <p className={`mt-1 text-xs font-medium sm:text-sm ${rankDeltaTone}`}>
-          전일 {formatRankDelta(item.rankDelta1d)}
+          주간 순위 변동 {formatRankDelta(item.rankDelta7d)}
+        </p>
+        <p className={`mt-1 text-[11px] font-medium sm:text-xs ${momentumTone}`}>
+          Momentum (W) {formatPercent(item.marketCapDeltaPct7d)}
         </p>
       </div>
     </article>

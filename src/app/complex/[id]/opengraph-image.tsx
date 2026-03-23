@@ -34,15 +34,27 @@ function formatMarketCapKrw(value: number): string {
   return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
 
-function formatRankDelta(delta: number): string {
+function formatWeeklyRankDelta(delta: number): string {
   if (delta > 0) return `▲ +${delta}`;
   if (delta < 0) return `▼ ${delta}`;
   return "— 0";
 }
 
+function formatMomentumW(value: number): string {
+  if (value > 0) return `+${value.toFixed(2)}%`;
+  if (value < 0) return `${value.toFixed(2)}%`;
+  return "0.00%";
+}
+
 function deltaColor(delta: number): string {
   if (delta > 0) return "#34d399";
   if (delta < 0) return "#fb7185";
+  return "rgba(234,242,255,0.55)";
+}
+
+function momentumColor(value: number): string {
+  if (value > 0) return "#67e8f9";
+  if (value < 0) return "#f0abfc";
   return "rgba(234,242,255,0.55)";
 }
 
@@ -61,7 +73,7 @@ function Metric({
         display: "flex",
         flexDirection: "column",
         gap: 10,
-        minWidth: 220,
+        width: "48%",
         padding: "20px 24px",
         borderRadius: 24,
         border: "1px solid rgba(255,255,255,0.08)",
@@ -110,13 +122,23 @@ export default async function OpenGraphImage({
   }
 
   const title = detail?.name ?? "KOAPTIX";
-  const location = detail?.locationLabel ?? "서울 아파트 실데이터 보드";
+  const location = detail?.locationLabel ?? "서울 아파트 주간 모멘텀 보드";
   const rankLabel = detail ? `#${detail.rank}` : "LIVE";
   const marketCapLabel = detail
     ? formatMarketCapKrw(detail.marketCapKrw)
-    : "실시간 랭킹";
-  const deltaLabel = detail ? formatRankDelta(detail.rankDelta1d) : "데이터 준비 중";
-  const deltaTone = detail ? deltaColor(detail.rankDelta1d) : "rgba(234,242,255,0.55)";
+    : "주간 자본 흐름";
+  const weeklyRankDeltaLabel = detail
+    ? formatWeeklyRankDelta(detail.rankDelta7d)
+    : "— 0";
+  const weeklyRankDeltaTone = detail
+    ? deltaColor(detail.rankDelta7d)
+    : "rgba(234,242,255,0.55)";
+  const momentumLabel = detail
+    ? formatMomentumW(detail.marketCapDeltaPct7d)
+    : "0.00%";
+  const momentumTone = detail
+    ? momentumColor(detail.marketCapDeltaPct7d)
+    : "rgba(234,242,255,0.55)";
 
   return new ImageResponse(
     (
@@ -184,13 +206,23 @@ export default async function OpenGraphImage({
           <div
             style={{
               display: "flex",
+              flexWrap: "wrap",
               gap: 18,
               marginTop: 42,
             }}
           >
             <Metric label="현재 순위" value={rankLabel} />
             <Metric label="시가총액" value={marketCapLabel} />
-            <Metric label="전일 변동" value={deltaLabel} color={deltaTone} />
+            <Metric
+              label="주간 순위 변동"
+              value={weeklyRankDeltaLabel}
+              color={weeklyRankDeltaTone}
+            />
+            <Metric
+              label="Momentum (W)"
+              value={momentumLabel}
+              color={momentumTone}
+            />
           </div>
 
           <div
@@ -208,7 +240,7 @@ export default async function OpenGraphImage({
                 color: "rgba(234,242,255,0.48)",
               }}
             >
-              서울 아파트 실데이터 보드 · koaptix.com
+              최근 7일 기준 모멘텀 분석 · koaptix.com
             </div>
 
             <div
@@ -224,7 +256,7 @@ export default async function OpenGraphImage({
                 textTransform: "uppercase",
               }}
             >
-              Share Card
+              Weekly Share
             </div>
           </div>
         </div>
