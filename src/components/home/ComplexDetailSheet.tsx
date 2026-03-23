@@ -2,13 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
+import { TierBadge } from "./TierBadge";
 import type {
   ComplexDetail,
   HistoryChartPoint,
   RankingItem,
 } from "../../lib/koaptix/types";
 
-// 💡 잼이사의 지연 로딩 마법 (차트는 바텀 시트 열릴 때만 다운로드 됨!)
 const ComplexHistoryMiniChart = dynamic(
   () =>
     import("./ComplexHistoryMiniChart").then(
@@ -36,7 +36,6 @@ type ToastState = {
   tone: "success" | "error";
 } | null;
 
-// --- 포맷팅 헬퍼 함수들 ---
 function formatMarketCapKrw(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "-";
 
@@ -183,7 +182,6 @@ export function ComplexDetailSheet({
   const [toast, setToast] = useState<ToastState>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 💡 페이즈 16: 차트 관련 상태
   const [chartData, setChartData] = useState<HistoryChartPoint[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
@@ -221,7 +219,18 @@ export function ComplexDetailSheet({
     };
   }, []);
 
-  // 💡 차트 데이터 패치 로직
+  function showToast(message: string, tone: "success" | "error") {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+
+    setToast({ message, tone });
+
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+    }, 2200);
+  }
+
   useEffect(() => {
     if (!open || !item?.complexId) return;
 
@@ -263,8 +272,12 @@ export function ComplexDetailSheet({
         );
       }
 
-      const nextData = Array.isArray(payload.data)
-        ? (payload.data as HistoryChartPoint[])
+      const series = Array.isArray(payload.data?.series)
+        ? payload.data.series
+        : [];
+
+      const nextData = Array.isArray(series[0]?.points)
+        ? (series[0].points as HistoryChartPoint[])
         : [];
 
       chartCacheRef.current[complexId] = nextData;
@@ -295,18 +308,6 @@ export function ComplexDetailSheet({
       controller.abort();
     };
   }, [open, item?.complexId]);
-
-  function showToast(message: string, tone: "success" | "error") {
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-
-    setToast({ message, tone });
-
-    toastTimerRef.current = setTimeout(() => {
-      setToast(null);
-    }, 2200);
-  }
 
   async function handleShare() {
     if (!item || typeof window === "undefined") return;
@@ -362,8 +363,10 @@ export function ComplexDetailSheet({
   const marketCap = detail?.marketCapKrw ?? item.marketCapKrw;
   const rankDelta7d = detail?.rankDelta7d ?? item.rankDelta7d;
   const marketCapDelta7d = detail?.marketCapDelta7d ?? item.marketCapDelta7d;
-  const marketCapDeltaPct7d = detail?.marketCapDeltaPct7d ?? item.marketCapDeltaPct7d;
+  const marketCapDeltaPct7d =
+    detail?.marketCapDeltaPct7d ?? item.marketCapDeltaPct7d;
   const historySnapshotDate = detail?.historySnapshotDate ?? item.historySnapshotDate;
+  const tierBadges = item.tierBadges?.slice(0, 2) ?? [];
 
   return (
     <>
@@ -377,9 +380,9 @@ export function ComplexDetailSheet({
           role="dialog"
           aria-modal="true"
           aria-labelledby="complex-detail-title"
-          className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl flex flex-col"
+          className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
         >
-          <div className="border-b border-white/5 bg-[#0b1118]/95 px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pt-4 shrink-0">
+          <div className="border-b border-white/5 bg-[#0b1118]/95 px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pt-4">
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/10 md:hidden" />
 
             <div className="flex items-start justify-between gap-3">
@@ -396,6 +399,17 @@ export function ComplexDetailSheet({
                 <p className="mt-1 truncate text-sm text-white/50 sm:text-[15px]">
                   {location}
                 </p>
+
+                {tierBadges.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {tierBadges.map((badge) => (
+                      <TierBadge
+                        key={`${item.complexId}-${badge.key}-${badge.label}`}
+                        badge={badge}
+                      />
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
@@ -407,7 +421,7 @@ export function ComplexDetailSheet({
                   aria-label="공유하기"
                 >
                   <ShareIcon />
-                  <span className="hidden sm:inline">{sharePending ? "공유 중..." : "공유하기"}</span>
+                  <span>{sharePending ? "공유 중..." : "공유하기"}</span>
                 </button>
 
                 <button
@@ -421,7 +435,7 @@ export function ComplexDetailSheet({
             </div>
           </div>
 
-          <div className="overflow-y-auto px-4 pb-6 pt-4 sm:px-5 flex-1">
+          <div className="max-h-[calc(85vh-100px)] overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
             {error ? (
               <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
                 {error}
@@ -443,7 +457,6 @@ export function ComplexDetailSheet({
               />
             </div>
 
-            {/* 💡 페이즈 16: 히스토리 네온 차트 삽입부 */}
             <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">
               <div className="border-b border-white/5 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">

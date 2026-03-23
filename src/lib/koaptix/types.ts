@@ -42,12 +42,37 @@ export type DbComplexDetailSheetBaseRow = {
   updated_at: string | null;
 };
 
-export type DbComplexDetailSheetWeeklyRow =
-  DbComplexDetailSheetBaseRow & WeeklyDeltaPayload;
+export type DbComplexDetailSheetWeeklyRow = DbComplexDetailSheetBaseRow & WeeklyDeltaPayload;
 
 export type DbIndexHistoryRow = {
   snapshot_date: string;
   total_market_cap: number | string | null;
+};
+
+// --- Phase 17: 티어 및 다중 차트 부품 ---
+export type TierBadgeTone = "gold" | "cyan" | "fuchsia" | "steel";
+
+export type TierBadgeData = {
+  key: "national" | "district" | "city";
+  label: string;
+  icon: "👑" | "💠" | "⚡";
+  tone: TierBadgeTone;
+};
+
+export type TierStats = {
+  nationalRank: number;
+  nationalTierCode: string;
+  localRank?: number;
+  cityRank?: number;
+  districtLabel?: string;
+  cityLabel?: string;
+};
+
+export type HistoryChartSeries = {
+  key: string;
+  name: string;
+  color?: string;
+  points: HistoryChartPoint[];
 };
 
 export type RankingItem = {
@@ -59,6 +84,7 @@ export type RankingItem = {
 
   sigunguName: string;
   legalDongName: string;
+  cityName?: string;
   locationLabel: string;
   searchText: string;
 
@@ -66,10 +92,12 @@ export type RankingItem = {
   rankDelta7d: number;
   marketCapDelta7d: number;
   marketCapDeltaPct7d: number;
-  deltaWindow: WeeklyDeltaWindow;
+  deltaWindow: "7d";
 
-  // 하위 UI 호환 alias
   rankDelta1d: number;
+
+  tierBadges?: TierBadgeData[];
+  tierStats?: TierStats;
 };
 
 export type ComplexDetail = {
@@ -81,6 +109,7 @@ export type ComplexDetail = {
 
   sigunguName: string;
   legalDongName: string;
+  cityName?: string;
   locationLabel: string;
 
   householdCount: number | null;
@@ -94,12 +123,31 @@ export type ComplexDetail = {
   rankDelta7d: number;
   marketCapDelta7d: number;
   marketCapDeltaPct7d: number;
-  deltaWindow: WeeklyDeltaWindow;
+  deltaWindow: "7d";
 
-  // 하위 UI 호환 alias
   rankDelta1d: number;
+
+  tierBadges?: TierBadgeData[];
+  tierStats?: TierStats;
 };
 
+// --- Phase 16: 차트 데이터 부품 ---
+export type DbComplexChartHistoryRow = {
+  snapshot_date: string;
+  complex_id: number | string | null;
+  market_cap_krw: number | string | null;
+  rank_all: number | null;
+};
+
+export type HistoryChartPoint = {
+  snapshotDate: string;
+  label: string;
+  value: number;
+};
+
+export type ComplexChartMode = "weekly" | "ma7";
+
+// --- 기타 KPI 및 차트 헬퍼 ---
 export type KpiItem = {
   label: string;
   value: string;
@@ -120,18 +168,4 @@ export type HomePageData = {
   };
   rankings: RankingItem[];
   rankingsError?: string | null;
-};
-export type ComplexChartMode = "weekly" | "ma7";
-
-export type DbComplexChartHistoryRow = {
-  snapshot_date: string;
-  complex_id: number | string | null;
-  market_cap_krw: number | string | null;
-  rank_all: number | null;
-};
-
-export type HistoryChartPoint = {
-  snapshotDate: string;
-  label: string;
-  value: number;
 };

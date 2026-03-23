@@ -20,6 +20,12 @@ var _s = __turbopack_context__.k.signature();
 "use client";
 ;
 ;
+const DEFAULT_COLORS = [
+    "#22d3ee",
+    "#e879f9",
+    "#34d399",
+    "#f59e0b"
+];
 function formatMarketCapCompact(value) {
     if (!Number.isFinite(value) || value <= 0) return "-";
     const TRILLION = 1_000_000_000_000;
@@ -38,39 +44,127 @@ function formatMarketCapFull(value) {
     if (!Number.isFinite(value) || value <= 0) return "-";
     return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
-function ComplexHistoryMiniChart({ data }) {
-    _s();
-    const trend = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useMemo"])({
-        "ComplexHistoryMiniChart.useMemo[trend]": ()=>{
-            if (data.length < 2) return 0;
-            return data[data.length - 1].value - data[0].value;
+function buildSingleSeries(data) {
+    if (!data || data.length === 0) return [];
+    const trend = data[data.length - 1].value - data[0].value;
+    const color = trend >= 0 ? "#22d3ee" : "#e879f9";
+    return [
+        {
+            key: "series_0",
+            name: "Market Cap",
+            color,
+            points: data
         }
-    }["ComplexHistoryMiniChart.useMemo[trend]"], [
-        data
+    ];
+}
+function buildMergedDataset(series) {
+    const merged = new Map();
+    for (const entry of series){
+        for (const point of entry.points){
+            const current = merged.get(point.snapshotDate) ?? {
+                snapshotDate: point.snapshotDate,
+                label: point.label
+            };
+            current[entry.key] = point.value;
+            merged.set(point.snapshotDate, current);
+        }
+    }
+    return Array.from(merged.values()).sort((a, b)=>String(a.snapshotDate).localeCompare(String(b.snapshotDate)));
+}
+function ComplexHistoryMiniChart({ data, series }) {
+    _s();
+    const normalizedSeries = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useMemo"])({
+        "ComplexHistoryMiniChart.useMemo[normalizedSeries]": ()=>{
+            const base = series && series.length > 0 ? series : buildSingleSeries(data);
+            return base.filter({
+                "ComplexHistoryMiniChart.useMemo[normalizedSeries]": (entry)=>entry.points.length > 0
+            }["ComplexHistoryMiniChart.useMemo[normalizedSeries]"]).map({
+                "ComplexHistoryMiniChart.useMemo[normalizedSeries]": (entry, index)=>({
+                        ...entry,
+                        color: entry.color ?? DEFAULT_COLORS[index % DEFAULT_COLORS.length]
+                    })
+            }["ComplexHistoryMiniChart.useMemo[normalizedSeries]"]);
+        }
+    }["ComplexHistoryMiniChart.useMemo[normalizedSeries]"], [
+        data,
+        series
     ]);
-    const isUp = trend >= 0;
-    const stroke = isUp ? "#22d3ee" : "#e879f9";
-    const shadow = isUp ? "drop-shadow(0 0 10px rgba(34,211,238,0.45))" : "drop-shadow(0 0 10px rgba(232,121,249,0.45))";
+    const mergedData = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useMemo"])({
+        "ComplexHistoryMiniChart.useMemo[mergedData]": ()=>buildMergedDataset(normalizedSeries)
+    }["ComplexHistoryMiniChart.useMemo[mergedData]"], [
+        normalizedSeries
+    ]);
+    if (normalizedSeries.length === 0 || mergedData.length === 0) {
+        return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+            className: "rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55",
+            children: "차트를 그릴 히스토리 데이터가 아직 충분하지 않다."
+        }, void 0, false, {
+            fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
+            lineNumber: 108,
+            columnNumber: 7
+        }, this);
+    }
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-        className: "relative h-[220px] w-full overflow-hidden rounded-2xl border border-white/8 bg-black/25 [background-image:linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]",
+        className: "relative w-full overflow-hidden rounded-2xl border border-white/8 bg-black/25 [background-image:linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]",
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                 className: "pointer-events-none absolute inset-0 opacity-80",
                 style: {
-                    background: isUp ? "radial-gradient(circle at top right, rgba(34,211,238,0.12), transparent 40%)" : "radial-gradient(circle at top right, rgba(232,121,249,0.12), transparent 40%)"
+                    background: normalizedSeries.length > 1 ? "radial-gradient(circle at top left, rgba(34,211,238,0.10), transparent 34%), radial-gradient(circle at top right, rgba(232,121,249,0.10), transparent 34%)" : `radial-gradient(circle at top right, ${normalizedSeries[0].color}22, transparent 40%)`
                 }
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
-                lineNumber: 57,
+                lineNumber: 116,
                 columnNumber: 7
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "relative h-full w-full px-1 py-2",
+                className: "relative border-b border-white/6 px-3 py-2.5",
+                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                    className: "flex flex-wrap gap-2",
+                    children: normalizedSeries.map((entry)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                            className: "inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-white/75",
+                            children: [
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                    className: "h-2 w-2 rounded-full",
+                                    style: {
+                                        backgroundColor: entry.color,
+                                        boxShadow: `0 0 14px ${entry.color}`
+                                    }
+                                }, void 0, false, {
+                                    fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
+                                    lineNumber: 133,
+                                    columnNumber: 15
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                    children: entry.name
+                                }, void 0, false, {
+                                    fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
+                                    lineNumber: 140,
+                                    columnNumber: 15
+                                }, this)
+                            ]
+                        }, entry.key, true, {
+                            fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
+                            lineNumber: 129,
+                            columnNumber: 13
+                        }, this))
+                }, void 0, false, {
+                    fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
+                    lineNumber: 127,
+                    columnNumber: 9
+                }, this)
+            }, void 0, false, {
+                fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
+                lineNumber: 126,
+                columnNumber: 7
+            }, this),
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                className: "relative h-[220px] w-full px-1 py-2",
                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$recharts$2f$es6$2f$component$2f$ResponsiveContainer$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["ResponsiveContainer"], {
                     width: "100%",
                     height: "100%",
                     children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$recharts$2f$es6$2f$chart$2f$LineChart$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["LineChart"], {
-                        data: data,
+                        data: mergedData,
                         margin: {
                             top: 12,
                             right: 12,
@@ -84,7 +178,7 @@ function ComplexHistoryMiniChart({ data }) {
                                 strokeDasharray: "3 3"
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
-                                lineNumber: 69,
+                                lineNumber: 149,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$recharts$2f$es6$2f$cartesian$2f$XAxis$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["XAxis"], {
@@ -99,7 +193,7 @@ function ComplexHistoryMiniChart({ data }) {
                                 }
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
-                                lineNumber: 75,
+                                lineNumber: 155,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$recharts$2f$es6$2f$cartesian$2f$YAxis$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["YAxis"], {
@@ -113,72 +207,78 @@ function ComplexHistoryMiniChart({ data }) {
                                 }
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
-                                lineNumber: 84,
+                                lineNumber: 164,
                                 columnNumber: 13
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$recharts$2f$es6$2f$component$2f$Tooltip$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Tooltip"], {
                                 cursor: {
-                                    stroke: isUp ? "rgba(34,211,238,0.22)" : "rgba(232,121,249,0.22)",
+                                    stroke: "rgba(255,255,255,0.16)",
                                     strokeWidth: 1
                                 },
                                 contentStyle: {
                                     background: "#081018",
-                                    border: `1px solid ${isUp ? "rgba(34,211,238,0.18)" : "rgba(232,121,249,0.18)"}`,
+                                    border: "1px solid rgba(255,255,255,0.12)",
                                     borderRadius: 16
                                 },
                                 labelFormatter: (label, payload)=>{
                                     const point = payload?.[0]?.payload;
                                     return point?.snapshotDate ?? String(label);
                                 },
-                                formatter: (value)=>formatMarketCapFull(Number(value))
+                                formatter: (value, name)=>[
+                                        formatMarketCapFull(Number(value)),
+                                        String(name)
+                                    ]
                             }, void 0, false, {
                                 fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
-                                lineNumber: 92,
+                                lineNumber: 172,
                                 columnNumber: 13
                             }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$recharts$2f$es6$2f$cartesian$2f$Line$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Line"], {
-                                type: "monotone",
-                                dataKey: "value",
-                                stroke: stroke,
-                                strokeWidth: 2.5,
-                                dot: false,
-                                activeDot: {
-                                    r: 4,
-                                    fill: stroke,
-                                    strokeWidth: 0
-                                },
-                                style: {
-                                    filter: shadow
-                                }
-                            }, void 0, false, {
-                                fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
-                                lineNumber: 111,
-                                columnNumber: 13
-                            }, this)
+                            normalizedSeries.map((entry, index)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$recharts$2f$es6$2f$cartesian$2f$Line$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Line"], {
+                                    type: "monotone",
+                                    dataKey: entry.key,
+                                    name: entry.name,
+                                    stroke: entry.color,
+                                    strokeWidth: 2.5,
+                                    dot: false,
+                                    connectNulls: true,
+                                    activeDot: {
+                                        r: 4,
+                                        fill: entry.color,
+                                        strokeWidth: 0
+                                    },
+                                    style: {
+                                        filter: `drop-shadow(0 0 10px ${entry.color}88)`
+                                    },
+                                    strokeDasharray: index % 2 === 1 ? "5 4" : undefined
+                                }, entry.key, false, {
+                                    fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
+                                    lineNumber: 195,
+                                    columnNumber: 15
+                                }, this))
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
-                        lineNumber: 68,
+                        lineNumber: 148,
                         columnNumber: 11
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
-                    lineNumber: 67,
+                    lineNumber: 147,
                     columnNumber: 9
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
-                lineNumber: 66,
+                lineNumber: 146,
                 columnNumber: 7
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/home/ComplexHistoryMiniChart.tsx",
-        lineNumber: 56,
+        lineNumber: 115,
         columnNumber: 5
     }, this);
 }
-_s(ComplexHistoryMiniChart, "gjmkXRYSk+B7l1qrZ65xngmw/+4=");
+_s(ComplexHistoryMiniChart, "u0ogkLR70kSluw75FBdvKSG3qcc=");
 _c = ComplexHistoryMiniChart;
 var _c;
 __turbopack_context__.k.register(_c, "ComplexHistoryMiniChart");

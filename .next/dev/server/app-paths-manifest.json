@@ -1,5 +1,3 @@
 {
-  "/api/complex-detail/route": "app/api/complex-detail/route.js",
-  "/api/complex-history/route": "app/api/complex-history/route.js",
   "/page": "app/page.js"
 }

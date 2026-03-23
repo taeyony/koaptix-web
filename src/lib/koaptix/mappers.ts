@@ -1,3 +1,4 @@
+import { decorateRankingTiers } from "./tiers";
 import type {
   ChartPoint,
   ComplexDetail,
@@ -5,19 +6,20 @@ import type {
   DbIndexHistoryRow,
   DbLatestRankBoardWeeklyRow,
   RankingItem,
-  KpiItem, // 💡 잼이사가 빼먹은 단어 추가!!
+  KpiItem,
+  ComplexChartMode,
+  DbComplexChartHistoryRow,
+  HistoryChartPoint,
 } from "./types";
 
 function toNumber(value: number | string | null | undefined, fallback = 0): number {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : fallback;
   }
-
   if (typeof value === "string") {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
   }
-
   return fallback;
 }
 
@@ -25,7 +27,6 @@ function toNullableNumber(value: number | string | null | undefined): number | n
   if (value === null || value === undefined || value === "") {
     return null;
   }
-
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -38,7 +39,6 @@ function toIdText(value: number | string | null | undefined): string {
   if (value === null || value === undefined) {
     return "";
   }
-
   return String(value).trim();
 }
 
@@ -58,6 +58,7 @@ function getWeekBucket(snapshotDate: string): string {
   return date.toISOString().slice(0, 10);
 }
 
+// --- 인덱스 차트 헬퍼 ---
 type NormalizedChartRow = {
   snapshotDate: string;
   value: number;
@@ -83,7 +84,6 @@ function applyMovingAverage(
     const average =
       windowRows.reduce((sum, current) => sum + current.value, 0) /
       windowRows.length;
-
     return {
       snapshotDate: row.snapshotDate,
       value: Math.round(average),
@@ -93,16 +93,15 @@ function applyMovingAverage(
 
 function selectWeeklyRows(rows: NormalizedChartRow[]): NormalizedChartRow[] {
   const latestByWeek = new Map<string, NormalizedChartRow>();
-
   for (const row of rows) {
     latestByWeek.set(getWeekBucket(row.snapshotDate), row);
   }
-
   return Array.from(latestByWeek.values()).sort((a, b) =>
     a.snapshotDate.localeCompare(b.snapshotDate)
   );
 }
 
+// --- 랭킹 및 상세 매퍼 ---
 export function mapLatestRankBoardRow(
   row: DbLatestRankBoardWeeklyRow
 ): RankingItem {
@@ -147,18 +146,20 @@ export function mapLatestRankBoardRow(
     marketCapDeltaPct7d,
     deltaWindow: "7d",
 
-    // 기존 하위 컴포넌트 호환
     rankDelta1d: rankDelta7d,
   };
 }
 
+// 💡 페이즈 17: 티어 엔진을 통과시켜 훈장을 달아주는 로직 추가!
 export function mapLatestRankBoardRows(
   rows: DbLatestRankBoardWeeklyRow[]
 ): RankingItem[] {
-  return rows
+  const mapped = rows
     .map(mapLatestRankBoardRow)
     .filter((item) => item.complexId.length > 0 && item.rank > 0 && item.name.length > 0)
     .sort((a, b) => a.rank - b.rank);
+
+  return decorateRankingTiers(mapped);
 }
 
 export function mapComplexDetailRow(
@@ -211,7 +212,6 @@ export function mapComplexDetailRow(
     marketCapDeltaPct7d,
     deltaWindow: "7d",
 
-    // 기존 하위 컴포넌트 호환
     rankDelta1d: rankDelta7d,
   };
 }
@@ -241,39 +241,8 @@ export function mapIndexChartRows(
     value: row.value,
   }));
 }
-// --- 🚨 잼이사가 긴급 복구한 KPI 매퍼 부품 ---
-export function mapHomeKpiToKpiCards(row: any): KpiItem[] {
-  // DB에서 값이 안 넘어오면 기본 화면(Fallback)을 띄워줍니다.
-  const totalMarketCap = row?.total_market_cap_krw || row?.market_cap_krw;
-  let marketCapDisplay = "468.8조원";
 
-  if (totalMarketCap && totalMarketCap >= 1_000_000_000_000) {
-    marketCapDisplay = `${(totalMarketCap / 1_000_000_000_000).toFixed(1)}조원`;
-  } else if (totalMarketCap) {
-    marketCapDisplay = `${new Intl.NumberFormat("ko-KR").format(totalMarketCap)}원`;
-  }
-
-  const complexCount = row?.total_complex_count || row?.listed_units || 501;
-
-  return [
-    {
-      label: "MARKET CAP",
-      value: marketCapDisplay,
-      subValue: "코앱틱스 전체 단지",
-    },
-    {
-      label: "LISTED UNITS",
-      value: `${new Intl.NumberFormat("ko-KR").format(complexCount)}개`,
-      subValue: "2025년 1월 기준", // 필요시 동적으로 변경 가능
-    },
-  ];
-}
-import type {
-  ComplexChartMode,
-  DbComplexChartHistoryRow,
-  HistoryChartPoint,
-} from "./types";
-
+// --- 페이즈 16, 17: 단지별 히스토리 멀티맵 매퍼 ---
 type NormalizedComplexHistoryRow = {
   snapshotDate: string;
   value: number;
@@ -306,6 +275,7 @@ export function mapComplexChartHistoryRows(
     return [];
   }
 
+  // mode를 "weekly" | "ma7"에 맞게 강제 타입 캐스팅
   const series =
     mode === "ma7"
       ? applyMovingAverage(normalized, 7)
@@ -316,4 +286,46 @@ export function mapComplexChartHistoryRows(
     label: formatChartLabel(row.snapshotDate),
     value: row.value,
   }));
+}
+
+export function mapComplexChartHistoryMap(
+  rowsById: Record<string, DbComplexChartHistoryRow[]>,
+  options: {
+    mode?: ComplexChartMode;
+    maxPoints?: number;
+  } = {}
+): Record<string, HistoryChartPoint[]> {
+  return Object.fromEntries(
+    Object.entries(rowsById).map(([complexId, rows]) => [
+      complexId,
+      mapComplexChartHistoryRows(rows, options),
+    ])
+  );
+}
+
+// --- 잃어버렸던 KPI 복구 매퍼 ---
+export function mapHomeKpiToKpiCards(row: any): KpiItem[] {
+  const totalMarketCap = row?.total_market_cap_krw || row?.market_cap_krw;
+  let marketCapDisplay = "468.8조원";
+
+  if (totalMarketCap && totalMarketCap >= 1_000_000_000_000) {
+    marketCapDisplay = `${(totalMarketCap / 1_000_000_000_000).toFixed(1)}조원`;
+  } else if (totalMarketCap) {
+    marketCapDisplay = `${new Intl.NumberFormat("ko-KR").format(totalMarketCap)}원`;
+  }
+
+  const complexCount = row?.total_complex_count || row?.listed_units || 501;
+
+  return [
+    {
+      label: "MARKET CAP",
+      value: marketCapDisplay,
+      subValue: "코앱틱스 전체 단지",
+    },
+    {
+      label: "LISTED UNITS",
+      value: `${new Intl.NumberFormat("ko-KR").format(complexCount)}개`,
+      subValue: "2025년 1월 기준",
+    },
+  ];
 }

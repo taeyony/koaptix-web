@@ -10,7 +10,17 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { HistoryChartPoint } from "../../lib/koaptix/types";
+import type {
+  HistoryChartPoint,
+  HistoryChartSeries,
+} from "../../lib/koaptix/types";
+
+type ComplexHistoryMiniChartProps = {
+  data?: HistoryChartPoint[];
+  series?: HistoryChartSeries[];
+};
+
+const DEFAULT_COLORS = ["#22d3ee", "#e879f9", "#34d399", "#f59e0b"];
 
 function formatMarketCapCompact(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "-";
@@ -36,36 +46,106 @@ function formatMarketCapFull(value: number): string {
   return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
 
+function buildSingleSeries(data?: HistoryChartPoint[]): HistoryChartSeries[] {
+  if (!data || data.length === 0) return [];
+
+  const trend = data[data.length - 1].value - data[0].value;
+  const color = trend >= 0 ? "#22d3ee" : "#e879f9";
+
+  return [
+    {
+      key: "series_0",
+      name: "Market Cap",
+      color,
+      points: data,
+    },
+  ];
+}
+
+function buildMergedDataset(series: HistoryChartSeries[]) {
+  const merged = new Map<string, Record<string, string | number | null>>();
+
+  for (const entry of series) {
+    for (const point of entry.points) {
+      const current = merged.get(point.snapshotDate) ?? {
+        snapshotDate: point.snapshotDate,
+        label: point.label,
+      };
+
+      current[entry.key] = point.value;
+      merged.set(point.snapshotDate, current);
+    }
+  }
+
+  return Array.from(merged.values()).sort((a, b) =>
+    String(a.snapshotDate).localeCompare(String(b.snapshotDate))
+  );
+}
+
 export function ComplexHistoryMiniChart({
   data,
-}: {
-  data: HistoryChartPoint[];
-}) {
-  const trend = useMemo(() => {
-    if (data.length < 2) return 0;
-    return data[data.length - 1].value - data[0].value;
-  }, [data]);
+  series,
+}: ComplexHistoryMiniChartProps) {
+  const normalizedSeries = useMemo(() => {
+    const base =
+      series && series.length > 0 ? series : buildSingleSeries(data);
 
-  const isUp = trend >= 0;
-  const stroke = isUp ? "#22d3ee" : "#e879f9";
-  const shadow = isUp
-    ? "drop-shadow(0 0 10px rgba(34,211,238,0.45))"
-    : "drop-shadow(0 0 10px rgba(232,121,249,0.45))";
+    return base
+      .filter((entry) => entry.points.length > 0)
+      .map((entry, index) => ({
+        ...entry,
+        color: entry.color ?? DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+      }));
+  }, [data, series]);
+
+  const mergedData = useMemo(
+    () => buildMergedDataset(normalizedSeries),
+    [normalizedSeries]
+  );
+
+  if (normalizedSeries.length === 0 || mergedData.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55">
+        차트를 그릴 히스토리 데이터가 아직 충분하지 않다.
+      </div>
+    );
+  }
 
   return (
-    <div className="relative h-[220px] w-full overflow-hidden rounded-2xl border border-white/8 bg-black/25 [background-image:linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]">
+    <div className="relative w-full overflow-hidden rounded-2xl border border-white/8 bg-black/25 [background-image:linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]">
       <div
         className="pointer-events-none absolute inset-0 opacity-80"
         style={{
-          background: isUp
-            ? "radial-gradient(circle at top right, rgba(34,211,238,0.12), transparent 40%)"
-            : "radial-gradient(circle at top right, rgba(232,121,249,0.12), transparent 40%)",
+          background:
+            normalizedSeries.length > 1
+              ? "radial-gradient(circle at top left, rgba(34,211,238,0.10), transparent 34%), radial-gradient(circle at top right, rgba(232,121,249,0.10), transparent 34%)"
+              : `radial-gradient(circle at top right, ${normalizedSeries[0].color}22, transparent 40%)`,
         }}
       />
 
-      <div className="relative h-full w-full px-1 py-2">
+      <div className="relative border-b border-white/6 px-3 py-2.5">
+        <div className="flex flex-wrap gap-2">
+          {normalizedSeries.map((entry) => (
+            <span
+              key={entry.key}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-white/75"
+            >
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{
+                  backgroundColor: entry.color,
+                  boxShadow: `0 0 14px ${entry.color}`,
+                }}
+              />
+              <span>{entry.name}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="relative h-[220px] w-full px-1 py-2">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
+          <LineChart data={mergedData} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
             <CartesianGrid
               vertical={false}
               stroke="rgba(255,255,255,0.08)"
@@ -91,32 +171,47 @@ export function ComplexHistoryMiniChart({
 
             <Tooltip
               cursor={{
-                stroke: isUp ? "rgba(34,211,238,0.22)" : "rgba(232,121,249,0.22)",
+                stroke: "rgba(255,255,255,0.16)",
                 strokeWidth: 1,
               }}
               contentStyle={{
                 background: "#081018",
-                border: `1px solid ${
-                  isUp ? "rgba(34,211,238,0.18)" : "rgba(232,121,249,0.18)"
-                }`,
+                border: "1px solid rgba(255,255,255,0.12)",
                 borderRadius: 16,
               }}
               labelFormatter={(label, payload) => {
-                const point = payload?.[0]?.payload as HistoryChartPoint | undefined;
+                const point = payload?.[0]?.payload as
+                  | { snapshotDate?: string }
+                  | undefined;
                 return point?.snapshotDate ?? String(label);
               }}
-              formatter={(value) => formatMarketCapFull(Number(value))}
+              formatter={(value, name) => [
+                formatMarketCapFull(Number(value)),
+                String(name),
+              ]}
             />
 
-            <Line
-              type="monotone"
-              dataKey="value"
-              stroke={stroke}
-              strokeWidth={2.5}
-              dot={false}
-              activeDot={{ r: 4, fill: stroke, strokeWidth: 0 }}
-              style={{ filter: shadow }}
-            />
+            {normalizedSeries.map((entry, index) => (
+              <Line
+                key={entry.key}
+                type="monotone"
+                dataKey={entry.key}
+                name={entry.name}
+                stroke={entry.color}
+                strokeWidth={2.5}
+                dot={false}
+                connectNulls
+                activeDot={{
+                  r: 4,
+                  fill: entry.color,
+                  strokeWidth: 0,
+                }}
+                style={{
+                  filter: `drop-shadow(0 0 10px ${entry.color}88)`,
+                }}
+                strokeDasharray={index % 2 === 1 ? "5 4" : undefined}
+              />
+            ))}
           </LineChart>
         </ResponsiveContainer>
       </div>

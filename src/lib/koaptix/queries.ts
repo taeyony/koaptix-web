@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import type {
   DbComplexDetailSheetBaseRow,
   DbComplexDetailSheetWeeklyRow,
+  DbComplexChartHistoryRow,
   DbIndexHistoryRow,
   DbLatestRankBoardRow,
   DbLatestRankBoardWeeklyRow,
@@ -346,14 +347,26 @@ export async function getHomeKpi() {
     return null;
   }
 }
-import type { DbComplexChartHistoryRow } from "./types";
 
-export async function getComplexChartHistory(
-  complexId: string | number,
+
+export async function getComplexChartHistories(
+  complexIds: Array<string | number>,
   options: { days?: number } = {}
-): Promise<DbComplexChartHistoryRow[]> {
+): Promise<Record<string, DbComplexChartHistoryRow[]>> {
   const supabase = createServerSupabase();
   const safeDays = Math.max(90, Math.min(options.days ?? 180, 180));
+
+  const normalizedIds = Array.from(
+    new Set(
+      complexIds
+        .map((id) => normalizeComplexId(id))
+        .filter((id) => id !== "" && id !== null && id !== undefined)
+    )
+  );
+
+  if (normalizedIds.length === 0) {
+    return {};
+  }
 
   const anchorDate = await getWeeklyAnchorDate(supabase);
   const startDate = shiftSeoulDateString(anchorDate, -safeDays);
@@ -361,15 +374,36 @@ export async function getComplexChartHistory(
   const { data, error } = await supabase
     .from("complex_rank_history")
     .select("snapshot_date, complex_id, market_cap_krw, rank_all")
-    .eq("complex_id", normalizeComplexId(complexId))
+    .in("complex_id", normalizedIds)
     .gte("snapshot_date", startDate)
     .lte("snapshot_date", anchorDate)
     .order("snapshot_date", { ascending: true })
-    .limit(Math.min(safeDays + 14, 240));
+    .limit(Math.min(normalizedIds.length * (safeDays + 14), 2500));
 
   if (error) {
-    throw new Error(`Failed to fetch complex chart history: ${error.message}`);
+    throw new Error(`Failed to fetch complex chart histories: ${error.message}`);
   }
 
-  return (data ?? []) as DbComplexChartHistoryRow[];
+  const grouped: Record<string, DbComplexChartHistoryRow[]> = {};
+
+  for (const rawId of normalizedIds) {
+    grouped[String(rawId)] = [];
+  }
+
+  for (const row of (data ?? []) as DbComplexChartHistoryRow[]) {
+    const key = row.complex_id == null ? "" : String(row.complex_id);
+    if (!key) continue;
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(row);
+  }
+
+  return grouped;
+}
+
+export async function getComplexChartHistory(
+  complexId: string | number,
+  options: { days?: number } = {}
+): Promise<DbComplexChartHistoryRow[]> {
+  const grouped = await getComplexChartHistories([complexId], options);
+  return grouped[String(normalizeComplexId(complexId))] ?? [];
 }

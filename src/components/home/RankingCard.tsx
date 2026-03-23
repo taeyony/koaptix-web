@@ -1,5 +1,6 @@
 "use client";
 
+import { TierBadge } from "./TierBadge";
 import type { RankingItem } from "../../lib/koaptix/types";
 
 function formatMarketCapKrw(value: number): string {
@@ -53,6 +54,7 @@ export function RankingCard({ item }: { item: RankingItem }) {
   const locationLabel = item.locationLabel || "위치 정보 없음";
   const rankDeltaTone = getRankDeltaTone(item.rankDelta7d);
   const momentumTone = getMomentumTone(item.marketCapDeltaPct7d);
+  const tierBadges = item.tierBadges?.slice(0, 2) ?? [];
 
   return (
     <article className="grid grid-cols-[44px_minmax(0,1fr)_auto] gap-3 rounded-xl border border-white/6 bg-white/[0.03] p-3 sm:grid-cols-[48px_minmax(0,1fr)_auto] sm:gap-4 sm:p-4">
@@ -64,9 +66,22 @@ export function RankingCard({ item }: { item: RankingItem }) {
         <h3 className="truncate text-[15px] font-semibold tracking-tight sm:text-base">
           {item.name}
         </h3>
+
         <p className="mt-1 truncate text-xs leading-5 text-white/45 sm:text-sm">
           {locationLabel}
         </p>
+
+        {tierBadges.length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {tierBadges.map((badge) => (
+              <TierBadge
+                key={`${item.complexId}-${badge.key}-${badge.label}`}
+                badge={badge}
+                compact
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="text-right tabular-nums">
