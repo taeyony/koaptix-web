@@ -5,6 +5,7 @@ import type {
   DbIndexHistoryRow,
   DbLatestRankBoardWeeklyRow,
   RankingItem,
+  KpiItem, // 💡 잼이사가 빼먹은 단어 추가!!
 } from "./types";
 
 function toNumber(value: number | string | null | undefined, fallback = 0): number {

@@ -25,6 +25,11 @@ function createFallbackItem(complexId: string): RankingItem {
   return {
     complexId, name: "단지 정보 불러오는 중", rank: 0, marketCapKrw: 0, marketCapTrillionKrw: null,
     rankDelta1d: 0, sigunguName: "", legalDongName: "", locationLabel: "", searchText: complexId.toLowerCase(),
+    historySnapshotDate: null,
+  rankDelta7d: 0,
+  marketCapDelta7d: 0,
+  marketCapDeltaPct7d: 0,
+  deltaWindow: "7d",
   };
 }
 
