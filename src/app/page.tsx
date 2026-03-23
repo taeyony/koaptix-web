@@ -6,6 +6,7 @@ import { MarketHeatmap } from "../components/home/MarketHeatmap";
 import { RankingBoardClient } from "../components/home/RankingBoardClient";
 import { TickerTape } from "../components/home/TickerTape";
 import { TopMovers } from "../components/home/TopMovers";
+import { CommandPalette } from "../components/home/CommandPalette";
 
 import { buildComplexMetadata } from "../lib/koaptix/metadata";
 import { mapLatestRankBoardRows, mapHomeKpiToKpiCards, mapIndexChartData } from "../lib/koaptix/mappers";
@@ -59,9 +60,13 @@ export default async function Page({ searchParams }: { searchParams?: HomeSearch
       )
     : home.rankings;
 
-  return (
+ return (
     <main className="min-h-screen overflow-x-hidden bg-[#05070b] text-[#eaf2ff]">
+      {/* 💡 잼이사가 설치한 최첨단 커맨드 팔레트!! */}
+      <CommandPalette items={home.rankings} />
+
       <TickerTape items={["KOAPTIX 500 LIVE", "자본의 흐름을 읽는 자만이 살아남는다", "오늘의 급등 단지: 반포자이 ▲", "HAPI 그룹 제공"]} />
+      // ... (이하 기존 코드 동일)
 
       <div className="mx-auto w-full max-w-[1440px] px-3 pb-8 pt-3 sm:px-4 sm:pb-10 sm:pt-4 lg:px-6 lg:pb-12">
         <section className="mb-3 grid gap-3 sm:mb-4 sm:gap-4">

@@ -234,7 +234,13 @@ export function RankingBoardClient({ items: initialItems, boardError = null }: R
             </div>
 
             <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_120px]">
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="단지명, 구, 동 검색" className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-cyan-300/40" />
+              <input
+          data-koaptix-command-trigger="true" // 💡 잼이사가 추가한 호출 센서!
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="단지명, 구, 동 검색"
+          className="w-full bg-transparent py-2.5 pl-3 pr-3 text-sm text-white outline-none placeholder:text-white/28"
+        />
               
               <select value={districtFilter} onChange={(e) => setDistrictFilter(e.target.value)} className="h-11 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-cyan-300/40">
                 {uniqueDistricts.map((gu) => (
