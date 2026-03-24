@@ -102,8 +102,8 @@ export function RankingBoardClient({ items: initialItems, boardError = null }: R
     // 2. 지역구 필터 or 검색어 필터 적용
     if (districtQuery) {
       result = result.filter((item) => 
-        item.sigunguName === districtQuery || 
-        item.locationLabel.includes(districtQuery)
+        item.sigunguName?.includes(districtQuery) || // 👈 includes로 교체 완료!!
+        item.locationLabel?.includes(districtQuery)
       );
     } else if (normalizedQuery) {
       result = result.filter((item) => item.searchText.includes(normalizedQuery));

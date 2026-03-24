@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { CommandPalette } from "../components/home/CommandPalette";
 import { HapiPhilosophyTrigger } from "../components/home/HapiPhilosophyTrigger";
 import { MarketChartCard } from "../components/home/MarketChartCard";
-import { MarketHeatmap } from "../components/home/MarketHeatmap";
+import { MarketRadar } from "../components/home/MarketRadar";
 import { RankingBoardClient } from "../components/home/RankingBoardClient";
 import { TickerTape } from "../components/home/TickerTape";
 import { TopMovers } from "../components/home/TopMovers";
@@ -101,7 +101,7 @@ export default async function Page({ searchParams }: { searchParams?: HomeSearch
 
         <section className="mb-3 grid gap-3 sm:mb-4 sm:gap-4 lg:grid-cols-12">
           <div className="min-w-0 lg:col-span-7">
-            <MarketHeatmap items={home.rankings} />
+            <MarketRadar items={home.rankings} />
           </div>
           <div className="min-w-0 lg:col-span-5">
             <TopMovers items={home.rankings} />
@@ -114,7 +114,7 @@ export default async function Page({ searchParams }: { searchParams?: HomeSearch
           </div>
           <div className="min-w-0 lg:col-span-5">
             <Suspense fallback={<div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-10 text-center text-sm text-white/55">랭킹 보드 로딩 중...</div>}>
-              <RankingBoardClient key={`board-${district || 'all'}`} items={filteredRankings} boardError={home.rankingsError ?? null} />
+              <RankingBoardClient items={home.rankings} boardError={home.rankingsError ?? null} />
             </Suspense>
           </div>
         </section>
