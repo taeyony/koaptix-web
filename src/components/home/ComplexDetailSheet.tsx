@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
+import { RecoveryGauge } from "./RecoveryGauge";
 import { TierBadge } from "./TierBadge";
 import type {
   ComplexDetail,
@@ -85,6 +86,20 @@ function momentumTone(value: number): string {
   if (value > 0) return "text-cyan-200";
   if (value < 0) return "text-fuchsia-200";
   return "text-white/45";
+}
+
+function recoveryTone(value: number | null | undefined): string {
+  if (value == null) return "text-white/50";
+  if (value >= 100) return "text-amber-200";
+  if (value >= 80) return "text-emerald-200";
+  return "text-fuchsia-200";
+}
+
+function formatRecoveryGap(value: number | null | undefined): string {
+  if (value == null) return "-";
+  if (value > 100) return `+${(value - 100).toFixed(1)}% breakout`;
+  if (value < 100) return `-${(100 - value).toFixed(1)}% to high`;
+  return "At high";
 }
 
 function formatCount(value: number | null | undefined): string {
@@ -366,6 +381,11 @@ export function ComplexDetailSheet({
   const marketCapDeltaPct7d =
     detail?.marketCapDeltaPct7d ?? item.marketCapDeltaPct7d;
   const historySnapshotDate = detail?.historySnapshotDate ?? item.historySnapshotDate;
+  const highMarketCap52w =
+    detail?.highMarketCap52w ?? item.highMarketCap52w;
+  const recoveryRate52w =
+    detail?.recoveryRate52w ?? item.recoveryRate52w;
+
   const tierBadges = item.tierBadges?.slice(0, 2) ?? [];
 
   return (
@@ -455,6 +475,52 @@ export function ComplexDetailSheet({
                 value={formatPercent(marketCapDeltaPct7d)}
                 tone={momentumTone(marketCapDeltaPct7d)}
               />
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">
+              <div className="border-b border-white/5 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70">
+                      RECOVERY SIGNAL
+                    </p>
+                    <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">
+                      52주 최고가 회복률
+                    </h4>
+                    <p className="mt-1 text-xs text-white/45">
+                      과거의 고점과 현재의 격차를 즉시 드러내는 탐욕 지표
+                    </p>
+                  </div>
+
+                  <span
+                    className={`shrink-0 text-xs font-semibold tabular-nums ${recoveryTone(
+                      recoveryRate52w
+                    )}`}
+                  >
+                    {recoveryRate52w != null ? `${recoveryRate52w.toFixed(1)}%` : "-"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:px-4">
+                <RecoveryGauge recoveryRate={recoveryRate52w} />
+
+                <div className="grid grid-cols-1 gap-3">
+                  <Metric
+                    label="52주 최고 시총"
+                    value={
+                      highMarketCap52w != null
+                        ? formatMarketCapKrw(highMarketCap52w)
+                        : "-"
+                    }
+                  />
+                  <Metric
+                    label="현재-고점 갭"
+                    value={formatRecoveryGap(recoveryRate52w)}
+                    tone={recoveryTone(recoveryRate52w)}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">

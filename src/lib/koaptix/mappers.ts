@@ -22,6 +22,25 @@ function toNumber(value: number | string | null | undefined, fallback = 0): numb
   }
   return fallback;
 }
+function deriveRecoveryRate52w(
+  currentMarketCap: number,
+  highMarketCap52w: number | null,
+  recoveryRate52w: number | null
+): number | null {
+  if (recoveryRate52w != null && Number.isFinite(recoveryRate52w)) {
+    return Number(recoveryRate52w.toFixed(1));
+  }
+
+  if (
+    highMarketCap52w != null &&
+    highMarketCap52w > 0 &&
+    currentMarketCap > 0
+  ) {
+    return Number(((currentMarketCap / highMarketCap52w) * 100).toFixed(1));
+  }
+
+  return null;
+}
 
 function toNullableNumber(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined || value === "") {
@@ -121,6 +140,13 @@ export function mapLatestRankBoardRow(
   const marketCapDelta7d = toNumber(row.market_cap_delta_7d, 0);
   const marketCapDeltaPct7d = toNumber(row.market_cap_delta_pct_7d, 0);
 
+  const highMarketCap52w = toNullableNumber(row.high_market_cap_52w);
+  const recoveryRate52w = deriveRecoveryRate52w(
+    marketCapKrw,
+    highMarketCap52w,
+    toNullableNumber(row.recovery_rate_52w)
+  );
+
   const sigunguName = toText(row.sigungu_name);
   const legalDongName = toText(row.legal_dong_name);
   const locationLabel = buildLocationLabel(sigunguName, legalDongName);
@@ -147,6 +173,9 @@ export function mapLatestRankBoardRow(
     deltaWindow: "7d",
 
     rankDelta1d: rankDelta7d,
+
+    highMarketCap52w,
+    recoveryRate52w,
   };
 }
 
@@ -188,6 +217,13 @@ export function mapComplexDetailRow(
   const marketCapDelta7d = toNumber(row.market_cap_delta_7d, 0);
   const marketCapDeltaPct7d = toNumber(row.market_cap_delta_pct_7d, 0);
 
+  const highMarketCap52w = toNullableNumber(row.high_market_cap_52w);
+  const recoveryRate52w = deriveRecoveryRate52w(
+    marketCapKrw,
+    highMarketCap52w,
+    toNullableNumber(row.recovery_rate_52w)
+  );
+
   return {
     complexId,
     name,
@@ -213,9 +249,11 @@ export function mapComplexDetailRow(
     deltaWindow: "7d",
 
     rankDelta1d: rankDelta7d,
+
+    highMarketCap52w,
+    recoveryRate52w,
   };
 }
-
 export function mapIndexChartRows(
   rows: DbIndexHistoryRow[],
   options: {

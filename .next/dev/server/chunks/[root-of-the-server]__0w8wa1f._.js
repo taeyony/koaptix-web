@@ -470,6 +470,15 @@ function toNumber(value, fallback = 0) {
     }
     return fallback;
 }
+function deriveRecoveryRate52w(currentMarketCap, highMarketCap52w, recoveryRate52w) {
+    if (recoveryRate52w != null && Number.isFinite(recoveryRate52w)) {
+        return Number(recoveryRate52w.toFixed(1));
+    }
+    if (highMarketCap52w != null && highMarketCap52w > 0 && currentMarketCap > 0) {
+        return Number((currentMarketCap / highMarketCap52w * 100).toFixed(1));
+    }
+    return null;
+}
 function toNullableNumber(value) {
     if (value === null || value === undefined || value === "") {
         return null;
@@ -535,6 +544,8 @@ function mapLatestRankBoardRow(row) {
     const rankDelta7d = toNumber(row.rank_delta_7d, 0);
     const marketCapDelta7d = toNumber(row.market_cap_delta_7d, 0);
     const marketCapDeltaPct7d = toNumber(row.market_cap_delta_pct_7d, 0);
+    const highMarketCap52w = toNullableNumber(row.high_market_cap_52w);
+    const recoveryRate52w = deriveRecoveryRate52w(marketCapKrw, highMarketCap52w, toNullableNumber(row.recovery_rate_52w));
     const sigunguName = toText(row.sigungu_name);
     const legalDongName = toText(row.legal_dong_name);
     const locationLabel = buildLocationLabel(sigunguName, legalDongName);
@@ -559,7 +570,9 @@ function mapLatestRankBoardRow(row) {
         marketCapDelta7d,
         marketCapDeltaPct7d,
         deltaWindow: "7d",
-        rankDelta1d: rankDelta7d
+        rankDelta1d: rankDelta7d,
+        highMarketCap52w,
+        recoveryRate52w
     };
 }
 function mapLatestRankBoardRows(rows) {
@@ -580,6 +593,8 @@ function mapComplexDetailRow(row) {
     const rankDelta7d = toNumber(row.rank_delta_7d, 0);
     const marketCapDelta7d = toNumber(row.market_cap_delta_7d, 0);
     const marketCapDeltaPct7d = toNumber(row.market_cap_delta_pct_7d, 0);
+    const highMarketCap52w = toNullableNumber(row.high_market_cap_52w);
+    const recoveryRate52w = deriveRecoveryRate52w(marketCapKrw, highMarketCap52w, toNullableNumber(row.recovery_rate_52w));
     return {
         complexId,
         name,
@@ -600,7 +615,9 @@ function mapComplexDetailRow(row) {
         marketCapDelta7d,
         marketCapDeltaPct7d,
         deltaWindow: "7d",
-        rankDelta1d: rankDelta7d
+        rankDelta1d: rankDelta7d,
+        highMarketCap52w,
+        recoveryRate52w
     };
 }
 function mapIndexChartRows(rows, options = {}) {

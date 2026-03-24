@@ -1,5 +1,6 @@
 "use client";
 
+import { RecoveryGauge } from "./RecoveryGauge";
 import { TierBadge } from "./TierBadge";
 import type { RankingItem } from "../../lib/koaptix/types";
 
@@ -82,6 +83,13 @@ export function RankingCard({ item }: { item: RankingItem }) {
             ))}
           </div>
         ) : null}
+
+        <div className="mt-2.5">
+          <RecoveryGauge
+            recoveryRate={item.recoveryRate52w}
+            compact
+          />
+        </div>
       </div>
 
       <div className="text-right tabular-nums">

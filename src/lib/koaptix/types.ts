@@ -17,7 +17,6 @@ export type DbLatestRankBoardRow = {
   legal_dong_name: string | null;
 };
 
-export type DbLatestRankBoardWeeklyRow = DbLatestRankBoardRow & WeeklyDeltaPayload;
 
 export type DbRankHistoryRow = {
   snapshot_date: string;
@@ -42,7 +41,6 @@ export type DbComplexDetailSheetBaseRow = {
   updated_at: string | null;
 };
 
-export type DbComplexDetailSheetWeeklyRow = DbComplexDetailSheetBaseRow & WeeklyDeltaPayload;
 
 export type DbIndexHistoryRow = {
   snapshot_date: string;
@@ -75,6 +73,21 @@ export type HistoryChartSeries = {
   points: HistoryChartPoint[];
 };
 
+// 💡 18페이즈: 52주 최고가 속성 추가! (물음표(?) 기호로 선택적 속성 변경)
+export type DbLatestRankBoardWeeklyRow = DbLatestRankBoardRow &
+  WeeklyDeltaPayload & {
+    high_market_cap_52w?: number | string | null;
+    recovery_rate_52w?: number | string | null;
+  };
+
+// 💡 18페이즈: 52주 최고가 속성 추가! (물음표(?) 기호로 선택적 속성 변경)
+export type DbComplexDetailSheetWeeklyRow =
+  DbComplexDetailSheetBaseRow &
+    WeeklyDeltaPayload & {
+      high_market_cap_52w?: number | string | null;
+      recovery_rate_52w?: number | string | null;
+    };
+
 export type RankingItem = {
   complexId: string;
   name: string;
@@ -98,6 +111,9 @@ export type RankingItem = {
 
   tierBadges?: TierBadgeData[];
   tierStats?: TierStats;
+
+  highMarketCap52w: number | null;
+  recoveryRate52w: number | null;
 };
 
 export type ComplexDetail = {
@@ -129,6 +145,9 @@ export type ComplexDetail = {
 
   tierBadges?: TierBadgeData[];
   tierStats?: TierStats;
+
+  highMarketCap52w: number | null;
+  recoveryRate52w: number | null;
 };
 
 // --- Phase 16: 차트 데이터 부품 ---

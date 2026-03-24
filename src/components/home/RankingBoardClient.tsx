@@ -80,22 +80,33 @@ export function RankingBoardClient({ items: initialItems, boardError = null }: R
 
   const normalizedQuery = query.trim().toLowerCase();
 
+ // 💡 잼이사의 수신 안테나 장착 코드! (다이렉트 연결 완료 버전)
   const filteredItems = useMemo(() => {
-    const searched = items.filter((item) => {
-      if (normalizedQuery && !item.searchText.includes(normalizedQuery)) return false;
-      if (districtFilter !== "전체" && !item.locationLabel.startsWith(districtFilter)) return false;
-      return true;
-    });
+    let result = [...items];
 
-    return [...searched].sort((a, b) => {
-      switch (sortKey) {
-        case "market_cap_desc": return b.marketCapKrw - a.marketCapKrw;
-        case "delta_desc": return b.rankDelta1d - a.rankDelta1d;
-        case "name_asc": return a.name.localeCompare(b.name, "ko");
-        case "rank_asc": default: return a.rank - b.rank;
-      }
-    });
-  }, [items, normalizedQuery, districtFilter, sortKey]);
+    // 1. URL에서 필터 데이터 직접 꺼내오기!
+    const districtQuery = searchParams.get("district");
+    const currentSort = searchParams.get("sort"); // 👈 (수정) sortBy 대신 다이렉트로 꺼냅니다!
+    
+    // 2. 지역구 필터 or 검색어 필터 적용
+    if (districtQuery) {
+      result = result.filter((item) => 
+        item.sigunguName === districtQuery || 
+        item.locationLabel.includes(districtQuery)
+      );
+    } else if (normalizedQuery) {
+      result = result.filter((item) => item.searchText.includes(normalizedQuery));
+    }
+
+    // 3. 정렬 필터 적용
+    if (currentSort === "momentum") {
+      result.sort((a, b) => b.marketCapDeltaPct7d - a.marketCapDeltaPct7d);
+    } else if (currentSort === "pressure") {
+      result.sort((a, b) => a.marketCapDeltaPct7d - b.marketCapDeltaPct7d);
+    }
+
+    return result;
+  }, [items, normalizedQuery, searchParams]); // 👈 (수정) 배열 안에 있던 찌꺼기 이름도 지웠습니다!
 
   const selectedCompareItems = useMemo(
     () => selectedCompareIds.map((id) => items.find((item) => item.complexId === id)).filter((item): item is RankingItem => Boolean(item)),
