@@ -168,13 +168,23 @@ function buildDistrictBuckets(items: RankingItem[]): DistrictBucket[] {
     .sort((a, b) => b.totalMarketCap - a.totalMarketCap);
 }
 
+// 👇 여기서부터 교체!
 function buildUrlWithDistrict(districtName: string) {
   const params = new URLSearchParams(window.location.search);
-  params.set("district", districtName);
+  const currentDistrict = params.get("district"); // 지금 주소창에 무슨 구가 있는지 확인!
+
+  // 💡 잼이사의 토글 마법: 이미 눌려있는 구를 또 누르면 필터 해제!
+  if (currentDistrict === districtName) {
+    params.delete("district");
+  } else {
+    // 다른 구를 누르면 새로 적용!
+    params.set("district", districtName);
+  }
 
   const queryString = params.toString();
   return `${window.location.pathname}${queryString ? `?${queryString}` : ""}${window.location.hash}`;
 }
+// 👆 여기까지 교체!
 
 function pushDistrictToUrl(districtName: string) {
   const nextUrl = buildUrlWithDistrict(districtName);
