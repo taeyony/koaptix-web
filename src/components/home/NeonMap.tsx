@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { Map, CustomOverlayMap, useKakaoLoader } from "react-kakao-maps-sdk";
 import type { RankingItem } from "../../lib/koaptix/types";
 
-// 💡 서울 주요 구 중심 좌표
 const DISTRICT_COORDS: Record<string, { lat: number; lng: number }> = {
   강남구: { lat: 37.5172, lng: 127.0473 },
   서초구: { lat: 37.4837, lng: 127.0324 },
@@ -22,116 +22,94 @@ const DISTRICT_COORDS: Record<string, { lat: number; lng: number }> = {
   서대문구: { lat: 37.5791, lng: 126.9368 },
 };
 
-// 💡 잼이사의 마법: URL 토글 통신선! (히트맵과 100% 동일한 로직)
 function buildUrlWithDistrict(districtName: string) {
   const params = new URLSearchParams(window.location.search);
   const currentDistrict = params.get("district");
-
-  if (currentDistrict === districtName) {
-    params.delete("district"); // 이미 눌려있으면 해제!
-  } else {
-    params.set("district", districtName); // 아니면 새로 장착!
-  }
-
-  const queryString = params.toString();
-  return `${window.location.pathname}${queryString ? `?${queryString}` : ""}${window.location.hash}`;
+  if (currentDistrict === districtName) params.delete("district");
+  else params.set("district", districtName);
+  return `${window.location.pathname}?${params.toString()}${window.location.hash}`;
 }
 
 function pushDistrictToUrl(districtName: string) {
   const nextUrl = buildUrlWithDistrict(districtName);
-  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-
-  if (currentUrl !== nextUrl) {
+  if (`${window.location.pathname}${window.location.search}` !== nextUrl) {
     window.history.pushState(null, "", nextUrl);
   }
 }
 
 export function NeonMap({ items }: { items: RankingItem[] }) {
-  // 카카오맵 스크립트 강제 로딩!
+  const searchParams = useSearchParams();
+  const currentDistrict = searchParams?.get("district");
+
   const [loading, error] = useKakaoLoader({
     appkey: process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY as string,
   });
 
-  // 💡 잼이사의 처방: 동명이인 충돌 방지 및 데이터 계산
   const mapData = useMemo(() => {
     const grouped = new globalThis.Map<string, any>();
-
     items.forEach((item) => {
       const district = item.sigunguName?.trim() || "기타";
       if (!DISTRICT_COORDS[district]) return;
-
-      const current = grouped.get(district) || {
-        name: district,
-        coords: DISTRICT_COORDS[district],
-        totalMarketCap: 0,
-        totalDelta: 0,
-        count: 0,
-      };
-
+      const current = grouped.get(district) || { name: district, coords: DISTRICT_COORDS[district], totalMarketCap: 0, totalDelta: 0, count: 0 };
       current.totalMarketCap += item.marketCapKrw;
       current.totalDelta += item.rankDelta7d;
       current.count += 1;
       grouped.set(district, current);
     });
-
-    return Array.from(grouped.values()).map((g) => ({
-      ...g,
-      averageDelta: g.count > 0 ? g.totalDelta / g.count : 0,
-    }));
+    return Array.from(grouped.values()).map((g) => ({ ...g, averageDelta: g.count > 0 ? g.totalDelta / g.count : 0 }));
   }, [items]);
 
-  if (error) return <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-200">지도 로딩 에러: API 키를 확인하세요.</div>;
-  if (loading) return <div className="h-[450px] w-full animate-pulse rounded-2xl border border-white/10 bg-white/5" />;
+  if (error) return <div className="p-4 text-sm text-rose-400">지도 로딩 에러</div>;
+  if (loading) return <div className="h-[450px] w-full animate-pulse rounded-2xl border border-slate-800 bg-slate-900/50" />;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_50px_rgba(0,0,0,0.3)]">
-      <div className="border-b border-white/5 px-4 py-3">
-        <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/70">TACTICAL RADAR</p>
-        <h2 className="mt-1 text-lg font-semibold text-white">서울 자본 흐름 전술 맵</h2>
+    // 🚨 구조선 색상 리셋: 튀는 Cyan 테두리를 차분한 Slate로 변경!
+    <section className="overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)]">
+      <div className="border-b border-slate-800/80 px-4 py-3">
+        <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">TACTICAL RADAR</p>
+        <h2 className="mt-1 text-lg font-semibold text-slate-100">서울 자본 흐름 전술 맵</h2>
       </div>
 
       <div className="relative h-[450px] w-full bg-[#0b1118]">
-        {/* 다크모드 강제 튜닝 필터 */}
         <div 
-          className="absolute inset-0 z-0 [&>div]:h-full [&>div]:w-full" 
-          style={{ filter: 'invert(100%) hue-rotate(180deg) brightness(85%) contrast(110%) grayscale(20%)' }}
+          className="absolute inset-0 z-0 [&>div]:h-full [&>div]:w-full opacity-80" 
+          style={{ filter: 'invert(100%) hue-rotate(180deg) brightness(80%) contrast(110%) grayscale(30%)' }}
         >
-          <Map
-            center={{ lat: 37.525, lng: 126.99 }}
-            style={{ width: "100%", height: "100%" }}
-            level={8}
-            disableDoubleClickZoom={true}
-          >
+          <Map center={{ lat: 37.525, lng: 126.99 }} style={{ width: "100%", height: "100%" }} level={8} disableDoubleClickZoom={true}>
             {mapData.map((data) => {
               const isRising = data.averageDelta >= 0;
-              const ringColor = isRising ? "border-cyan-400" : "border-fuchsia-400";
-              const glowColor = isRising ? "rgba(34,211,238,0.5)" : "rgba(232,121,249,0.5)";
-              const bgColor = isRising ? "bg-cyan-400/20" : "bg-fuchsia-400/20";
-              const textColor = isRising ? "text-cyan-100" : "text-fuchsia-100";
+              const isSelected = data.name === currentDistrict; 
               
-              // 시가총액 크기에 따라 네온 원 크기 조절 (최소 60px ~ 최대 130px)
+              // 🚨 지차장 룰 적용: 기본은 에메랄드(상승)/로즈(하락), 선택(포커스) 시에만 시안(Cyan)!!
+              let ringColor = isRising ? "border-emerald-500/60" : "border-rose-500/60";
+              let glowColor = isRising ? "rgba(16,185,129,0.3)" : "rgba(244,63,94,0.3)";
+              let bgColor = isRising ? "bg-emerald-500/10" : "bg-rose-500/10";
+              let textColor = isRising ? "text-emerald-400" : "text-rose-400";
+
+              // 유저가 클릭(선택)했을 때만 네온 발광 폭발!! (인터랙션 피드백)
+              if (isSelected) {
+                ringColor = "border-cyan-400";
+                glowColor = "rgba(34,211,238,0.7)";
+                bgColor = "bg-cyan-500/30";
+                textColor = "text-cyan-100";
+              }
+              
               const size = Math.max(60, Math.min(130, (data.totalMarketCap / 1000000000000) * 1.5));
 
               return (
-                <CustomOverlayMap
-                  key={data.name}
-                  position={data.coords}
-                  yAnchor={0.5}
-                  xAnchor={0.5}
-                >
-                  {/* 💡 전술 클릭 액션(onClick) 장착 완료!! */}
+                <CustomOverlayMap key={data.name} position={data.coords} yAnchor={0.5} xAnchor={0.5} zIndex={isSelected ? 50 : 1}>
                   <div
                     onClick={() => pushDistrictToUrl(data.name)}
-                    className={`flex flex-col items-center justify-center rounded-full border-[1.5px] backdrop-blur-md transition-transform hover:scale-110 cursor-pointer ${ringColor} ${bgColor}`}
+                    // 🚨 hover 시에도 살짝 시안빛이 돌도록 통일!
+                    className={`group flex flex-col items-center justify-center rounded-full border backdrop-blur-md transition-all duration-300 hover:scale-110 hover:border-cyan-400/80 cursor-pointer ${ringColor} ${bgColor} ${isSelected ? 'ring-2 ring-white scale-110' : ''}`}
                     style={{
-                      width: `${size}px`,
-                      height: `${size}px`,
+                      width: `${size}px`, height: `${size}px`,
                       boxShadow: `0 0 20px ${glowColor}, inset 0 0 10px ${glowColor}`,
                       filter: 'invert(100%) hue-rotate(180deg)',
                     }}
                   >
-                    <span className="text-[11px] font-bold text-white drop-shadow-md pointer-events-none">{data.name}</span>
-                    <span className={`mt-0.5 text-[12px] font-black tracking-tighter ${textColor} drop-shadow-md pointer-events-none`}>
+                    <span className="text-[11px] font-bold text-slate-100 drop-shadow-md pointer-events-none transition-colors group-hover:text-white">{data.name}</span>
+                    <span className={`mt-0.5 text-[12px] font-black tracking-tighter ${textColor} drop-shadow-md pointer-events-none transition-colors group-hover:text-cyan-300`}>
                       {isRising ? "▲" : "▼"}{Math.abs(data.averageDelta).toFixed(1)}
                     </span>
                   </div>
@@ -140,8 +118,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
             })}
           </Map>
         </div>
-        {/* 상단 덮어씌우는 글래스 글로우 효과 */}
-        <div className="pointer-events-none absolute inset-0 z-10 shadow-[inset_0_0_60px_rgba(11,17,24,1)]" />
+        <div className="pointer-events-none absolute inset-0 z-10 shadow-[inset_0_0_80px_rgba(11,17,24,1)]" />
       </div>
     </section>
   );

@@ -1,372 +1,132 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useState, useMemo } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { RankingCard } from "./RankingCard";
-import { ComplexDetailSheet } from "./ComplexDetailSheet";
-import { ComparisonSheet } from "./ComparisonSheet";
-import type { ComplexDetail, RankingItem } from "../../lib/koaptix/types";
+import type { RankingItem } from "../../lib/koaptix/types";
+import { useBookmarks } from "../../hooks/useBookmarks";
 
-type RankingSortKey = "rank_asc" | "market_cap_desc" | "delta_desc" | "name_asc";
-
-type RankingBoardClientProps = {
-  items: RankingItem[]; // 💡 초기 데이터를 받습니다
+interface RankingBoardClientProps {
+  items: RankingItem[];
   boardError?: string | null;
-};
-
-const SORT_OPTIONS: Array<{ value: RankingSortKey; label: string }> = [
-  { value: "rank_asc", label: "순위순" },
-  { value: "market_cap_desc", label: "시총순" },
-  { value: "delta_desc", label: "상승폭순" },
-  { value: "name_asc", label: "이름순" },
-];
-
-function createFallbackItem(complexId: string): RankingItem {
-  return {
-    complexId,
-    name: "단지 정보 불러오는 중",
-    rank: 0,
-    marketCapKrw: 0,
-    marketCapTrillionKrw: null,
-    rankDelta1d: 0,
-    sigunguName: "",
-    legalDongName: "",
-    locationLabel: "",
-    searchText: "",
-    historySnapshotDate: null,
-    rankDelta7d: 0,
-    marketCapDelta7d: 0,
-    marketCapDeltaPct7d: 0,
-    deltaWindow: "7d",
-    // 💡 잼이사가 누락했던 18페이즈 신규 부품 추가! (빈칸으로 채움)
-    highMarketCap52w: null,
-    recoveryRate52w: null,
-  };
 }
 
-export function RankingBoardClient({ items: initialItems, boardError = null }: RankingBoardClientProps) {
+export function RankingBoardClient({ items, boardError }: RankingBoardClientProps) {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const searchParamsKey = searchParams.toString();
-  const complexIdFromUrl = searchParams.get("complexId");
 
-  // 🚨 잼이사가 복구한 1번: 무한 스크롤을 위한 State 부활!
-  const [items, setItems] = useState<RankingItem[]>(initialItems);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(initialItems.length >= 50);
+  const districtQuery = searchParams?.get("district");
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  const { bookmarks, toggleBookmark, isLoaded } = useBookmarks();
+  const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
 
-  const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState<RankingSortKey>("rank_asc");
-  const [districtFilter, setDistrictFilter] = useState<string>("전체");
+  const clearDistrict = () => {
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    params.delete("district");
+    router.push(`${pathname}?${params.toString()}`);
+  };
 
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<RankingItem | null>(null);
-  const [detail, setDetail] = useState<ComplexDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
-
-  // 비교 기능 State
-  const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
-  const [comparisonSheetOpen, setComparisonSheetOpen] = useState(false);
-  const [compareToast, setCompareToast] = useState<string | null>(null);
-  const compareToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-      if (compareToastTimerRef.current) clearTimeout(compareToastTimerRef.current);
-    };
-  }, []);
-
-  const uniqueDistricts = useMemo(() => {
-    const districts = new Set<string>();
-    items.forEach(item => {
-      const gu = item.locationLabel?.split(' ')[0];
-      if (gu && gu.endsWith('구')) districts.add(gu);
-    });
-    return ["전체", ...Array.from(districts).sort()];
-  }, [items]);
-
-  const normalizedQuery = query.trim().toLowerCase();
-
- // 💡 잼이사의 수신 안테나 장착 코드! (다이렉트 연결 완료 버전)
   const filteredItems = useMemo(() => {
-    let result = [...items];
-
-    // 1. URL에서 필터 데이터 직접 꺼내오기!
-    const districtQuery = searchParams.get("district");
-    const currentSort = searchParams.get("sort"); // 👈 (수정) sortBy 대신 다이렉트로 꺼냅니다!
-    
-    // 2. 지역구 필터 or 검색어 필터 적용
-    if (districtQuery) {
-      result = result.filter((item) => 
-        item.sigunguName?.includes(districtQuery) || // 👈 includes로 교체 완료!!
-        item.locationLabel?.includes(districtQuery)
-      );
-    } else if (normalizedQuery) {
-      result = result.filter((item) => item.searchText.includes(normalizedQuery));
+    let result = items;
+    if (districtQuery) result = result.filter(item => item.sigunguName?.includes(districtQuery) || item.locationLabel?.includes(districtQuery));
+    if (searchQuery) {
+      const lowerQ = searchQuery.toLowerCase();
+      result = result.filter(item => item.name.toLowerCase().includes(lowerQ) || item.sigunguName?.toLowerCase().includes(lowerQ) || item.legalDongName?.toLowerCase().includes(lowerQ));
     }
-
-    // 3. 정렬 필터 적용
-    if (currentSort === "momentum") {
-      result.sort((a, b) => b.marketCapDeltaPct7d - a.marketCapDeltaPct7d);
-    } else if (currentSort === "pressure") {
-      result.sort((a, b) => a.marketCapDeltaPct7d - b.marketCapDeltaPct7d);
-    }
-
+    if (showBookmarksOnly && isLoaded) result = result.filter(item => bookmarks.includes(item.complexId));
     return result;
-  }, [items, normalizedQuery, searchParams]); // 👈 (수정) 배열 안에 있던 찌꺼기 이름도 지웠습니다!
+  }, [items, districtQuery, searchQuery, showBookmarksOnly, bookmarks, isLoaded]);
 
-  const selectedCompareItems = useMemo(
-    () => selectedCompareIds.map((id) => items.find((item) => item.complexId === id)).filter((item): item is RankingItem => Boolean(item)),
-    [items, selectedCompareIds]
-  );
-
-  // 🚨 잼이사가 복구한 2번: 더보기(Load More) 데이터 요청 함수 부활!
-  async function loadMore() {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const response = await fetch(`/api/rankings?offset=${items.length}&limit=50`);
-      const payload = await response.json();
-      if (payload.data && payload.data.length > 0) {
-        setItems((prev) => [...prev, ...payload.data]);
-        if (payload.data.length < 50) setHasMore(false);
-      } else {
-        setHasMore(false);
-      }
-    } catch (error) {
-      console.error("더보기 로딩 실패:", error);
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
-  const buildUrlWithComplexId = useCallback((complexId: string) => {
-    const nextParams = new URLSearchParams(searchParamsKey);
-    nextParams.set("complexId", complexId);
-    return nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname;
-  }, [pathname, searchParamsKey]);
-
-  const buildUrlWithoutComplexId = useCallback(() => {
-    const nextParams = new URLSearchParams(searchParamsKey);
-    nextParams.delete("complexId");
-    return nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname;
-  }, [pathname, searchParamsKey]);
-
-  const requestDetail = useCallback(async (complexId: string) => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const response = await fetch(`/api/complex-detail?complexId=${encodeURIComponent(complexId)}`, { method: "GET", signal: controller.signal, cache: "no-store" });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error ?? "상세 정보를 불러오지 못했다.");
-    return payload.data as ComplexDetail;
-  }, []);
-
-  const openDetailByItem = useCallback(async (item: RankingItem, options: { syncUrl?: boolean } = {}) => {
-    const { syncUrl = true } = options;
-    if (sheetOpen && selectedItem?.complexId === item.complexId) return;
-
-    setSelectedItem(item); setDetail(null); setDetailError(null); setDetailLoading(true); setSheetOpen(true);
-
-    if (syncUrl) {
-      const nextUrl = buildUrlWithComplexId(item.complexId);
-      const currentUrl = `${window.location.pathname}${window.location.search}`;
-      if (currentUrl !== nextUrl) window.history.pushState(null, "", nextUrl);
-    }
-
-    try {
-      const nextDetail = await requestDetail(item.complexId);
-      setDetail(nextDetail);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      setDetailError(error instanceof Error ? error.message : "상세 정보를 불러오지 못했다.");
-    } finally {
-      setDetailLoading(false);
-    }
-  }, [buildUrlWithComplexId, requestDetail, selectedItem?.complexId, sheetOpen]);
-
-  const openDetailByComplexId = useCallback(async (complexId: string, options: { syncUrl?: boolean } = {}) => {
-    const targetItem = items.find((item) => item.complexId === complexId) ?? createFallbackItem(complexId);
-    await openDetailByItem(targetItem, options);
-  }, [items, openDetailByItem]);
-
-  const closeDetail = useCallback((options: { syncUrl?: boolean } = {}) => {
-    const { syncUrl = true } = options;
-    abortRef.current?.abort();
-    setSheetOpen(false); setSelectedItem(null); setDetail(null); setDetailError(null); setDetailLoading(false);
-
-    if (syncUrl) {
-      const nextUrl = buildUrlWithoutComplexId();
-      const currentUrl = `${window.location.pathname}${window.location.search}`;
-      if (currentUrl !== nextUrl) window.history.replaceState(null, "", nextUrl);
-    }
-  }, [buildUrlWithoutComplexId]);
-
-  useEffect(() => {
-    if (!complexIdFromUrl) {
-      if (sheetOpen || selectedItem) closeDetail({ syncUrl: false });
-      return;
-    }
-    if (sheetOpen && selectedItem?.complexId === complexIdFromUrl) return;
-    void openDetailByComplexId(complexIdFromUrl, { syncUrl: false });
-  }, [closeDetail, complexIdFromUrl, openDetailByComplexId, selectedItem, sheetOpen]);
-
-  function showCompareToast(message: string) {
-    if (compareToastTimerRef.current) clearTimeout(compareToastTimerRef.current);
-    setCompareToast(message);
-    compareToastTimerRef.current = setTimeout(() => setCompareToast(null), 2200);
-  }
-
-  function toggleCompareSelection(item: RankingItem) {
-    const isSelected = selectedCompareIds.includes(item.complexId);
-    if (isSelected) {
-      setSelectedCompareIds((prev) => prev.filter((id) => id !== item.complexId));
-      return;
-    }
-    if (selectedCompareIds.length >= 2) {
-      showCompareToast("비교는 최대 2개까지만 가능합니다");
-      return;
-    }
-    setSelectedCompareIds((prev) => [...prev, item.complexId]);
-  }
-
-  function clearCompareSelection() {
-    setSelectedCompareIds([]);
-    setComparisonSheetOpen(false);
-  }
-
-  function openComparisonSheet() {
-    if (selectedCompareItems.length < 2) {
-      showCompareToast("비교할 단지를 2개 선택해라");
-      return;
-    }
-    if (sheetOpen) closeDetail({ syncUrl: true });
-    setComparisonSheetOpen(true);
-  }
-
-  const showFloatingBar = selectedCompareItems.length > 0 && !comparisonSheetOpen;
+  if (boardError) return <div className="p-4 text-sm text-rose-400">Error: {boardError}</div>;
 
   return (
-    <>
-      <section className="overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_50px_rgba(0,0,0,0.3)]">
-        <div className="border-b border-white/5 px-3 py-3 sm:px-4 sm:py-4">
-          <div className="flex flex-col gap-3">
-            <div className="min-w-0">
-              <h2 className="mt-1 truncate text-lg font-semibold tracking-tight sm:text-xl">KOAPTIX 500 Rankings</h2>
-              <p className="mt-1 text-xs text-white/45 sm:text-sm">단지명·구·동 검색 / 클릭 시 URL 동기화 / VS 클릭 시 비교 담기</p>
-            </div>
+    // 🚨 핵심 포인트: h-full을 주어 부모가 준 공간을 꽉 채우고, 밖으로 튀어나가지 않게 막습니다!
+    <div className="flex h-full flex-col rounded-2xl border border-slate-700/50 bg-[#0b1118]/90 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)] backdrop-blur-sm">
+      
+      {/* --- 상단 컨트롤 패널 (고정 영역) --- */}
+      <div className="shrink-0 flex flex-col gap-3 border-b border-slate-800/80 p-4 sm:p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold tracking-tight text-slate-100 sm:text-lg">KOAPTIX 500 Rankings</h2>
+        </div>
 
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_120px]">
-              <input
-          data-koaptix-command-trigger="true" // 💡 잼이사가 추가한 호출 센서!
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="단지명, 구, 동 검색"
-          className="w-full bg-transparent py-2.5 pl-3 pr-3 text-sm text-white outline-none placeholder:text-white/28"
+        {/* 탭 버튼 (색상 톤 다운 적용) */}
+        <div className="flex rounded-lg border border-slate-700/50 bg-black/40 p-1">
+          <button
+            onClick={() => setShowBookmarksOnly(false)}
+            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold transition-all ${
+              !showBookmarksOnly ? "bg-slate-700 text-white shadow" : "text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            전체 스캔
+          </button>
+          <button
+            onClick={() => setShowBookmarksOnly(true)}
+            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold transition-all ${
+              showBookmarksOnly ? "bg-yellow-500/10 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.1)]" : "text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            ★ MY RADAR
+          </button>
+        </div>
+
+        {/* 검색창 */}
+        <input
+          type="text"
+          placeholder="단지명, 구, 동 검색..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full rounded-lg border border-slate-700/50 bg-slate-800/30 px-3 py-2.5 text-sm text-slate-200 outline-none transition-all focus:border-cyan-500/50 focus:bg-slate-800/60"
         />
-              
-              <select value={districtFilter} onChange={(e) => setDistrictFilter(e.target.value)} className="h-11 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-cyan-300/40">
-                {uniqueDistricts.map((gu) => (
-                  <option key={gu} value={gu} style={{ backgroundColor: "#0b1118", color: "#ffffff" }}>{gu}</option>
-                ))}
-              </select>
 
-              <select value={sortKey} onChange={(e) => setSortKey(e.target.value as RankingSortKey)} className="h-11 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-cyan-300/40">
-                {SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value} style={{ backgroundColor: "#0b1118", color: "#ffffff" }}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="flex items-center justify-between text-xs text-white/45 sm:text-sm">
-              <span>표시 {filteredItems.length}개</span>
-              <span>전체 {items.length}개</span>
-            </div>
+        {/* 상태 칩 */}
+        {(districtQuery || searchQuery) && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-[10px] uppercase tracking-widest text-slate-500">Active:</span>
+            {districtQuery && (
+              <div className="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-400">
+                <span>📍 {districtQuery}</span>
+                <button onClick={clearDistrict} className="ml-1 flex h-4 w-4 items-center justify-center rounded-full text-cyan-400/60 transition-all hover:bg-cyan-500/20 hover:text-cyan-300">✕</button>
+              </div>
+            )}
+            {searchQuery && (
+              <div className="flex items-center gap-1 rounded-full border border-slate-600 bg-slate-700 px-2.5 py-1 text-[11px] font-semibold text-slate-200">
+                <span>🔍 {searchQuery}</span>
+                <button onClick={() => setSearchQuery("")} className="ml-1 flex h-4 w-4 items-center justify-center rounded-full text-slate-400 transition-all hover:bg-slate-600 hover:text-white">✕</button>
+              </div>
+            )}
           </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-2 sm:space-y-3 lg:max-h-[600px]">
-          {filteredItems.length > 0 ? (
-            filteredItems.map((item) => {
-              const isActive = sheetOpen && selectedItem?.complexId === item.complexId;
-              const isCompared = selectedCompareIds.includes(item.complexId);
-
-              return (
-                <div key={item.complexId} className="grid grid-cols-[minmax(0,1fr)_50px] gap-2 sm:grid-cols-[minmax(0,1fr)_56px]">
-                  <div role="button" tabIndex={0} onClick={() => void openDetailByItem(item, { syncUrl: true })} className={`rounded-xl outline-none transition cursor-pointer ${isActive ? "ring-2 ring-cyan-300/50" : "hover:ring-1 hover:ring-white/10"}`}>
-                    <RankingCard item={item} />
-                  </div>
-
-                  <button type="button" onClick={(e) => { e.stopPropagation(); toggleCompareSelection(item); }} className={`flex h-full min-h-[108px] flex-col items-center justify-center rounded-xl border text-[10px] font-semibold tracking-[0.18em] transition sm:min-h-[116px] ${isCompared ? "border-cyan-300/30 bg-cyan-300/12 text-cyan-100 shadow-[0_0_0_1px_rgba(103,232,249,0.05)]" : "border-white/10 bg-white/[0.04] text-white/65 hover:bg-white/[0.08]"}`}>
-                    <span className="text-sm leading-none sm:text-base">{isCompared ? "✓" : "VS"}</span>
-                    <span className="mt-1">{isCompared ? "담김" : "추가"}</span>
-                  </button>
-                </div>
-              );
-            })
-          ) : (
-            <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55 text-center">검색 결과가 없습니다.</div>
-          )}
-
-          {/* 🚨 잼이사가 복구한 3번: 무한 스크롤 더보기 버튼 부활! */}
-          {hasMore && !query && districtFilter === "전체" && (
-            <button
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="w-full mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/10 py-3 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400/20 disabled:opacity-50"
-            >
-              {loadingMore ? "데이터를 불러오는 중입니다..." : "더보기 (Load More)"}
-            </button>
-          )}
-        </div>
-      </section>
-
-      <ComplexDetailSheet open={sheetOpen} item={selectedItem} detail={detail} loading={detailLoading} error={detailError} onClose={() => closeDetail({ syncUrl: true })} />
-
-     {/* 🚨 잼이사가 강제 주입한 무적의 플로팅 바 (Inline Style) */}
-      <div 
-        style={{
-          position: 'fixed',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          bottom: selectedCompareItems.length > 0 && !comparisonSheetOpen ? '24px' : '-100px',
-          opacity: selectedCompareItems.length > 0 && !comparisonSheetOpen ? 1 : 0,
-          visibility: selectedCompareItems.length > 0 && !comparisonSheetOpen ? 'visible' : 'hidden',
-          zIndex: 99999,
-          transition: 'all 0.3s ease',
-          width: '90%',
-          maxWidth: '600px',
-          backgroundColor: 'rgba(11, 17, 24, 0.95)',
-          border: '1px solid rgba(103, 232, 249, 0.3)',
-          borderRadius: '16px',
-          padding: '16px 20px',
-          boxShadow: '0 18px 50px rgba(0,0,0,0.8)',
-          backdropFilter: 'blur(10px)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          pointerEvents: selectedCompareItems.length > 0 && !comparisonSheetOpen ? 'auto' : 'none'
-        }}
-      >
-        <div>
-          <p style={{ margin: 0, fontSize: '11px', color: '#67e8f9', fontWeight: 'bold', letterSpacing: '1px' }}>COMPARISON CART</p>
-          <p style={{ margin: '4px 0 0 0', fontSize: '16px', color: 'white', fontWeight: 'bold' }}>{selectedCompareItems.length}개 단지 선택됨</p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={clearCompareSelection} style={{ padding: '8px 16px', backgroundColor: 'rgba(255,255,255,0.1)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>초기화</button>
-          <button onClick={openComparisonSheet} disabled={selectedCompareItems.length < 2} style={{ padding: '8px 16px', backgroundColor: selectedCompareItems.length < 2 ? 'rgba(103,232,249,0.1)' : 'rgba(103,232,249,0.2)', color: selectedCompareItems.length < 2 ? 'rgba(255,255,255,0.3)' : '#cffafe', border: 'none', borderRadius: '8px', cursor: selectedCompareItems.length < 2 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>비교하기</button>
+        )}
+        
+        <div className="mt-1 flex justify-between text-[11px] text-slate-500">
+          <span>표시 {filteredItems.length}개</span>
+          <span>전체 {items.length}개</span>
         </div>
       </div>
 
-      <div aria-live="polite" aria-atomic="true" className="pointer-events-none fixed inset-x-0 z-[99999] flex justify-center px-4 transition-all" style={{ bottom: selectedCompareItems.length > 0 ? "100px" : "24px" }}>
-        {compareToast ? <div style={{ padding: '8px 24px', borderRadius: '30px', border: '1px solid rgba(103, 232, 249, 0.2)', backgroundColor: 'rgba(11, 17, 24, 0.95)', color: '#cffafe', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 12px 30px rgba(0,0,0,0.5)' }}>{compareToast}</div> : null}
+      {/* 🚨 하단 리스트 영역 (내부 스크롤 영역!!) 🚨 */}
+      {/* 🚨 3. 여기도 'min-h-0' 추가!! */}
+      <div className="flex-1 overflow-y-auto min-h-0 p-2 sm:p-3 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-700 hover:scrollbar-thumb-slate-500">
+        {filteredItems.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {filteredItems.map((item) => (
+// ... (이하 기존 코드 유지) ...
+              <RankingCard 
+                key={item.complexId} 
+                item={item} 
+                isBookmarked={bookmarks.includes(item.complexId)}
+                onToggleBookmark={toggleBookmark}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="flex h-32 flex-col items-center justify-center gap-2 text-slate-500">
+            <span className="text-2xl opacity-50">📡</span>
+            <p className="text-sm">데이터가 없습니다.</p>
+          </div>
+        )}
       </div>
-
-      <ComparisonSheet open={comparisonSheetOpen} items={selectedCompareItems} onClose={() => setComparisonSheetOpen(false)} onClear={clearCompareSelection} />
-    </>
+    </div>
   );
 }
