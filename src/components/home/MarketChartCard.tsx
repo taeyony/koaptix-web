@@ -1,103 +1,339 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
-interface MarketChartCardProps {
-  title?: string;
-  valueLabel?: string;
-  changePct?: number;
-  data?: any[];
+type MarketChartRow = {
+  snapshot_date: string;
+  total_market_cap: number | null;
+};
+
+type MarketChartCardProps = {
+  data?: MarketChartRow[] | null;
+};
+
+type PeriodKey = "1W" | "1M" | "3M" | "1Y";
+
+const PERIOD_OPTIONS = [
+  { key: "1W", label: "1W", days: 7 },
+  { key: "1M", label: "1M", days: 30 },
+  { key: "3M", label: "3M", days: 90 },
+  { key: "1Y", label: "1Y", days: 365 },
+] as const;
+
+const PALETTES = {
+  up: {
+    stroke: "#10b981",
+    fill: "#10b981",
+    fillTopOpacity: 0.24,
+    fillBottomOpacity: 0.02,
+    textClassName: "text-emerald-300",
+    dot: "#34d399",
+  },
+  down: {
+    stroke: "#f43f5e",
+    fill: "#f43f5e",
+    fillTopOpacity: 0.24,
+    fillBottomOpacity: 0.02,
+    textClassName: "text-rose-300",
+    dot: "#fb7185",
+  },
+  flat: {
+    stroke: "#94a3b8",
+    fill: "#94a3b8",
+    fillTopOpacity: 0.18,
+    fillBottomOpacity: 0.02,
+    textClassName: "text-slate-300",
+    dot: "#cbd5e1",
+  },
+} as const;
+
+type ChartPoint = {
+  snapshot_date: string;
+  total_market_cap: number;
+  shortLabel: string;
+  fullLabel: string;
+};
+
+function toShortLabel(snapshotDate: string): string {
+  const safe = snapshotDate.slice(0, 10);
+  const [, month = "--", day = "--"] = safe.split("-");
+  return `${month}.${day}`;
 }
 
-export function MarketChartCard({ 
-  title = "KOAPTIX 500", 
-  valueLabel = "0", 
-  changePct = 0, 
-  data = [] 
-}: MarketChartCardProps) {
-  
-  const [period, setPeriod] = useState("1M");
-  const [mode, setMode] = useState("MarketCap");
+function toFullLabel(snapshotDate: string): string {
+  return snapshotDate.slice(0, 10).replace(/-/g, ".");
+}
 
-  const isUp = changePct >= 0;
-  const changeText = `${isUp ? "▲ +" : "▼ "}${Math.abs(changePct).toFixed(2)}%`;
-  
-  // 🚨 텍스트 색상: 상승=에메랄드, 하락=로즈
-  const changeColor = isUp ? "text-emerald-500" : "text-rose-500";
-  
-  // 🚨 차트 선 & 그라데이션 동적 색상 (지수 상태에 따라 차트 색이 바뀝니다!!)
-  const chartStrokeColor = isUp ? "#10b981" : "#f43f5e"; // Emerald or Rose
-  const chartGradientClass = isUp ? "from-emerald-500/20" : "from-rose-500/20";
+function formatValue(value: number): string {
+  if (!Number.isFinite(value)) return "-";
+  return new Intl.NumberFormat("ko-KR", {
+    maximumFractionDigits: 0,
+  }).format(value);
+}
 
+function formatCompactValue(value: number): string {
+  if (!Number.isFinite(value)) return "-";
+  return new Intl.NumberFormat("ko-KR", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatDelta(value: number): string {
+  if (!Number.isFinite(value) || value === 0) return "0";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${formatCompactValue(value)}`;
+}
+
+function formatPercent(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "-";
+  if (value === 0) return "0.00%";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}%`;
+}
+
+function getPalette(delta: number) {
+  if (delta > 0) return PALETTES.up;
+  if (delta < 0) return PALETTES.down;
+  return PALETTES.flat;
+}
+
+function EmptyState({
+  title = "표시할 지수 데이터가 없습니다.",
+  description = "일별 스냅샷이 쌓이면 이 영역에 KOAPTIX 500 시가총액 지수가 표시됩니다.",
+}: {
+  title?: string;
+  description?: string;
+}) {
   return (
-    // 🚨 스티키 유지 & 구조선 슬레이트로 톤 다운
-    <div className="sticky top-4 z-10 flex h-[400px] shrink-0 flex-col rounded-2xl border border-slate-700/50 bg-[#0b1118]/90 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)] backdrop-blur-sm">
-      <div className="flex flex-col gap-4 border-b border-slate-800/80 p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">Index Chart</p>
-            <div className="mt-1 flex items-end gap-3">
-              <h2 className="text-xl font-bold tracking-tight text-slate-100 sm:text-2xl">{title}</h2>
-              <span className={`mb-0.5 text-sm font-semibold ${changeColor}`}>{changeText}</span>
-            </div>
-          </div>
-
-          <div className="flex rounded-lg border border-slate-700/50 bg-slate-800/30 p-1">
-            {["1W", "1M", "3M", "1Y"].map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                // 🚨 지차장 룰: '선택(인터랙션)' 된 탭만 시안(Cyan) 네온으로 빛납니다!
-                className={`rounded-md px-3 py-1.5 text-xs font-bold transition-all ${
-                  period === p ? "bg-cyan-500/20 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]" : "text-slate-500 hover:text-slate-300"
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-        
-        <div className="flex gap-4 text-[11px] font-medium text-slate-500">
-           <button onClick={() => setMode("MarketCap")} className={`transition-all ${mode === "MarketCap" ? "text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.3)]" : "hover:text-slate-300"}`}>
-             ● Total Market Cap (시가총액)
-           </button>
-           <button onClick={() => setMode("Breadth")} className={`transition-all ${mode === "Breadth" ? "text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.3)]" : "hover:text-slate-300"}`}>
-             ○ Recovery Breadth (회복 압력)
-           </button>
-        </div>
-      </div>
-
-      <div className="relative flex-1 p-4 sm:p-5">
-         <div className="relative h-full w-full">
-            <div className="absolute -left-1 flex h-full flex-col justify-between pb-6 pt-2 text-[10px] font-medium text-slate-500">
-              <span>470조</span>
-              <span>465조</span>
-              <span>460조</span>
-            </div>
-            
-            <div className="absolute bottom-6 left-8 right-0 top-2 overflow-hidden border-b border-l border-slate-700/50">
-               {/* 🚨 지수의 상승/하락에 따라 그라데이션 색상이 에메랄드/로즈로 자동 변경! */}
-               <div className={`absolute bottom-0 left-0 h-[60%] w-full bg-gradient-to-t ${chartGradientClass} to-transparent`} />
-               
-               <svg className="absolute bottom-0 left-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 1000 100">
-                 {/* 🚨 차트 선도 동적 색상(chartStrokeColor) 연동 완료! */}
-                 <path d="M0,100 L0,60 Q250,50 500,40 T1000,20 L1000,100 Z" fill={isUp ? "rgba(16,185,129,0.05)" : "rgba(244,63,94,0.05)"} />
-                 <path d="M0,60 Q250,50 500,40 T1000,20" fill="none" stroke={chartStrokeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                 <circle cx="1000" cy="20" r="4" fill="#fff" className="animate-ping" vectorEffect="non-scaling-stroke" />
-                 <circle cx="1000" cy="20" r="4" fill={chartStrokeColor} vectorEffect="non-scaling-stroke" />
-               </svg>
-            </div>
-
-            <div className="absolute bottom-0 left-8 right-0 flex justify-between text-[10px] font-medium text-slate-500">
-              <span>03.01</span>
-              <span>03.08</span>
-              <span>03.15</span>
-              {/* TODAY는 포커스 영역이므로 시안(Cyan) 유지 */}
-              <span className="text-cyan-500/80">TODAY</span> 
-            </div>
-         </div>
+    <div className="flex h-full min-h-0 items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/60">
+      <div className="px-6 text-center">
+        <p className="text-sm font-medium text-slate-200">{title}</p>
+        <p className="mt-2 text-xs leading-6 text-slate-500">{description}</p>
       </div>
     </div>
+  );
+}
+
+export default function MarketChartCard({
+  data = [],
+}: MarketChartCardProps) {
+  const [activePeriod, setActivePeriod] = useState<PeriodKey>("3M");
+  const [isMounted, setIsMounted] = useState(false);
+  const gradientId = useId().replace(/:/g, "");
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const normalizedData = useMemo<ChartPoint[]>(() => {
+    return [...(data || [])] // 🚨 (data || []) 로 감싸서 null 붕괴를 막습니다!!
+      .filter(
+        (row): row is { snapshot_date: string; total_market_cap: number } =>
+          Boolean(row?.snapshot_date) &&
+          typeof row?.total_market_cap === "number" &&
+          Number.isFinite(row.total_market_cap),
+      )
+      .sort((a, b) =>
+        a.snapshot_date.slice(0, 10).localeCompare(b.snapshot_date.slice(0, 10)),
+      )
+      .map((row) => ({
+        snapshot_date: row.snapshot_date.slice(0, 10),
+        total_market_cap: row.total_market_cap,
+        shortLabel: toShortLabel(row.snapshot_date),
+        fullLabel: toFullLabel(row.snapshot_date),
+      }));
+  }, [data]);
+
+  const selectedData = useMemo(() => {
+    const period =
+      PERIOD_OPTIONS.find((option) => option.key === activePeriod) ??
+      PERIOD_OPTIONS[2];
+
+    if (normalizedData.length <= period.days) {
+      return normalizedData;
+    }
+
+    return normalizedData.slice(-period.days);
+  }, [activePeriod, normalizedData]);
+
+  const firstValue = selectedData[0]?.total_market_cap ?? null;
+  const lastValue = selectedData[selectedData.length - 1]?.total_market_cap ?? null;
+
+  const delta =
+    firstValue !== null && lastValue !== null ? lastValue - firstValue : 0;
+
+  const deltaPercent =
+    firstValue !== null && lastValue !== null && firstValue !== 0
+      ? ((lastValue - firstValue) / firstValue) * 100
+      : null;
+
+  const palette = getPalette(delta);
+  const hasUsableData = selectedData.length >= 2;
+
+  return (
+    <section className="flex h-full min-h-0 flex-col rounded-3xl border border-slate-800 bg-slate-950/90 p-5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-500">
+            Market Index
+          </p>
+
+          <h2 className="mt-2 text-lg font-semibold text-slate-100">
+            KOAPTIX 500 시가총액 지수
+          </h2>
+
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="text-2xl font-semibold tracking-tight text-slate-50">
+              {lastValue !== null ? formatCompactValue(lastValue) : "-"}
+            </span>
+
+            <span className={`text-sm font-medium ${palette.textClassName}`}>
+              {hasUsableData
+                ? `${activePeriod} ${formatDelta(delta)} · ${formatPercent(deltaPercent)}`
+                : "히스토리 대기"}
+            </span>
+          </div>
+
+          <p className="mt-2 text-xs text-slate-500">
+            기준일 {selectedData[selectedData.length - 1]?.fullLabel ?? "-"}
+          </p>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1 rounded-2xl border border-slate-800 bg-slate-900/80 p-1">
+          {PERIOD_OPTIONS.map((option) => {
+            const isActive = option.key === activePeriod;
+
+            return (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setActivePeriod(option.key)}
+                aria-pressed={isActive}
+                className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
+                  isActive
+                    ? "border border-cyan-400/30 bg-slate-800 text-cyan-300 shadow-[0_0_0_1px_rgba(34,211,238,0.08)]"
+                    : "border border-transparent bg-transparent text-slate-400 hover:text-slate-200 focus-visible:border-cyan-400/30 focus-visible:text-cyan-300"
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-5 flex-1 min-h-0">
+        {!hasUsableData ? (
+          <EmptyState />
+        ) : !isMounted ? (
+          <div className="h-full min-h-0 animate-pulse rounded-2xl border border-slate-800 bg-slate-950/60" />
+        ) : (
+          <div className="h-full min-h-0 w-full overflow-visible">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={selectedData}
+                margin={{ top: 12, right: 16, left: 0, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient
+                    id={`market-chart-gradient-${gradientId}`}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="0%"
+                      stopColor={palette.fill}
+                      stopOpacity={palette.fillTopOpacity}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor={palette.fill}
+                      stopOpacity={palette.fillBottomOpacity}
+                    />
+                  </linearGradient>
+                </defs>
+
+                <CartesianGrid
+                  vertical={false}
+                  stroke="#1e293b"
+                  strokeOpacity={0.7}
+                  strokeDasharray="3 3"
+                />
+
+                <XAxis
+                  dataKey="shortLabel"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={12}
+                  minTickGap={24}
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                />
+
+                <YAxis hide domain={["dataMin", "dataMax"]} />
+
+                <Tooltip
+                  cursor={{
+                    stroke: palette.stroke,
+                    strokeOpacity: 0.18,
+                    strokeWidth: 1,
+                  }}
+                  isAnimationActive={false}
+                  allowEscapeViewBox={{ x: true, y: true }}
+                  wrapperStyle={{ zIndex: 30 }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+
+                    const point = payload[0]?.payload as ChartPoint | undefined;
+                    if (!point) return null;
+
+                    return (
+                      <div className="rounded-2xl border border-slate-700/80 bg-slate-950/95 px-3 py-2 shadow-2xl backdrop-blur">
+                        <p className="text-[11px] tracking-wide text-slate-400">
+                          {point.fullLabel}
+                        </p>
+                        <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">
+                          총 시가총액
+                        </p>
+                        <p className="mt-2 text-sm font-semibold text-slate-100">
+                          {formatValue(point.total_market_cap)}
+                        </p>
+                      </div>
+                    );
+                  }}
+                />
+
+                <Area
+                  type="monotone"
+                  dataKey="total_market_cap"
+                  stroke={palette.stroke}
+                  fill={`url(#market-chart-gradient-${gradientId})`}
+                  strokeWidth={2.25}
+                  dot={false}
+                  activeDot={{
+                    r: 4,
+                    stroke: palette.dot,
+                    strokeWidth: 2,
+                    fill: "#020617",
+                  }}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

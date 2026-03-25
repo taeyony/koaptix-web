@@ -1,649 +1,332 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  ComplexDetail,
-  HistoryChartPoint,
-  HistoryChartSeries,
-  RankingItem,
-} from "../../lib/koaptix/types";
-
-const ComplexHistoryMiniChart = dynamic(
-  () =>
-    import("./ComplexHistoryMiniChart").then(
-      (mod) => mod.ComplexHistoryMiniChart
-    ),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-[220px] w-full animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]" />
-    ),
-  }
-);
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 type ComparisonSheetProps = {
   open: boolean;
-  items: RankingItem[];
+  items: unknown[];
   onClose: () => void;
-  onClear: () => void;
+  onRemoveItem?: (item: unknown) => void;
+  onClear?: () => void;
 };
 
-type Winner = "left" | "right" | "tie" | "none";
+type WinnerSide = "left" | "right" | null;
 
-type PanelData = {
-  complexId: string;
-  name: string;
-  locationLabel: string;
-  rank: number | null;
-  marketCapKrw: number | null;
-  householdCount: number | null;
-  approvalYear: number | null;
-  ageYears: number | null;
-  parkingCount: number | null;
-  buildingCount: number | null;
-};
-
-function formatMarketCapKrw(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value) || value <= 0) return "-";
-
-  const TRILLION = 1_000_000_000_000;
-  const HUNDRED_MILLION = 100_000_000;
-
-  if (value >= TRILLION) {
-    const amount = value / TRILLION;
-    const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
-    return `${amount.toFixed(digits)}조원`;
-  }
-
-  if (value >= HUNDRED_MILLION) {
-    const amount = value / HUNDRED_MILLION;
-    const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
-    return `${amount.toFixed(digits)}억원`;
-  }
-
-  return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
-}
-
-function formatNumber(value: number | null | undefined, suffix = ""): string {
-  if (value == null) return "-";
-  return `${new Intl.NumberFormat("ko-KR").format(value)}${suffix}`;
-}
-
-function getWinner(
-  left: number | null | undefined,
-  right: number | null | undefined,
-  better: "higher" | "lower"
-): Winner {
-  if (left == null || right == null) return "none";
-  if (left === right) return "tie";
-
-  if (better === "higher") {
-    return left > right ? "left" : "right";
-  }
-
-  return left < right ? "left" : "right";
-}
-
-function getTone(winner: Winner, side: "left" | "right"): string {
-  if (winner === "none" || winner === "tie") {
-    return "border-white/8 bg-white/[0.03] text-white";
-  }
-
-  if (winner === side) {
-    return "border-cyan-300/30 bg-cyan-300/12 text-cyan-50 shadow-[0_0_0_1px_rgba(103,232,249,0.05)]";
-  }
-
-  return "border-white/6 bg-white/[0.02] text-white/75";
-}
-
-function resolvePanelData(
-  item: RankingItem,
-  detail?: ComplexDetail
-): PanelData {
-  return {
-    complexId: item.complexId,
-    name: detail?.name ?? item.name,
-    locationLabel:
-      detail?.locationLabel ?? item.locationLabel ?? "위치 정보 없음",
-    rank: detail?.rank ?? item.rank,
-    marketCapKrw: detail?.marketCapKrw ?? item.marketCapKrw,
-    householdCount: detail?.householdCount ?? null,
-    approvalYear: detail?.approvalYear ?? null,
-    ageYears: detail?.ageYears ?? null,
-    parkingCount: detail?.parkingCount ?? null,
-    buildingCount: detail?.buildingCount ?? null,
-  };
-}
-
-function StatTile({
-  label,
-  value,
-  hint,
-  tone,
-}: {
+type MetricDefinition = {
   label: string;
-  value: string;
-  hint?: string;
-  tone: string;
-}) {
-  return (
-    <div className={`rounded-xl border p-3 ${tone}`}>
-      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-semibold tabular-nums sm:text-base">
-        {value}
-      </p>
-      {hint ? (
-        <p className="mt-1 text-[11px] text-white/45 sm:text-xs">{hint}</p>
-      ) : null}
-    </div>
-  );
+  leftValue: number | null;
+  rightValue: number | null;
+  displayLeft: string;
+  displayRight: string;
+  compare: "higher" | "lower";
+};
+
+const CURRENT_YEAR = new Date().getFullYear();
+
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
 }
 
-function PlaceholderColumn() {
-  return (
-    <div className="flex min-h-[360px] items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-4 text-center text-sm leading-6 text-white/45">
-      비교할 단지를 하나 더 담으면 여기에 나란히 표시된다.
-    </div>
-  );
+function toRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
-function ComparisonColumn({
-  side,
-  badge,
-  panel,
-  loading,
-  rankWinner,
-  marketCapWinner,
-  householdWinner,
-  approvalYearWinner,
-  parkingWinner,
-  buildingWinner,
-}: {
-  side: "left" | "right";
-  badge: string;
-  panel: PanelData;
-  loading: boolean;
-  rankWinner: Winner;
-  marketCapWinner: Winner;
-  householdWinner: Winner;
-  approvalYearWinner: Winner;
-  parkingWinner: Winner;
-  buildingWinner: Winner;
-}) {
+function readString(value: unknown, keys: string[]): string | null {
+  const record = toRecord(value);
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return String(candidate);
+    }
+  }
+  return null;
+}
+
+function readNumber(value: unknown, keys: string[]): number | null {
+  const record = toRecord(value);
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return candidate;
+    }
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      const parsed = Number(candidate.replace(/,/g, ""));
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return null;
+}
+
+// 🚨 잼이사 튜닝: 우리 데이터 규격(RankingItem)에 맞게 이름표(Key)를 정확히 꽂았습니다!
+function getComplexName(item: unknown): string {
+  return readString(item, ["name", "complex_name", "apt_name"]) ?? "선택 단지";
+}
+
+function getLocationText(item: unknown): string {
+  return readString(item, ["locationLabel", "district_name"]) ?? "-";
+}
+
+function getRankText(item: unknown): string | null {
+  const rank = readNumber(item, ["rank", "current_rank"]);
+  if (rank === null) return null;
+  return `#${Math.round(rank)}`;
+}
+
+function getMarketCap(item: unknown): number | null {
+  return readNumber(item, ["marketCapTrillionKrw", "total_market_cap"]);
+}
+
+function getWeeklyMomentum(item: unknown): number | null {
+  return readNumber(item, ["rankDelta7d", "weekly_momentum"]);
+}
+
+function getRecovery52w(item: unknown): number | null {
+  const raw = readNumber(item, ["recoveryRate52w", "recovery_52w"]);
+  if (raw === null) return null;
+  if (Math.abs(raw) <= 1) return raw * 100; // 0.85 -> 85% 변환
+  return raw;
+}
+
+// (참고: 세대수, 연식은 DB 쿼리에 추가되기 전까지는 '-' 로 방어합니다)
+function getHouseholds(item: unknown): number | null {
+  return readNumber(item, ["households", "household_count"]);
+}
+
+function getAgeYears(item: unknown): number | null {
+  return readNumber(item, ["age_years", "building_age"]);
+}
+
+// --- 포맷터 ---
+function formatInteger(value: number | null, suffix = ""): string {
+  if (value === null || !Number.isFinite(value)) return "-";
+  return `${new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 }).format(value)}${suffix}`;
+}
+
+function formatTrillion(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "-";
+  return `${new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 3 }).format(value)}조`;
+}
+
+function formatSigned(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "-";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 }).format(value)}`;
+}
+
+function formatPercent(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "-";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)}%`;
+}
+
+function formatAge(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "-";
+  return `${Math.round(value)}년`;
+}
+
+function getWinnerSide(leftValue: number | null, rightValue: number | null, compare: "higher" | "lower"): WinnerSide {
+  if (leftValue === null || rightValue === null || !Number.isFinite(leftValue) || !Number.isFinite(rightValue) || leftValue === rightValue) {
+    return null;
+  }
+  if (compare === "higher") return leftValue > rightValue ? "left" : "right";
+  return leftValue < rightValue ? "left" : "right";
+}
+
+function buildMetricRows(leftItem: unknown, rightItem: unknown): MetricDefinition[] {
+  const leftMarketCap = getMarketCap(leftItem);
+  const rightMarketCap = getMarketCap(rightItem);
+  const leftMomentum = getWeeklyMomentum(leftItem);
+  const rightMomentum = getWeeklyMomentum(rightItem);
+  const leftRecovery = getRecovery52w(leftItem);
+  const rightRecovery = getRecovery52w(rightItem);
+  const leftHouseholds = getHouseholds(leftItem);
+  const rightHouseholds = getHouseholds(rightItem);
+  const leftAge = getAgeYears(leftItem);
+  const rightAge = getAgeYears(rightItem);
+
+  return [
+    {
+      label: "시가총액",
+      leftValue: leftMarketCap,
+      rightValue: rightMarketCap,
+      displayLeft: formatTrillion(leftMarketCap),
+      displayRight: formatTrillion(rightMarketCap),
+      compare: "higher",
+    },
+    {
+      label: "주간 모멘텀",
+      leftValue: leftMomentum,
+      rightValue: rightMomentum,
+      displayLeft: formatSigned(leftMomentum),
+      displayRight: formatSigned(rightMomentum),
+      compare: "higher",
+    },
+    {
+      label: "52주 회복률",
+      leftValue: leftRecovery,
+      rightValue: rightRecovery,
+      displayLeft: formatPercent(leftRecovery),
+      displayRight: formatPercent(rightRecovery),
+      compare: "higher",
+    },
+    {
+      label: "세대수",
+      leftValue: leftHouseholds,
+      rightValue: rightHouseholds,
+      displayLeft: formatInteger(leftHouseholds, "세대"),
+      displayRight: formatInteger(rightHouseholds, "세대"),
+      compare: "higher",
+    },
+    {
+      label: "연식",
+      leftValue: leftAge,
+      rightValue: rightAge,
+      displayLeft: formatAge(leftAge),
+      displayRight: formatAge(rightAge),
+      compare: "lower", // 연식은 숫자가 낮을수록(신축일수록) 우위!
+    },
+  ];
+}
+
+function MetricCell({ value, winner, side }: { value: string; winner: WinnerSide; side: "left" | "right" }) {
+  const isWinner = winner === side;
   return (
-    <div className="min-w-0 rounded-2xl border border-white/8 bg-white/[0.03] p-3 sm:p-4">
-      <div className="flex items-start gap-2">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-cyan-300/20 bg-cyan-300/10 text-[11px] font-semibold text-cyan-100">
-          {badge}
-        </div>
-
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-white sm:text-base">
-              {panel.name}
-            </h3>
-
-            {loading ? (
-              <span className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-white/45">
-                SYNC
-              </span>
-            ) : null}
-          </div>
-
-          <p className="mt-1 truncate text-xs text-white/45 sm:text-sm">
-            {panel.locationLabel}
-          </p>
-        </div>
+    <div className={cx("rounded-2xl border px-4 py-3 transition", isWinner ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300" : "border-slate-800 bg-slate-900/70 text-slate-100")}>
+      <div className={cx("flex items-center gap-2", side === "right" ? "justify-end" : "justify-start")}>
+        <span className="text-sm font-semibold tabular-nums">{value}</span>
+        {isWinner ? <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium tracking-[0.18em] text-emerald-300">우위</span> : null}
       </div>
-
-      <div className="mt-3 space-y-2">
-        <StatTile
-          label="현재 순위"
-          value={panel.rank != null ? `#${formatNumber(panel.rank)}` : "-"}
-          tone={getTone(rankWinner, side)}
-        />
-
-        <StatTile
-          label="시가총액"
-          value={formatMarketCapKrw(panel.marketCapKrw)}
-          tone={getTone(marketCapWinner, side)}
-        />
-
-        <StatTile
-          label="세대수"
-          value={formatNumber(panel.householdCount, "세대")}
-          tone={getTone(householdWinner, side)}
-        />
-
-        <StatTile
-          label="준공연도"
-          value={panel.approvalYear != null ? `${panel.approvalYear}년` : "-"}
-          hint={panel.ageYears != null ? `${panel.ageYears}년차` : undefined}
-          tone={getTone(approvalYearWinner, side)}
-        />
-
-        <StatTile
-          label="주차대수"
-          value={formatNumber(panel.parkingCount, "대")}
-          tone={getTone(parkingWinner, side)}
-        />
-
-        <StatTile
-          label="동 수"
-          value={formatNumber(panel.buildingCount, "동")}
-          tone={getTone(buildingWinner, side)}
-        />
-      </div>
     </div>
   );
 }
 
-export function ComparisonSheet({
-  open,
-  items,
-  onClose,
-  onClear,
-}: ComparisonSheetProps) {
-  const activeItems = useMemo(() => items.slice(0, 2), [items]);
-  const itemIdsKey = activeItems.map((item) => item.complexId).join("|");
-
-  const [detailsById, setDetailsById] = useState<Record<string, ComplexDetail>>(
-    {}
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [historyById, setHistoryById] = useState<Record<string, HistoryChartPoint[]>>(
-    {}
-  );
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-
-  const abortRef = useRef<AbortController | null>(null);
-  const historyAbortRef = useRef<AbortController | null>(null);
+export default function ComparisonSheet({ open, items, onClose, onRemoveItem, onClear }: ComparisonSheetProps) {
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-      historyAbortRef.current?.abort();
-    };
+    setIsMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!isMounted || !open) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    const prevBodyPaddingRight = body.style.paddingRight;
+    const scrollBarGap = window.innerWidth - document.documentElement.clientWidth;
 
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    if (scrollBarGap > 0) body.style.paddingRight = `${scrollBarGap}px`;
 
     return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener("keydown", onKeyDown);
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+      body.style.paddingRight = prevBodyPaddingRight;
     };
-  }, [open, onClose]);
+  }, [isMounted, open]);
 
   useEffect(() => {
-    if (!open || activeItems.length === 0) return;
-
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setLoading(true);
-    setError(null);
-
-    (async () => {
-      const results = await Promise.allSettled(
-        activeItems.map(async (item) => {
-          const response = await fetch(
-            `/api/complex-detail?complexId=${encodeURIComponent(item.complexId)}`,
-            {
-              method: "GET",
-              signal: controller.signal,
-              cache: "no-store",
-            }
-          );
-
-          const payload = await response.json();
-
-          if (!response.ok) {
-            throw new Error(
-              payload.error ?? "비교용 상세 정보를 불러오지 못했다."
-            );
-          }
-
-          return payload.data as ComplexDetail;
-        })
-      );
-
-      if (controller.signal.aborted) return;
-
-      const nextDetails: Record<string, ComplexDetail> = {};
-      let failedCount = 0;
-
-      results.forEach((result, index) => {
-        const item = activeItems[index];
-
-        if (result.status === "fulfilled" && result.value) {
-          nextDetails[item.complexId] = result.value;
-        } else {
-          failedCount += 1;
-        }
-      });
-
-      setDetailsById(nextDetails);
-
-      if (failedCount > 0) {
-        setError(
-          failedCount === activeItems.length
-            ? "비교용 상세 정보를 불러오지 못했다."
-            : "일부 상세 정보가 누락되어 기본 카드 데이터로 비교 중이다."
-        );
-      }
-    })()
-      .catch((fetchError) => {
-        if (
-          fetchError instanceof DOMException &&
-          fetchError.name === "AbortError"
-        ) {
-          return;
-        }
-
-        setError(
-          fetchError instanceof Error
-            ? fetchError.message
-            : "비교용 상세 정보를 불러오지 못했다."
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      controller.abort();
+    if (!isMounted || !open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
     };
-  }, [activeItems, itemIdsKey, open]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isMounted, open, onClose]);
 
-  useEffect(() => {
-    if (!open || activeItems.length === 0) return;
+  const [leftItem, rightItem] = items.slice(0, 2);
 
-    historyAbortRef.current?.abort();
-    const controller = new AbortController();
-    historyAbortRef.current = controller;
+  const metricRows = useMemo(() => {
+    if (!leftItem || !rightItem) return [];
+    return buildMetricRows(leftItem, rightItem);
+  }, [leftItem, rightItem]);
 
-    setHistoryLoading(true);
-    setHistoryError(null);
+  if (!isMounted || (!open && items.length === 0)) return null;
 
-    (async () => {
-      const response = await fetch(
-        `/api/complex-history?complexId=${encodeURIComponent(
-          activeItems.map((item) => item.complexId).join(",")
-        )}&mode=weekly&days=180`,
-        {
-          method: "GET",
-          signal: controller.signal,
-          cache: "no-store",
-        }
-      );
-
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          payload.error ?? "비교용 히스토리 차트를 불러오지 못했다."
-        );
-      }
-
-      const series = Array.isArray(payload.data?.series)
-        ? payload.data.series
-        : [];
-
-      const nextHistoryById: Record<string, HistoryChartPoint[]> = {};
-
-      for (const entry of series) {
-        const complexId = String(entry?.complexId ?? "");
-        if (!complexId) continue;
-        nextHistoryById[complexId] = Array.isArray(entry?.points)
-          ? (entry.points as HistoryChartPoint[])
-          : [];
-      }
-
-      setHistoryById(nextHistoryById);
-    })()
-      .catch((fetchError) => {
-        if (
-          fetchError instanceof DOMException &&
-          fetchError.name === "AbortError"
-        ) {
-          return;
-        }
-
-        setHistoryById({});
-        setHistoryError(
-          fetchError instanceof Error
-            ? fetchError.message
-            : "비교용 히스토리 차트를 불러오지 못했다."
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setHistoryLoading(false);
-        }
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [activeItems, itemIdsKey, open]);
-
-  const panels = useMemo(
-    () =>
-      activeItems.map((item) =>
-        resolvePanelData(item, detailsById[item.complexId])
-      ),
-    [activeItems, detailsById]
-  );
-
-  const chartSeries = useMemo<HistoryChartSeries[]>(
-    () =>
-      activeItems
-        .map((item, index) => ({
-          key: item.complexId,
-          name: item.name,
-          color: index === 0 ? "#22d3ee" : "#e879f9",
-          points: historyById[item.complexId] ?? [],
-        }))
-        .filter((entry) => entry.points.length > 0),
-    [activeItems, historyById]
-  );
-
-  if (!open) return null;
-
-  const left = panels[0] ?? null;
-  const right = panels[1] ?? null;
-
-  const rankWinner = getWinner(
-    left?.rank ?? null,
-    right?.rank ?? null,
-    "lower"
-  );
-
-  const marketCapWinner = getWinner(
-    left?.marketCapKrw ?? null,
-    right?.marketCapKrw ?? null,
-    "higher"
-  );
-
-  const householdWinner = getWinner(
-    left?.householdCount ?? null,
-    right?.householdCount ?? null,
-    "higher"
-  );
-
-  const approvalYearWinner = getWinner(
-    left?.approvalYear ?? null,
-    right?.approvalYear ?? null,
-    "higher"
-  );
-
-  const parkingWinner = getWinner(
-    left?.parkingCount ?? null,
-    right?.parkingCount ?? null,
-    "higher"
-  );
-
-  const buildingWinner = getWinner(
-    left?.buildingCount ?? null,
-    right?.buildingCount ?? null,
-    "higher"
-  );
-
-  return (
-    <div className="fixed inset-0 z-[70]">
-      <div
-        className="absolute inset-0 bg-black/75 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="comparison-sheet-title"
-        className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[900px] md:max-w-[94vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
-      >
-        <div className="border-b border-white/5 bg-[#0b1118]/95 px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pt-4">
-          <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/10 md:hidden" />
-
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/70 sm:text-xs">
-                VS COMPARISON
-              </p>
-              <h3
-                id="comparison-sheet-title"
-                className="mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl"
-              >
-                2개 단지 스펙 비교
-              </h3>
-              <p className="mt-1 text-sm text-white/50 sm:text-[15px]">
-                순위는 낮을수록, 시가총액·세대수·주차·준공연도는 높을수록 우위
-              </p>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={onClear}
-                className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/70 transition hover:bg-white/[0.06]"
-              >
-                초기화
-              </button>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/15"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-h-[calc(88vh-96px)] overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
-          {error ? (
-            <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-              {error}
-            </div>
-          ) : null}
-
-          <div className="mb-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">
-            <div className="border-b border-white/5 px-4 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70">
-                    CAPITAL DIVERGENCE
-                  </p>
-                  <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">
-                    듀얼 네온 라인 차트
-                  </h4>
-                  <p className="mt-1 text-xs text-white/45">
-                    두 단지의 시가총액 해류가 어떻게 엇갈리는지 최근 6개월 기준으로 본다
-                  </p>
-                </div>
-
-                <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-white/60">
-                  Weekly View
-                </span>
+  const content = (
+    <div className={cx("fixed inset-0 z-[1000] isolate", open ? "pointer-events-auto" : "pointer-events-none")}>
+      <div className={cx("absolute inset-0 bg-slate-950/70 backdrop-blur-[2px] transition-opacity duration-300", open ? "opacity-100" : "opacity-0")} onClick={onClose} />
+      <div className={cx("absolute inset-x-0 bottom-0 mx-auto w-full max-w-7xl px-4 pb-4 transition-all duration-300 ease-out", open ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0")} onClick={(event) => event.stopPropagation()}>
+        <section role="dialog" aria-modal="true" aria-labelledby="comparison-sheet-title" className="overflow-hidden rounded-[28px] border border-slate-800 bg-slate-950/95 shadow-[0_-30px_80px_rgba(2,6,23,0.82)] ring-1 ring-white/5">
+          <div className="border-b border-slate-800/80 px-6 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-500">Comparison Sheet</p>
+                <h2 id="comparison-sheet-title" className="mt-2 text-lg font-semibold text-slate-100">1:1 스펙 비교</h2>
+                <p className="mt-1 text-xs text-slate-500">에메랄드 포인트는 해당 항목의 우위를 의미합니다.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {onClear ? <button type="button" onClick={onClear} className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-cyan-400/30 hover:text-cyan-300">초기화</button> : null}
+                <button type="button" onClick={onClose} className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-cyan-400/30 hover:text-cyan-300">닫기</button>
               </div>
             </div>
-
-            <div className="px-3 py-3 sm:px-4">
-              {historyError ? (
-                <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-sm text-rose-200">
-                  {historyError}
-                </div>
-              ) : historyLoading ? (
-                <div className="h-[220px] w-full animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]" />
-              ) : chartSeries.length > 0 ? (
-                <ComplexHistoryMiniChart series={chartSeries} />
-              ) : (
-                <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55">
-                  비교 차트를 그릴 히스토리 데이터가 아직 충분하지 않다.
-                </div>
-              )}
-            </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {left ? (
-              <ComparisonColumn
-                side="left"
-                badge="A"
-                panel={left}
-                loading={loading && !detailsById[left.complexId]}
-                rankWinner={rankWinner}
-                marketCapWinner={marketCapWinner}
-                householdWinner={householdWinner}
-                approvalYearWinner={approvalYearWinner}
-                parkingWinner={parkingWinner}
-                buildingWinner={buildingWinner}
-              />
+          <div className="max-h-[78vh] overflow-y-auto overscroll-contain" onWheelCapture={(event) => event.stopPropagation()}>
+            {!leftItem || !rightItem ? (
+              <div className="flex min-h-[280px] items-center justify-center px-6 py-8">
+                <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/60 px-6 py-8 text-center">
+                  <p className="text-sm font-medium text-slate-200">비교 대상 2개를 담으면 여기서 바로 대조됩니다.</p>
+                  <p className="mt-2 text-xs text-slate-500">랭킹 카드의 VS 버튼으로 두 단지를 선택하세요.</p>
+                </div>
+              </div>
             ) : (
-              <PlaceholderColumn />
-            )}
-
-            {right ? (
-              <ComparisonColumn
-                side="right"
-                badge="B"
-                panel={right}
-                loading={loading && !detailsById[right.complexId]}
-                rankWinner={rankWinner}
-                marketCapWinner={marketCapWinner}
-                householdWinner={householdWinner}
-                approvalYearWinner={approvalYearWinner}
-                parkingWinner={parkingWinner}
-                buildingWinner={buildingWinner}
-              />
-            ) : (
-              <PlaceholderColumn />
+              <div className="px-6 pb-6 pt-5">
+                <div className="grid grid-cols-[minmax(0,1fr)_76px_minmax(0,1fr)] gap-3">
+                  <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">LEFT</p>
+                        <h3 className="mt-2 break-words text-base font-semibold text-slate-50">{getComplexName(leftItem)}</h3>
+                        <p className="mt-2 text-xs text-slate-400">{getLocationText(leftItem)}</p>
+                        {getRankText(leftItem) ? <p className="mt-1 text-xs text-slate-500">현재 순위 {getRankText(leftItem)}</p> : null}
+                      </div>
+                      {onRemoveItem ? <button type="button" onClick={() => onRemoveItem(leftItem)} className="shrink-0 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1.5 text-[11px] font-medium text-slate-400 transition hover:border-cyan-400/30 hover:text-cyan-300">제거</button> : null}
+                    </div>
+                  </article>
+                  <div className="flex items-center justify-center">
+                    <div className="rounded-full border border-slate-800 bg-slate-900/80 px-3 py-2 text-[11px] font-medium tracking-[0.28em] text-slate-300">VS</div>
+                  </div>
+                  <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      {onRemoveItem ? <button type="button" onClick={() => onRemoveItem(rightItem)} className="shrink-0 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1.5 text-[11px] font-medium text-slate-400 transition hover:border-cyan-400/30 hover:text-cyan-300">제거</button> : null}
+                      <div className="min-w-0 text-right">
+                        <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">RIGHT</p>
+                        <h3 className="mt-2 break-words text-base font-semibold text-slate-50">{getComplexName(rightItem)}</h3>
+                        <p className="mt-2 text-xs text-slate-400">{getLocationText(rightItem)}</p>
+                        {getRankText(rightItem) ? <p className="mt-1 text-xs text-slate-500">현재 순위 {getRankText(rightItem)}</p> : null}
+                      </div>
+                    </div>
+                  </article>
+                </div>
+                <div className="mt-5 space-y-3">
+                  {metricRows.map((row) => {
+                    const winner = getWinnerSide(row.leftValue, row.rightValue, row.compare);
+                    return (
+                      <div key={row.label} className="grid grid-cols-[minmax(0,1fr)_76px_minmax(0,1fr)] gap-3">
+                        <MetricCell value={row.displayLeft} winner={winner} side="left" />
+                        <div className="flex items-center justify-center px-2 text-center text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">{row.label}</div>
+                        <MetricCell value={row.displayRight} winner={winner} side="right" />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 }

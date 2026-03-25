@@ -1,19 +1,24 @@
-// 🚨 1. 리액트에서 마법의 방어막(Suspense)을 가져옵니다!
 import { Suspense } from "react"; 
 
 import { CommandPalette } from "../components/home/CommandPalette";
 import { TopMovers } from "../components/home/TopMovers";
 import { NeonMap } from "../components/home/NeonMap";
-import { MarketChartCard } from "../components/home/MarketChartCard";
+import MarketChartCard from "../components/home/MarketChartCard";
 import { RankingBoardClient } from "../components/home/RankingBoardClient";
 import { HapiPhilosophyTrigger } from "../components/home/HapiPhilosophyTrigger";
 
-import { getLatestRankBoard, getHomeKpi } from "../lib/koaptix/queries";
+import { getLatestRankBoard, getHomeKpi, getIndexChartRows } from "../lib/koaptix/queries";
 import type { RankingItem } from "../lib/koaptix/types";
 
 export default async function Home() {
   const rawItems = await getLatestRankBoard(50);
   const rawKpi = await getHomeKpi();
+  const rawChartRows = await getIndexChartRows(180); 
+  
+  const indexChartRows = rawChartRows.map((row: any) => ({
+    snapshot_date: row.snapshot_date,
+    total_market_cap: row.total_market_cap != null ? Number(row.total_market_cap) : null
+  }));
 
   const refinedItems: RankingItem[] = rawItems.map((row: any) => ({
     complexId: String(row.complex_id),
@@ -31,16 +36,8 @@ export default async function Home() {
   const home = {
     items: refinedItems,
     kpis: [
-      { 
-        label: "MARKET CAP", 
-        value: rawKpi?.total_market_cap_krw_string || "468.8조원", 
-        subValue: "코앱틱스 500 단지" 
-      },
-      { 
-        label: "LISTED UNITS", 
-        value: rawKpi?.total_household_count_string || "501개", 
-        subValue: "2026년 기준" 
-      }
+      { label: "MARKET CAP", value: rawKpi?.total_market_cap_krw_string || "468.8조원", subValue: "코앱틱스 500 단지" },
+      { label: "LISTED UNITS", value: rawKpi?.total_household_count_string || "501개", subValue: "2026년 기준" }
     ]
   };
 
@@ -51,7 +48,6 @@ export default async function Home() {
       <main className="min-h-screen bg-[#06090f] px-2 py-4 sm:p-4 lg:p-6">
         <div className="mx-auto w-full max-w-[1600px] space-y-4">
           
-          {/* --- 1. 대문 (압축된 Hero 영역) --- */}
           <section className="overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_rgba(0,0,0,0.4)]">
             <div className="border-b border-slate-800/80 px-4 py-3 lg:px-5 lg:py-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -80,27 +76,31 @@ export default async function Home() {
             </div>
           </section>
 
-          {/* --- 2. 하이엔드 2-Pane 레이아웃 --- */}
-          <section className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 lg:gap-6">
+          {/* 🚨 반응형 2-Pane 레이아웃: 모바일은 1열(세로), PC는 12열 분할! */}
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-6 items-start">
             
-            {/* 좌측 패널 */}
-            <div className="flex flex-col gap-4 lg:col-span-8 lg:gap-6">
-              {/* 🚨 2. 네온 맵에 Suspense 방어막 씌우기! (로딩 중엔 까만 스텔스 박스가 뜹니다) */}
-              <Suspense fallback={<div className="h-[450px] w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />}>
-                <NeonMap items={home.items} />
-              </Suspense>
+            {/* 좌측 패널 (모바일: 전체 폭 / PC: 8칸) */}
+            <div className="col-span-1 flex flex-col gap-4 lg:col-span-8 lg:gap-6">
+              {/* 네온 맵 (모바일: 300px / PC: 450px) */}
+              <div className="h-[300px] min-h-0 lg:h-[450px]">
+                <Suspense fallback={<div className="h-full w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />}>
+                  <NeonMap items={home.items} />
+                </Suspense>
+              </div>
               
-              <MarketChartCard />
+              {/* 🚨 메인 차트 (모바일: 높이 축소 & 스크롤 허용 / PC: 높이 고정 & 화면 상단 고정) */}
+              <div className="static h-[320px] min-h-0 lg:sticky lg:top-4 lg:h-[400px]">
+                <MarketChartCard data={indexChartRows} />
+              </div>
             </div>
 
-            {/* 우측 패널 */}
-            <div className="sticky top-4 flex h-[calc(100vh-2rem)] flex-col gap-4 lg:col-span-4 lg:gap-6">
-              <div className="shrink-0">
+            {/* 우측 랭킹 패널 (모바일: 전체 폭 & 600px 고정 / PC: 4칸 & 화면 꽉 채움) */}
+            <div className="col-span-1 min-h-0 lg:col-span-4 lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col lg:gap-6">
+              <div className="shrink-0 hidden lg:block mb-4 lg:mb-0">
                 <TopMovers items={home.items} />
               </div>
               
-              <div className="flex-1 overflow-hidden min-h-0">
-                {/* 🚨 3. 랭킹 보드에도 Suspense 방어막 씌우기! */}
+              <div className="h-[600px] min-h-0 lg:flex-1 lg:h-auto lg:overflow-hidden">
                 <Suspense fallback={<div className="h-full w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />}>
                   <RankingBoardClient items={home.items} />
                 </Suspense>
