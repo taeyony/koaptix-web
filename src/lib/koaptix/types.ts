@@ -1,3 +1,5 @@
+export type NullableNumberLike = number | string | null;
+
 export type WeeklyDeltaWindow = "7d";
 
 export type WeeklyDeltaPayload = {
@@ -15,8 +17,13 @@ export type DbLatestRankBoardRow = {
   market_cap_trillion_krw: number | string | null;
   sigungu_name: string | null;
   legal_dong_name: string | null;
-};
 
+  household_count?: NullableNumberLike;
+  build_year?: NullableNumberLike;
+
+  universe_code?: string | null;
+  universe_name?: string | null;
+};
 
 export type DbRankHistoryRow = {
   snapshot_date: string;
@@ -41,13 +48,11 @@ export type DbComplexDetailSheetBaseRow = {
   updated_at: string | null;
 };
 
-
 export type DbIndexHistoryRow = {
   snapshot_date: string;
   total_market_cap: number | string | null;
 };
 
-// --- Phase 17: 티어 및 다중 차트 부품 ---
 export type TierBadgeTone = "gold" | "cyan" | "fuchsia" | "steel";
 
 export type TierBadgeData = {
@@ -73,49 +78,78 @@ export type HistoryChartSeries = {
   points: HistoryChartPoint[];
 };
 
-// 💡 18페이즈: 52주 최고가 속성 추가! (물음표(?) 기호로 선택적 속성 변경)
 export type DbLatestRankBoardWeeklyRow = DbLatestRankBoardRow &
   WeeklyDeltaPayload & {
     high_market_cap_52w?: number | string | null;
     recovery_rate_52w?: number | string | null;
   };
 
-// 💡 18페이즈: 52주 최고가 속성 추가! (물음표(?) 기호로 선택적 속성 변경)
 export type DbComplexDetailSheetWeeklyRow =
   DbComplexDetailSheetBaseRow &
-    WeeklyDeltaPayload & {
-      high_market_cap_52w?: number | string | null;
-      recovery_rate_52w?: number | string | null;
-    };
+  WeeklyDeltaPayload & {
+    high_market_cap_52w?: number | string | null;
+    recovery_rate_52w?: number | string | null;
+  };
 
 export type RankingItem = {
   complexId: string;
   name: string;
+  apt_name_ko?: string;
+
   rank: number;
+  rank_all?: number;
+
   marketCapKrw: number;
+  market_cap_krw?: number;
+
   marketCapTrillionKrw: number | null;
+  market_cap_trillion_krw?: number | null;
 
   sigunguName: string;
+  sigungu_name?: string;
+
   legalDongName: string;
+  legal_dong_name?: string;
+
   cityName?: string;
   locationLabel: string;
   searchText: string;
 
   historySnapshotDate: string | null;
   rankDelta7d: number;
+  rank_delta_w?: number | null;
+
   marketCapDelta7d: number;
   marketCapDeltaPct7d: number;
   deltaWindow: "7d";
 
   rankDelta1d: number;
 
+  rankMovement?: string | null;
+  rank_movement?: string | null;
+
+  previousRankAll?: number | null;
+  previous_rank_all?: number | null;
+
   tierBadges?: TierBadgeData[];
   tierStats?: TierStats;
 
   highMarketCap52w: number | null;
   recoveryRate52w: number | null;
-};
+  recovery_52w?: number | null;
 
+  households?: number | null;
+  buildYear?: number | null;
+  household_count?: number | null;
+  build_year?: number | null;
+  ageYears?: number | null;
+  age_years?: number | null;
+
+  universeCode?: string;
+  universe_code?: string;
+  universeName?: string | null;
+  universe_name?: string | null;
+};
 export type ComplexDetail = {
   complexId: string;
   name: string;
@@ -150,7 +184,6 @@ export type ComplexDetail = {
   recoveryRate52w: number | null;
 };
 
-// --- Phase 16: 차트 데이터 부품 ---
 export type DbComplexChartHistoryRow = {
   snapshot_date: string;
   complex_id: number | string | null;
@@ -166,7 +199,6 @@ export type HistoryChartPoint = {
 
 export type ComplexChartMode = "weekly" | "ma7";
 
-// --- 기타 KPI 및 차트 헬퍼 ---
 export type KpiItem = {
   label: string;
   value: string;

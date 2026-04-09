@@ -96,12 +96,13 @@ function getRecovery52w(item: unknown): number | null {
 }
 
 // (참고: 세대수, 연식은 DB 쿼리에 추가되기 전까지는 '-' 로 방어합니다)
+// 🚨 page.tsx 에서 내려보낸 이름표와 1000% 똑같이 맞춥니다!!
 function getHouseholds(item: unknown): number | null {
-  return readNumber(item, ["households", "household_count"]);
+  return readNumber(item, ["households", "household_count", "householdCount"]);
 }
 
 function getAgeYears(item: unknown): number | null {
-  return readNumber(item, ["age_years", "building_age"]);
+  return readNumber(item, ["ageYears", "age_years", "building_age"]);
 }
 
 // --- 포맷터 ---

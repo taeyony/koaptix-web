@@ -1,4 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
+import {
+  DEFAULT_UNIVERSE_CODE,
+  normalizeUniverseCode,
+} from "./universes";
 import type {
   DbComplexDetailSheetBaseRow,
   DbComplexDetailSheetWeeklyRow,
@@ -7,11 +11,48 @@ import type {
   DbLatestRankBoardRow,
   DbLatestRankBoardWeeklyRow,
   DbRankHistoryRow,
-  WeeklyDeltaPayload,
 } from "./types";
 
 const SEOUL_TIME_ZONE = "Asia/Seoul";
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+type RegionFallbackRow = {
+  complex_id: number | string | null;
+  sigungu_name: string | null;
+  sigungu_full_name: string | null;
+  umd_nm: string | null;
+  address_jibun: string | null;
+};
+
+type RegionMapRawRow = {
+  complex_id: number | string | null;
+  lawd_cd: number | string | null;
+  sgg_cd: number | string | null;
+  umd_nm: string | null;
+  sigungu_name: string | null;
+};
+
+type AptComplexRegionRawRow = {
+  complex_id: number | string | null;
+  region_id: number | null;
+  address_jibun: string | null;
+};
+
+type RegionDimRawRow = {
+  region_id: number | null;
+  region_code: string | null;
+  region_name_ko: string | null;
+  full_name_ko: string | null;
+};
+
+type WeeklyDerivedPayload = {
+  history_snapshot_date: string | null;
+  previous_rank_all: number | null;
+  rank_delta_7d: number | null;
+  market_cap_delta_7d: number | null;
+  market_cap_delta_pct_7d: number | null;
+  rank_movement: "NEW" | "UP" | "DOWN" | "SAME";
+};
 
 function createServerSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -34,13 +75,27 @@ function toNumber(value: number | string | null | undefined, fallback = 0): numb
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : fallback;
   }
-
   if (typeof value === "string") {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
   }
-
   return fallback;
+}
+
+export function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const normalized = value.replace(/,/g, "").trim();
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function toSeoulDateString(date: Date): string {
@@ -65,7 +120,6 @@ function shiftSeoulDateString(baseDate: string, diffDays: number): string {
 
 function normalizeComplexId(complexId: string | number) {
   if (typeof complexId === "number") return complexId;
-
   const parsed = Number(complexId);
   return Number.isFinite(parsed) ? parsed : complexId;
 }
@@ -84,13 +138,15 @@ function buildWeeklyDeltaPayload(
   currentRank: number,
   currentMarketCap: number,
   previous: DbRankHistoryRow | null
-): WeeklyDeltaPayload {
+): WeeklyDerivedPayload {
   if (!previous) {
     return {
       history_snapshot_date: null,
-      rank_delta_7d: 0,
-      market_cap_delta_7d: 0,
-      market_cap_delta_pct_7d: 0,
+      previous_rank_all: null,
+      rank_delta_7d: null,
+      market_cap_delta_7d: null,
+      market_cap_delta_pct_7d: null,
+      rank_movement: "NEW",
     };
   }
 
@@ -104,11 +160,64 @@ function buildWeeklyDeltaPayload(
       ? Number(((marketCapDelta7d / previousMarketCap) * 100).toFixed(2))
       : 0;
 
+  const rankMovement: WeeklyDerivedPayload["rank_movement"] =
+    rankDelta7d > 0 ? "UP" : rankDelta7d < 0 ? "DOWN" : "SAME";
+
   return {
     history_snapshot_date: previous.snapshot_date ?? null,
+    previous_rank_all: previousRank,
     rank_delta_7d: rankDelta7d,
     market_cap_delta_7d: marketCapDelta7d,
     market_cap_delta_pct_7d: marketCapDeltaPct7d,
+    rank_movement: rankMovement,
+  };
+}
+
+function parseSigunguFromAddress(address: string | null | undefined): {
+  sigungu_name: string | null;
+  sigungu_full_name: string | null;
+} {
+  if (!address) {
+    return {
+      sigungu_name: null,
+      sigungu_full_name: null,
+    };
+  }
+
+  const tokens = address.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length < 2) {
+    return {
+      sigungu_name: null,
+      sigungu_full_name: null,
+    };
+  }
+
+  const first = tokens[0] ?? "";
+  const second = tokens[1] ?? "";
+
+  const isProvinceLike =
+    first.endsWith("시") ||
+    first.endsWith("도") ||
+    first.endsWith("특별시") ||
+    first.endsWith("광역시") ||
+    first.endsWith("특별자치시") ||
+    first.endsWith("특별자치도");
+
+  const isSigunguLike =
+    second.endsWith("구") ||
+    second.endsWith("군") ||
+    second.endsWith("시");
+
+  if (isProvinceLike && isSigunguLike) {
+    return {
+      sigungu_name: second,
+      sigungu_full_name: `${first} ${second}`,
+    };
+  }
+
+  return {
+    sigungu_name: isSigunguLike ? second : null,
+    sigungu_full_name: isProvinceLike && isSigunguLike ? `${first} ${second}` : null,
   };
 }
 
@@ -123,10 +232,7 @@ async function getWeeklyAnchorDate(
       .limit(1)
       .maybeSingle();
 
-    if (error) {
-      throw error;
-    }
-
+    if (error) throw error;
     return data?.snapshot_date ?? toSeoulDateString(new Date());
   } catch {
     return toSeoulDateString(new Date());
@@ -137,9 +243,7 @@ async function fetchWeeklyComparisonMap(
   supabase: ReturnType<typeof createServerSupabase>,
   complexIds: number[]
 ): Promise<Map<string, DbRankHistoryRow>> {
-  if (complexIds.length === 0) {
-    return new Map();
-  }
+  if (complexIds.length === 0) return new Map();
 
   const anchorDate = await getWeeklyAnchorDate(supabase);
   const targetDate = shiftSeoulDateString(anchorDate, -7);
@@ -155,18 +259,14 @@ async function fetchWeeklyComparisonMap(
       .order("snapshot_date", { ascending: false })
       .limit(Math.min(Math.max(complexIds.length * 14, 50), 1000));
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     const result = new Map<string, DbRankHistoryRow>();
-
     for (const row of (data ?? []) as DbRankHistoryRow[]) {
       const key = row.complex_id == null ? "" : String(row.complex_id);
       if (!key || result.has(key)) continue;
       result.set(key, row);
     }
-
     return result;
   } catch (error) {
     console.warn("[KOAPTIX] weekly comparison history lookup failed:", error);
@@ -193,10 +293,7 @@ async function fetchWeeklyComparisonByComplexId(
       .limit(1)
       .maybeSingle();
 
-    if (error) {
-      throw error;
-    }
-
+    if (error) throw error;
     return (data ?? null) as DbRankHistoryRow | null;
   } catch (error) {
     console.warn("[KOAPTIX] weekly comparison detail lookup failed:", error);
@@ -204,59 +301,253 @@ async function fetchWeeklyComparisonByComplexId(
   }
 }
 
-export async function getLatestRankBoard(
-  limit = 50
-): Promise<DbLatestRankBoardWeeklyRow[]> {
-  const supabase = createServerSupabase();
-  const safeLimit = Math.max(1, Math.min(limit, 100));
+async function fetchRegionFallbackMap(
+  supabase: ReturnType<typeof createServerSupabase>,
+  complexIds: number[]
+): Promise<Map<string, RegionFallbackRow>> {
+  if (complexIds.length === 0) return new Map();
 
-  const { data, error } = await supabase
-    .from("v_koaptix_latest_rank_board")
-    .select(
-      `
-        complex_id,
-        apt_name_ko,
-        rank_all,
-        market_cap_krw,
-        market_cap_trillion_krw,
-        sigungu_name,
-        legal_dong_name
-      `
-    )
-    .order("rank_all", { ascending: true })
-    .limit(safeLimit);
+  try {
+    const [{ data: regionMapData, error: regionMapError }, { data: aptComplexData, error: aptComplexError }] =
+      await Promise.all([
+        supabase
+          .from("koaptix_complex_region_map")
+          .select("complex_id, lawd_cd, sgg_cd, umd_nm, sigungu_name")
+          .in("complex_id", complexIds),
+        supabase
+          .from("apt_complex")
+          .select("complex_id, region_id, address_jibun")
+          .in("complex_id", complexIds),
+      ]);
 
-  if (error) {
-    throw new Error(`Failed to fetch v_koaptix_latest_rank_board: ${error.message}`);
-  }
+    if (regionMapError) throw regionMapError;
+    if (aptComplexError) throw aptComplexError;
 
-  const liveRows = (data ?? []) as DbLatestRankBoardRow[];
-  if (liveRows.length === 0) {
-    return [];
-  }
+    const regionMapRows = (regionMapData ?? []) as RegionMapRawRow[];
+    const aptComplexRows = (aptComplexData ?? []) as AptComplexRegionRawRow[];
 
-  const comparisonMap = await fetchWeeklyComparisonMap(
-    supabase,
-    extractComplexIds(liveRows)
-  );
-
-  return liveRows.map((row) => {
-    const key = row.complex_id == null ? "" : String(row.complex_id);
-    const previous = comparisonMap.get(key) ?? null;
-
-    const currentRank = toNumber(row.rank_all, 0);
-    const currentMarketCap = toNumber(
-      row.market_cap_krw,
-      row.market_cap_trillion_krw != null
-        ? Math.round(toNumber(row.market_cap_trillion_krw, 0) * 1_000_000_000_000)
-        : 0
+    const regionIds = Array.from(
+      new Set(
+        aptComplexRows
+          .map((row) => row.region_id)
+          .filter((value): value is number => typeof value === "number")
+      )
     );
 
-    return {
-      ...row,
-      ...buildWeeklyDeltaPayload(currentRank, currentMarketCap, previous),
-    };
+    const regionCodes = Array.from(
+      new Set(
+        regionMapRows
+          .map((row) => {
+            if (row.sgg_cd != null && String(row.sgg_cd).trim() !== "") return String(row.sgg_cd);
+            if (row.lawd_cd != null && String(row.lawd_cd).trim() !== "") return String(row.lawd_cd).slice(0, 5);
+            return null;
+          })
+          .filter((value): value is string => value !== null)
+      )
+    );
+
+    const regionDimById = new Map<number, RegionDimRawRow>();
+    const regionDimByCode = new Map<string, RegionDimRawRow>();
+
+    if (regionIds.length > 0) {
+      const { data: regionByIdData, error: regionByIdError } = await supabase
+        .from("region_dim")
+        .select("region_id, region_code, region_name_ko, full_name_ko")
+        .eq("region_type", "sigungu")
+        .in("region_id", regionIds);
+
+      if (regionByIdError) throw regionByIdError;
+
+      for (const row of (regionByIdData ?? []) as RegionDimRawRow[]) {
+        if (row.region_id != null) {
+          regionDimById.set(row.region_id, row);
+        }
+      }
+    }
+
+    if (regionCodes.length > 0) {
+      const { data: regionByCodeData, error: regionByCodeError } = await supabase
+        .from("region_dim")
+        .select("region_id, region_code, region_name_ko, full_name_ko")
+        .eq("region_type", "sigungu")
+        .in("region_code", regionCodes);
+
+      if (regionByCodeError) throw regionByCodeError;
+
+      for (const row of (regionByCodeData ?? []) as RegionDimRawRow[]) {
+        if (row.region_code) {
+          regionDimByCode.set(row.region_code, row);
+        }
+      }
+    }
+
+    const aptComplexById = new Map<string, AptComplexRegionRawRow>();
+    for (const row of aptComplexRows) {
+      const key = row.complex_id == null ? "" : String(row.complex_id);
+      if (!key) continue;
+      aptComplexById.set(key, row);
+    }
+
+    const result = new Map<string, RegionFallbackRow>();
+
+    for (const row of regionMapRows) {
+      const key = row.complex_id == null ? "" : String(row.complex_id);
+      if (!key || result.has(key)) continue;
+
+      const aptComplex = aptComplexById.get(key) ?? null;
+      const code =
+        row.sgg_cd != null && String(row.sgg_cd).trim() !== ""
+          ? String(row.sgg_cd)
+          : row.lawd_cd != null && String(row.lawd_cd).trim() !== ""
+            ? String(row.lawd_cd).slice(0, 5)
+            : null;
+
+      const byCode = code ? regionDimByCode.get(code) ?? null : null;
+      const byRegionId =
+        aptComplex?.region_id != null ? regionDimById.get(aptComplex.region_id) ?? null : null;
+      const parsedAddress = parseSigunguFromAddress(aptComplex?.address_jibun ?? null);
+
+      result.set(key, {
+        complex_id: row.complex_id,
+        sigungu_name:
+          row.sigungu_name ??
+          byCode?.region_name_ko ??
+          byRegionId?.region_name_ko ??
+          parsedAddress.sigungu_name,
+        sigungu_full_name:
+          byCode?.full_name_ko ??
+          byRegionId?.full_name_ko ??
+          parsedAddress.sigungu_full_name,
+        umd_nm: row.umd_nm ?? null,
+        address_jibun: aptComplex?.address_jibun ?? null,
+      });
+    }
+
+    return result;
+  } catch (error) {
+    console.warn("[KOAPTIX] region fallback map lookup failed:", error);
+    return new Map();
+  }
+}
+
+async function fetchRegionFallbackByComplexId(
+  supabase: ReturnType<typeof createServerSupabase>,
+  complexId: string | number
+): Promise<RegionFallbackRow | null> {
+  const normalized = normalizeComplexId(complexId);
+  const parsed = Number(normalized);
+
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  const map = await fetchRegionFallbackMap(supabase, [parsed]);
+  return map.get(String(parsed)) ?? null;
+}
+
+function isStatementTimeout(
+  error: { code?: string | null; message?: string | null } | null | undefined
+) {
+  if (!error) return false;
+  return error.code === "57014" || (error.message ?? "").includes("statement timeout");
+}
+
+export async function getLatestRankBoard(
+  universeCode = DEFAULT_UNIVERSE_CODE,
+  limit = 500
+): Promise<DbLatestRankBoardWeeklyRow[]> {
+  const supabase = createServerSupabase();
+  const requestedLimit = Math.max(1, Math.min(limit, 500));
+  const safeUniverseCode = normalizeUniverseCode(
+    universeCode ?? DEFAULT_UNIVERSE_CODE,
+  );
+
+  const retryLimits =
+    safeUniverseCode === DEFAULT_UNIVERSE_CODE
+      ? Array.from(new Set([requestedLimit, 200, 120, 60]))
+      : Array.from(new Set([requestedLimit, 300, 200]));
+
+  console.log("[QUERY DEBUG - INPUT]", {
+    universeCode,
+    safeUniverseCode,
+    requestedLimit,
+    retryLimits,
   });
+
+  let data: any[] | null = null;
+  let lastError: { code?: string | null; message?: string | null } | null = null;
+
+  for (const attemptLimit of retryLimits) {
+    const result = await supabase
+      .from("v_koaptix_latest_universe_rank_board_u")
+      .select(
+        `
+          snapshot_date,
+          universe_code,
+          universe_name,
+          universe_scope,
+          complex_id,
+          apt_name_ko,
+          sigungu_name,
+          legal_dong_name,
+          build_year,
+          household_count,
+          total_household_count,
+          recovery_52w,
+          rank_all,
+          previous_rank_all,
+          rank_delta_w,
+          rank_movement,
+          market_cap_krw,
+          market_cap_trillion_krw,
+          market_cap_share,
+          market_cap_share_pct,
+          tier_code,
+          tier_label,
+          tier_sort,
+          is_top1000
+        `
+      )
+      .eq("universe_code", safeUniverseCode)
+      .order("rank_all", { ascending: true })
+      .limit(attemptLimit);
+
+    data = result.data ?? null;
+    lastError = result.error ?? null;
+
+    console.log("[QUERY DEBUG - ATTEMPT]", {
+      safeUniverseCode,
+      attemptLimit,
+      rowCount: result.data?.length ?? 0,
+      firstUniverse: (result.data?.[0] as any)?.universe_code ?? null,
+      firstName: (result.data?.[0] as any)?.apt_name_ko ?? null,
+      error: result.error?.message ?? null,
+    });
+
+    if (!lastError) break;
+    if (!isStatementTimeout(lastError)) break;
+  }
+
+  if (lastError) {
+    throw new Error(
+      `Failed to fetch v_koaptix_latest_universe_rank_board_u: ${lastError.message}`
+    );
+  }
+
+  const liveRows = (data ?? []) as any[];
+
+  return liveRows.map((row: any) => ({
+    ...row,
+    universe_code: row.universe_code ?? safeUniverseCode,
+    universe_name: row.universe_name ?? null,
+    location_search_label: [
+      row.sigungu_name ?? null,
+      row.legal_dong_name ?? null,
+      row.apt_name_ko ?? null,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  })) as DbLatestRankBoardWeeklyRow[];
 }
 
 export async function getComplexDetailById(
@@ -290,14 +581,12 @@ export async function getComplexDetailById(
   }
 
   const liveRow = (data ?? null) as DbComplexDetailSheetBaseRow | null;
-  if (!liveRow) {
-    return null;
-  }
+  if (!liveRow) return null;
 
-  const previous = await fetchWeeklyComparisonByComplexId(
-    supabase,
-    complexId
-  );
+  const [previous, regionFallback] = await Promise.all([
+    fetchWeeklyComparisonByComplexId(supabase, complexId),
+    fetchRegionFallbackByComplexId(supabase, complexId),
+  ]);
 
   const currentRank = toNumber(liveRow.rank_all, 0);
   const currentMarketCap = toNumber(
@@ -307,10 +596,28 @@ export async function getComplexDetailById(
       : 0
   );
 
+  const resolvedSigungu = liveRow.sigungu_name ?? regionFallback?.sigungu_name ?? null;
+  const resolvedDong = liveRow.legal_dong_name ?? regionFallback?.umd_nm ?? null;
+  const resolvedSigunguFull =
+    regionFallback?.sigungu_full_name ??
+    resolvedSigungu ??
+    null;
+
   return {
     ...liveRow,
+    sigungu_name: resolvedSigungu,
+    sigungu_full_name: resolvedSigunguFull,
+    legal_dong_name: resolvedDong,
+    location_search_label: [
+      resolvedSigunguFull,
+      resolvedSigungu,
+      resolvedDong,
+      regionFallback?.address_jibun ?? null,
+    ]
+      .filter(Boolean)
+      .join(" "),
     ...buildWeeklyDeltaPayload(currentRank, currentMarketCap, previous),
-  };
+  } as DbComplexDetailSheetWeeklyRow;
 }
 
 export async function getIndexChartRows(
@@ -331,7 +638,7 @@ export async function getIndexChartRows(
 
   return (data ?? []) as DbIndexHistoryRow[];
 }
-// --- 🚨 잼이사가 긴급 복구한 KPI 데이터 조회 엔진 ---
+
 export async function getHomeKpi() {
   const supabase = createServerSupabase();
   try {
@@ -348,7 +655,6 @@ export async function getHomeKpi() {
   }
 }
 
-
 export async function getComplexChartHistories(
   complexIds: Array<string | number>,
   options: { days?: number } = {}
@@ -364,9 +670,7 @@ export async function getComplexChartHistories(
     )
   );
 
-  if (normalizedIds.length === 0) {
-    return {};
-  }
+  if (normalizedIds.length === 0) return {};
 
   const anchorDate = await getWeeklyAnchorDate(supabase);
   const startDate = shiftSeoulDateString(anchorDate, -safeDays);
@@ -385,7 +689,6 @@ export async function getComplexChartHistories(
   }
 
   const grouped: Record<string, DbComplexChartHistoryRow[]> = {};
-
   for (const rawId of normalizedIds) {
     grouped[String(rawId)] = [];
   }

@@ -2,6 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
+// 🚨 react-dom에서 createPortal을 가져옵니다!!
+import { createPortal } from "react-dom";
 import { RecoveryGauge } from "./RecoveryGauge";
 import { TierBadge } from "./TierBadge";
 import type {
@@ -39,22 +41,18 @@ type ToastState = {
 
 function formatMarketCapKrw(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "-";
-
   const TRILLION = 1_000_000_000_000;
   const HUNDRED_MILLION = 100_000_000;
-
   if (value >= TRILLION) {
     const amount = value / TRILLION;
     const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
     return `${amount.toFixed(digits)}조원`;
   }
-
   if (value >= HUNDRED_MILLION) {
     const amount = value / HUNDRED_MILLION;
     const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
     return `${amount.toFixed(digits)}억원`;
   }
-
   return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
 
@@ -119,10 +117,8 @@ function formatYear(value: number | null | undefined): string {
 
 function formatUpdatedAt(value: string | null | undefined): string {
   if (!value) return "-";
-
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-
   return new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
     month: "2-digit",
@@ -168,16 +164,7 @@ function DetailRow({
 
 function ShareIcon() {
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M7 12v7a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-7" />
       <path d="M12 3v12" />
       <path d="m8 7 4-4 4 4" />
@@ -185,14 +172,11 @@ function ShareIcon() {
   );
 }
 
-export function ComplexDetailSheet({
-  open,
-  item,
-  detail,
-  loading,
-  error,
-  onClose,
-}: ComplexDetailSheetProps) {
+export function ComplexDetailSheet({ open, item, detail, loading, error, onClose }: ComplexDetailSheetProps) {
+  // 🚨 순간이동을 위한 마운트 상태를 추가합니다!
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => { setIsMounted(true); }, []);
+  
   const [sharePending, setSharePending] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -206,18 +190,12 @@ export function ComplexDetailSheet({
 
   useEffect(() => {
     if (!open) return;
-
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
+      if (event.key === "Escape") onClose();
     };
-
     window.addEventListener("keydown", onKeyDown);
-
     return () => {
       document.body.style.overflow = prevOverflow;
       window.removeEventListener("keydown", onKeyDown);
@@ -227,20 +205,13 @@ export function ComplexDetailSheet({
   useEffect(() => {
     return () => {
       chartAbortRef.current?.abort();
-
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current);
-      }
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
 
   function showToast(message: string, tone: "success" | "error") {
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ message, tone });
-
     toastTimerRef.current = setTimeout(() => {
       setToast(null);
     }, 2200);
@@ -269,64 +240,32 @@ export function ComplexDetailSheet({
 
     (async () => {
       const response = await fetch(
-        `/api/complex-history?complexId=${encodeURIComponent(
-          complexId
-        )}&mode=weekly&days=180`,
-        {
-          method: "GET",
-          signal: controller.signal,
-          cache: "no-store",
-        }
+        `/api/complex-history?complexId=${encodeURIComponent(complexId)}&mode=weekly&days=180`,
+        { method: "GET", signal: controller.signal, cache: "no-store" }
       );
-
       const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "히스토리 차트를 불러오지 못했다.");
 
-      if (!response.ok) {
-        throw new Error(
-          payload.error ?? "히스토리 차트를 불러오지 못했다."
-        );
-      }
-
-      const series = Array.isArray(payload.data?.series)
-        ? payload.data.series
-        : [];
-
-      const nextData = Array.isArray(series[0]?.points)
-        ? (series[0].points as HistoryChartPoint[])
-        : [];
+      const series = Array.isArray(payload.data?.series) ? payload.data.series : [];
+      const nextData = Array.isArray(series[0]?.points) ? (series[0].points as HistoryChartPoint[]) : [];
 
       chartCacheRef.current[complexId] = nextData;
       setChartData(nextData);
     })()
       .catch((fetchError) => {
-        if (
-          fetchError instanceof DOMException &&
-          fetchError.name === "AbortError"
-        ) {
-          return;
-        }
-
+        if (fetchError instanceof DOMException && fetchError.name === "AbortError") return;
         setChartData([]);
-        setChartError(
-          fetchError instanceof Error
-            ? fetchError.message
-            : "히스토리 차트를 불러오지 못했다."
-        );
+        setChartError(fetchError instanceof Error ? fetchError.message : "히스토리 차트를 불러오지 못했다.");
       })
       .finally(() => {
-        if (!controller.signal.aborted) {
-          setChartLoading(false);
-        }
+        if (!controller.signal.aborted) setChartLoading(false);
       });
 
-    return () => {
-      controller.abort();
-    };
+    return () => controller.abort();
   }, [open, item?.complexId]);
 
   async function handleShare() {
     if (!item || typeof window === "undefined") return;
-
     const shareTitle = detail?.name ?? item.name;
     const shareUrl = window.location.href;
 
@@ -336,32 +275,20 @@ export function ComplexDetailSheet({
     }
 
     setSharePending(true);
-
     try {
       if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
         try {
-          await navigator.share({
-            title: shareTitle,
-            url: shareUrl,
-          });
+          await navigator.share({ title: shareTitle, url: shareUrl });
           return;
         } catch (shareError) {
-          if (shareError instanceof DOMException && shareError.name === "AbortError") {
-            return;
-          }
+          if (shareError instanceof DOMException && shareError.name === "AbortError") return;
         }
       }
-
-      if (
-        typeof navigator !== "undefined" &&
-        navigator.clipboard &&
-        typeof navigator.clipboard.writeText === "function"
-      ) {
+      if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
         await navigator.clipboard.writeText(shareUrl);
         showToast("링크가 복사되었습니다!", "success");
         return;
       }
-
       showToast("이 브라우저에서는 링크 공유를 지원하지 않는다.", "error");
     } catch {
       showToast("링크를 복사하지 못했다. 다시 시도해라.", "error");
@@ -370,7 +297,8 @@ export function ComplexDetailSheet({
     }
   }
 
-  if (!open || !item) return null;
+  // 🚨 마운트가 완료되었는지, 그리고 open과 item이 있는지 확인! (없으면 렌더링 X)
+  if (!isMounted || !open || !item) return null;
 
   const title = detail?.name ?? item.name;
   const location = (detail?.locationLabel ?? item.locationLabel) || "위치 정보 없음";
@@ -378,21 +306,18 @@ export function ComplexDetailSheet({
   const marketCap = detail?.marketCapKrw ?? item.marketCapKrw;
   const rankDelta7d = detail?.rankDelta7d ?? item.rankDelta7d;
   const marketCapDelta7d = detail?.marketCapDelta7d ?? item.marketCapDelta7d;
-  const marketCapDeltaPct7d =
-    detail?.marketCapDeltaPct7d ?? item.marketCapDeltaPct7d;
+  const marketCapDeltaPct7d = detail?.marketCapDeltaPct7d ?? item.marketCapDeltaPct7d;
   const historySnapshotDate = detail?.historySnapshotDate ?? item.historySnapshotDate;
-  const highMarketCap52w =
-    detail?.highMarketCap52w ?? item.highMarketCap52w;
-  const recoveryRate52w =
-    detail?.recoveryRate52w ?? item.recoveryRate52w;
-
+  const highMarketCap52w = detail?.highMarketCap52w ?? item.highMarketCap52w;
+  const recoveryRate52w = detail?.recoveryRate52w ?? item.recoveryRate52w;
   const tierBadges = item.tierBadges?.slice(0, 2) ?? [];
 
-  return (
+  // 🚨 리턴될 JSX 전체를 'content' 라는 바구니에 담습니다!
+  const content = (
     <>
-      <div className="fixed inset-0 z-50">
+      <div className="fixed inset-0 z-[1000] isolate">
         <div
-          className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+          className="absolute inset-0 z-[1000] bg-[#06090f]/90 backdrop-blur-lg"
           onClick={onClose}
         />
 
@@ -400,9 +325,9 @@ export function ComplexDetailSheet({
           role="dialog"
           aria-modal="true"
           aria-labelledby="complex-detail-title"
-          className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
+          className="absolute inset-x-0 bottom-0 z-[1001] max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
         >
-          <div className="border-b border-white/5 bg-[#0b1118]/95 px-4 pb-4 pt-3 backdrop-blur md:px-5 md:pt-4">
+          <div className="border-b border-white/5 bg-[#0b1118] px-4 pb-4 pt-3 md:px-5 md:pt-4">
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/10 md:hidden" />
 
             <div className="flex items-start justify-between gap-3">
@@ -410,10 +335,7 @@ export function ComplexDetailSheet({
                 <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/70 sm:text-xs">
                   COMPLEX DETAIL
                 </p>
-                <h3
-                  id="complex-detail-title"
-                  className="mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl"
-                >
+                <h3 id="complex-detail-title" className="mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl">
                   {title}
                 </h3>
                 <p className="mt-1 truncate text-sm text-white/50 sm:text-[15px]">
@@ -423,10 +345,7 @@ export function ComplexDetailSheet({
                 {tierBadges.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {tierBadges.map((badge) => (
-                      <TierBadge
-                        key={`${item.complexId}-${badge.key}-${badge.label}`}
-                        badge={badge}
-                      />
+                      <TierBadge key={`${item.complexId}-${badge.key}-${badge.label}`} badge={badge} />
                     ))}
                   </div>
                 ) : null}
@@ -465,38 +384,19 @@ export function ComplexDetailSheet({
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <Metric label="현재 순위" value={`#${formatPlainNumber(rank)}`} />
               <Metric label="시가총액" value={formatMarketCapKrw(marketCap)} />
-              <Metric
-                label="주간 순위 변동"
-                value={formatRankDelta(rankDelta7d)}
-                tone={rankDeltaTone(rankDelta7d)}
-              />
-              <Metric
-                label="Momentum (W)"
-                value={formatPercent(marketCapDeltaPct7d)}
-                tone={momentumTone(marketCapDeltaPct7d)}
-              />
+              <Metric label="주간 순위 변동" value={formatRankDelta(rankDelta7d)} tone={rankDeltaTone(rankDelta7d)} />
+              <Metric label="Momentum (W)" value={formatPercent(marketCapDeltaPct7d)} tone={momentumTone(marketCapDeltaPct7d)} />
             </div>
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">
               <div className="border-b border-white/5 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70">
-                      RECOVERY SIGNAL
-                    </p>
-                    <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">
-                      52주 최고가 회복률
-                    </h4>
-                    <p className="mt-1 text-xs text-white/45">
-                      과거의 고점과 현재의 격차를 즉시 드러내는 탐욕 지표
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70">RECOVERY SIGNAL</p>
+                    <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">52주 최고가 회복률</h4>
+                    <p className="mt-1 text-xs text-white/45">과거의 고점과 현재의 격차를 즉시 드러내는 탐욕 지표</p>
                   </div>
-
-                  <span
-                    className={`shrink-0 text-xs font-semibold tabular-nums ${recoveryTone(
-                      recoveryRate52w
-                    )}`}
-                  >
+                  <span className={`shrink-0 text-xs font-semibold tabular-nums ${recoveryTone(recoveryRate52w)}`}>
                     {recoveryRate52w != null ? `${recoveryRate52w.toFixed(1)}%` : "-"}
                   </span>
                 </div>
@@ -504,21 +404,9 @@ export function ComplexDetailSheet({
 
               <div className="grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:px-4">
                 <RecoveryGauge recoveryRate={recoveryRate52w} />
-
                 <div className="grid grid-cols-1 gap-3">
-                  <Metric
-                    label="52주 최고 시총"
-                    value={
-                      highMarketCap52w != null
-                        ? formatMarketCapKrw(highMarketCap52w)
-                        : "-"
-                    }
-                  />
-                  <Metric
-                    label="현재-고점 갭"
-                    value={formatRecoveryGap(recoveryRate52w)}
-                    tone={recoveryTone(recoveryRate52w)}
-                  />
+                  <Metric label="52주 최고 시총" value={highMarketCap52w != null ? formatMarketCapKrw(highMarketCap52w) : "-"} />
+                  <Metric label="현재-고점 갭" value={formatRecoveryGap(recoveryRate52w)} tone={recoveryTone(recoveryRate52w)} />
                 </div>
               </div>
             </div>
@@ -527,17 +415,10 @@ export function ComplexDetailSheet({
               <div className="border-b border-white/5 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70">
-                      CAP FLOW HISTORY
-                    </p>
-                    <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">
-                      최근 6개월 시가총액 흐름
-                    </h4>
-                    <p className="mt-1 text-xs text-white/45">
-                      주간 점 기준으로 노이즈를 걷어낸 모멘텀 라인
-                    </p>
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70">CAP FLOW HISTORY</p>
+                    <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">최근 6개월 시가총액 흐름</h4>
+                    <p className="mt-1 text-xs text-white/45">주간 점 기준으로 노이즈를 걷어낸 모멘텀 라인</p>
                   </div>
-
                   <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-white/60">
                     Weekly View
                   </span>
@@ -546,9 +427,7 @@ export function ComplexDetailSheet({
 
               <div className="px-3 py-3 sm:px-4">
                 {chartError ? (
-                  <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-sm text-rose-200">
-                    {chartError}
-                  </div>
+                  <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-sm text-rose-200">{chartError}</div>
                 ) : chartLoading ? (
                   <div className="h-[220px] w-full animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]" />
                 ) : chartData.length > 0 ? (
@@ -571,40 +450,15 @@ export function ComplexDetailSheet({
                 </div>
               ) : (
                 <>
-                  <DetailRow
-                    label="최근 7일 시총 변동"
-                    value={`${formatSignedNumber(marketCapDelta7d)}원`}
-                  />
-                  <DetailRow
-                    label="비교 기준 스냅샷"
-                    value={historySnapshotDate ?? "-"}
-                  />
-                  <DetailRow
-                    label="세대수"
-                    value={formatCount(detail?.householdCount)}
-                  />
-                  <DetailRow
-                    label="준공연도"
-                    value={formatYear(detail?.approvalYear)}
-                  />
-                  <DetailRow
-                    label="연식"
-                    value={
-                      detail?.ageYears != null ? `${detail.ageYears}년차` : "-"
-                    }
-                  />
-                  <DetailRow
-                    label="동 수"
-                    value={formatCount(detail?.buildingCount)}
-                  />
-                  <DetailRow
-                    label="주차대수"
-                    value={formatCount(detail?.parkingCount)}
-                  />
-                  <DetailRow
-                    label="데이터 기준일"
-                    value={formatUpdatedAt(detail?.updatedAt)}
-                  />
+                  <DetailRow label="최근 7일 시총 변동" value={`${formatSignedNumber(marketCapDelta7d)}원`} />
+                  <DetailRow label="비교 기준 스냅샷" value={historySnapshotDate ?? "-"} />
+                 {/* 🚨 상세 API(detail)가 없으면 메인 데이터(item)에서 강제로 끌어옵니다!! */}
+                  <DetailRow label="세대수" value={formatCount(detail?.householdCount ?? item?.households)} />
+                  <DetailRow label="준공연도" value={formatYear(detail?.approvalYear ?? item?.buildYear)} />
+                  <DetailRow label="연식" value={(detail?.ageYears ?? item?.ageYears) != null ? `${detail?.ageYears ?? item?.ageYears}년차` : "-"} />
+                  <DetailRow label="동 수" value={formatCount(detail?.buildingCount)} />
+                  <DetailRow label="주차대수" value={formatCount(detail?.parkingCount)} />
+                  <DetailRow label="데이터 기준일" value={formatUpdatedAt(detail?.updatedAt)} />
                 </>
               )}
             </div>
@@ -615,7 +469,7 @@ export function ComplexDetailSheet({
       <div
         aria-live="polite"
         aria-atomic="true"
-        className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4"
+        className="pointer-events-none fixed inset-x-0 bottom-4 z-[1060] flex justify-center px-4"
       >
         {toast ? (
           <div
@@ -631,4 +485,7 @@ export function ComplexDetailSheet({
       </div>
     </>
   );
+
+  // 🚨 맨 마지막에 펑! 하고 순간이동 포탈로 쏴버립니다!!
+  return createPortal(content, document.body);
 }

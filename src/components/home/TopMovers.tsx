@@ -38,17 +38,17 @@ export function TopMovers({ items }: { items: RankingItem[] }) {
         )}
 
         {hasUpdrafts && (
-          // 🚨 상승장 리셋: 배경 발광을 극도로 낮추고, 텍스트 컬러를 선명한 Emerald로 변경!
-          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.02] p-2.5">
+          // 🚨 K-상승장 리셋: 텍스트와 배경을 선명한 Rose(빨강)로 변경!
+          <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.02] p-2.5">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-emerald-400">📈 MOMENTUM (W)</span>
-              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[8px] uppercase tracking-widest text-emerald-400">Updraft</span>
+              <span className="text-[10px] font-bold text-rose-400">📈 MOMENTUM (W)</span>
+              <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[8px] uppercase tracking-widest text-rose-400">Updraft</span>
             </div>
             <div className="flex flex-col gap-1.5">
               {updrafts.map(item => (
                 <div key={item.complexId} className="flex items-center justify-between text-[11px] sm:text-xs">
                   <span className="truncate text-slate-300">{item.name}</span>
-                  <span className="font-bold text-emerald-400">▲{item.rankDelta7d}</span>
+                  <span className="font-bold text-rose-400">▲{item.rankDelta7d}</span>
                 </div>
               ))}
             </div>
@@ -56,17 +56,17 @@ export function TopMovers({ items }: { items: RankingItem[] }) {
         )}
 
         {hasDrags && (
-          // 🚨 하락장 리셋: 눈 아픈 Fuchsia 대신 명확한 경고를 주는 Rose 컬러로 변경!
-          <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.02] p-2.5">
+          // 🚨 K-하락장 리셋: 명확한 하락을 나타내는 Blue(파랑) 컬러로 변경!
+          <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.02] p-2.5">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-rose-400">📉 PRESSURE (W)</span>
-              <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[8px] uppercase tracking-widest text-rose-400">Drag</span>
+              <span className="text-[10px] font-bold text-blue-400">📉 PRESSURE (W)</span>
+              <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[8px] uppercase tracking-widest text-blue-400">Drag</span>
             </div>
             <div className="flex flex-col gap-1.5">
               {drags.map(item => (
                 <div key={item.complexId} className="flex items-center justify-between text-[11px] sm:text-xs">
                   <span className="truncate text-slate-300">{item.name}</span>
-                  <span className="font-bold text-rose-400">▼{Math.abs(item.rankDelta7d)}</span>
+                  <span className="font-bold text-blue-400">▼{Math.abs(item.rankDelta7d)}</span>
                 </div>
               ))}
             </div>

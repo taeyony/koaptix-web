@@ -1,482 +1,400 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { RankingItem } from "../../lib/koaptix/types";
+import {
+  DEFAULT_UNIVERSE_CODE,
+  normalizeUniverseCode,
+} from "../../lib/koaptix/universes";
 
-type CommandPaletteProps = {
+interface CommandPaletteProps {
   items: RankingItem[];
-  resultLimit?: number;
+  initialUniverseCode?: string;
+}
+
+type SearchApiResponse = {
+  ok?: boolean;
+  universeCode?: string;
+  localItems?: RankingItem[];
+  globalItems?: RankingItem[];
+  message?: string;
 };
 
-const DEFAULT_RESULT_LIMIT = 8;
-const TRIGGER_SELECTOR = [
-  '[data-koaptix-command-trigger="true"]',
-  'input[placeholder*="검색"]',
-  'textarea[placeholder*="검색"]',
-  'input[placeholder*="search" i]',
-  'input[type="search"]',
-].join(", ");
+const SEARCH_API = (query: string, universeCode: string, limit = 12) =>
+  `/api/search?q=${encodeURIComponent(query)}&universe_code=${encodeURIComponent(
+    universeCode,
+  )}&limit=${limit}`;
 
-function normalize(value: string): string {
-  return value.trim().toLowerCase();
-}
+async function readSearchResult(
+  input: string,
+  signal: AbortSignal,
+): Promise<{ localItems: RankingItem[]; globalItems: RankingItem[] }> {
+  const response = await fetch(input, {
+    method: "GET",
+    cache: "no-store",
+    signal,
+  });
 
-function formatMarketCapKrw(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "-";
+  const json = (await response.json()) as SearchApiResponse;
 
-  const TRILLION = 1_000_000_000_000;
-  const HUNDRED_MILLION = 100_000_000;
-
-  if (value >= TRILLION) {
-    const amount = value / TRILLION;
-    const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
-    return `${amount.toFixed(digits)}조원`;
+  if (!response.ok || json.ok === false) {
+    throw new Error(
+      json.message ?? `Request failed: ${response.status} ${input}`,
+    );
   }
 
-  if (value >= HUNDRED_MILLION) {
-    const amount = value / HUNDRED_MILLION;
-    const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
-    return `${amount.toFixed(digits)}억원`;
-  }
-
-  return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
-}
-
-function buildSearchText(item: RankingItem): string {
-  return (
-    item.searchText ||
-    [
-      item.name,
-      item.locationLabel,
-      item.sigunguName,
-      item.legalDongName,
-      item.complexId,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-  );
-}
-
-function scoreItem(item: RankingItem, query: string): number {
-  const q = normalize(query);
-  if (!q) return 0;
-
-  const name = item.name.toLowerCase();
-  const district = (item.sigunguName || "").toLowerCase();
-  const dong = (item.legalDongName || "").toLowerCase();
-  const location = (item.locationLabel || "").toLowerCase();
-  const code = String(item.complexId).toLowerCase();
-  const searchText = buildSearchText(item);
-
-  let score = 0;
-
-  if (name === q) score += 200;
-  if (name.startsWith(q)) score += 120;
-  if (name.includes(q)) score += 70;
-
-  if (district === q) score += 90;
-  if (district.startsWith(q)) score += 70;
-  if (district.includes(q)) score += 45;
-
-  if (dong === q) score += 65;
-  if (dong.startsWith(q)) score += 55;
-  if (dong.includes(q)) score += 35;
-
-  if (location.includes(q)) score += 25;
-  if (code === q) score += 110;
-  if (code.includes(q)) score += 40;
-  if (searchText.includes(q)) score += 15;
-
-  score += Math.max(0, 30 - item.rank);
-
-  return score;
-}
-
-function buildTargetUrl(complexId: string): string {
-  const url = new URL(window.location.href);
-  url.searchParams.set("complexId", complexId);
-  url.searchParams.set("id", complexId);
-
-  const query = url.searchParams.toString();
-  return `${url.pathname}${query ? `?${query}` : ""}${url.hash}`;
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" />
-    </svg>
-  );
-}
-
-function CommandIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M6 6h2a3 3 0 1 1 0 6H6a3 3 0 1 1 0-6Z" />
-      <path d="M16 6h2a3 3 0 1 1 0 6h-2a3 3 0 1 1 0-6Z" />
-      <path d="M6 16h2a3 3 0 1 1 0 6H6a3 3 0 1 1 0-6Z" />
-      <path d="M16 16h2a3 3 0 1 1 0 6h-2a3 3 0 1 1 0-6Z" />
-    </svg>
-  );
+  return {
+    localItems: json.localItems ?? [],
+    globalItems: json.globalItems ?? [],
+  };
 }
 
 export function CommandPalette({
   items,
-  resultLimit = DEFAULT_RESULT_LIMIT,
+  initialUniverseCode = DEFAULT_UNIVERSE_CODE,
 }: CommandPaletteProps) {
-  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  const [open, setOpen] = useState(false);
+  const urlUniverseCode = normalizeUniverseCode(
+    searchParams?.get("universe") ?? initialUniverseCode,
+  );
+
+  const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [localItems, setLocalItems] = useState<RankingItem[]>([]);
+  const [globalItems, setGlobalItems] = useState<RankingItem[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
-  const inputRef = useRef<HTMLInputElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const resultRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const cacheRef = useRef<
+    Record<string, { localItems: RankingItem[]; globalItems: RankingItem[] }>
+  >({});
 
-  const results = useMemo(() => {
-    const q = normalize(query);
+  const replaceUrlParams = useCallback(
+    (
+      updater: (params: URLSearchParams) => void,
+      mode: "replace" | "push" = "replace",
+    ) => {
+      if (typeof window === "undefined") return;
 
-    if (!q) {
-      return [...items].sort((a, b) => a.rank - b.rank).slice(0, resultLimit);
-    }
+      const params = new URLSearchParams(window.location.search);
+      updater(params);
+
+      const nextQuery = params.toString();
+      const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+
+      if (mode === "push") {
+        window.history.pushState(null, "", nextUrl);
+      } else {
+        window.history.replaceState(null, "", nextUrl);
+      }
+
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
+    [pathname],
+  );
+
+  const localFallbackItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
 
     return items
-      .map((item) => ({
-        item,
-        score: scoreItem(item, q),
-      }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        if (a.item.rank !== b.item.rank) return a.item.rank - b.item.rank;
-        return b.item.marketCapKrw - a.item.marketCapKrw;
+      .filter((item) => {
+        return (
+          item.name.toLowerCase().includes(q) ||
+          item.sigunguName?.toLowerCase().includes(q) ||
+          item.legalDongName?.toLowerCase().includes(q) ||
+          item.locationLabel?.toLowerCase().includes(q)
+        );
       })
-      .slice(0, resultLimit)
-      .map((entry) => entry.item);
-  }, [items, query, resultLimit]);
-
-  function openPalette(initialQuery = "") {
-    setQuery(initialQuery);
-    setActiveIndex(0);
-    setOpen(true);
-  }
-
-  function closePalette() {
-    setOpen(false);
-    setQuery("");
-    setActiveIndex(0);
-  }
-
-  function selectItem(item: RankingItem) {
-    const nextUrl = buildTargetUrl(item.complexId);
-    closePalette();
-    router.push(nextUrl, { scroll: false });
-  }
+      .slice(0, 8);
+  }, [items, query]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!isOpen) return;
 
-    const frame = window.requestAnimationFrame(() => {
+    const timer = window.setTimeout(() => {
       inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    if (results.length === 0) {
-      setActiveIndex(-1);
-      return;
-    }
-
-    setActiveIndex((prev) => {
-      if (prev < 0) return 0;
-      if (prev >= results.length) return results.length - 1;
-      return prev;
-    });
-  }, [open, results.length]);
-
-  useEffect(() => {
-    if (!open || activeIndex < 0) return;
-    resultRefs.current[activeIndex]?.scrollIntoView({
-      block: "nearest",
-    });
-  }, [activeIndex, open]);
-
-  useEffect(() => {
-    const onGlobalKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        openPalette();
-        return;
-      }
-
-      if (event.key === "Escape" && open) {
-        event.preventDefault();
-        closePalette();
-      }
-    };
-
-    window.addEventListener("keydown", onGlobalKeyDown);
-    return () => window.removeEventListener("keydown", onGlobalKeyDown);
-  }, [open]);
-
-  useEffect(() => {
-    const shouldIgnoreTarget = (target: EventTarget | null) => {
-      if (!(target instanceof HTMLElement)) return true;
-      return Boolean(target.closest('[data-command-palette-root="true"]'));
-    };
-
-    const readTriggerValue = (element: HTMLElement | null): string => {
-      if (!element) return "";
-      if (
-        element instanceof HTMLInputElement ||
-        element instanceof HTMLTextAreaElement
-      ) {
-        return element.value ?? "";
-      }
-      return "";
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (shouldIgnoreTarget(event.target)) return;
-      if (!(event.target instanceof HTMLElement)) return;
-
-      const trigger = event.target.closest(TRIGGER_SELECTOR) as HTMLElement | null;
-      if (!trigger) return;
-
-      const initialValue = readTriggerValue(trigger);
-
-      window.requestAnimationFrame(() => {
-        openPalette(initialValue);
-      });
-    };
-
-    const handleFocusIn = (event: FocusEvent) => {
-      if (shouldIgnoreTarget(event.target)) return;
-      if (!(event.target instanceof HTMLElement)) return;
-
-      const trigger = event.target.closest(TRIGGER_SELECTOR) as HTMLElement | null;
-      if (!trigger) return;
-
-      const initialValue = readTriggerValue(trigger);
-
-      window.requestAnimationFrame(() => {
-        openPalette(initialValue);
-      });
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown, true);
-    document.addEventListener("focusin", handleFocusIn, true);
+    }, 10);
 
     return () => {
-      document.removeEventListener("pointerdown", handlePointerDown, true);
-      document.removeEventListener("focusin", handleFocusIn, true);
+      window.clearTimeout(timer);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isMetaK =
+        (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k";
+      const isEsc = event.key === "Escape";
+
+      if (isMetaK) {
+        event.preventDefault();
+        setIsOpen((prev) => !prev);
+      }
+
+      if (isEsc) {
+        setIsOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
     };
   }, []);
 
-  function onInputKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      if (results.length === 0) return;
-      setActiveIndex((prev) => (prev + 1) % results.length);
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const q = query.trim();
+    if (q.length < 2) {
+      setLocalItems([]);
+      setGlobalItems([]);
+      setSearchError(null);
+      setIsSearching(false);
       return;
     }
 
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      if (results.length === 0) return;
-      setActiveIndex((prev) => (prev - 1 + results.length) % results.length);
+    const cacheKey = `${urlUniverseCode}::${q.toLowerCase()}`;
+    const cached = cacheRef.current[cacheKey];
+    if (cached) {
+      setLocalItems(cached.localItems);
+      setGlobalItems(cached.globalItems);
+      setSearchError(null);
+      setIsSearching(false);
       return;
     }
 
-    if (event.key === "Enter") {
-      event.preventDefault();
-      if (activeIndex < 0 || !results[activeIndex]) return;
-      selectItem(results[activeIndex]);
-      return;
-    }
+    const controller = new AbortController();
+    let cancelled = false;
 
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closePalette();
+    const timer = window.setTimeout(async () => {
+      setIsSearching(true);
+      setSearchError(null);
+
+      try {
+        const next = await readSearchResult(
+          SEARCH_API(q, urlUniverseCode, 12),
+          controller.signal,
+        );
+
+        if (cancelled) return;
+
+        cacheRef.current[cacheKey] = next;
+        setLocalItems(next.localItems);
+        setGlobalItems(next.globalItems);
+      } catch (error) {
+        if (controller.signal.aborted || cancelled) return;
+
+        const message =
+          error instanceof Error ? error.message : "검색 실패";
+
+        console.error("[CommandPalette] search failed", {
+          urlUniverseCode,
+          q,
+          message,
+        });
+
+        setSearchError(message);
+        setLocalItems([]);
+        setGlobalItems([]);
+      } finally {
+        if (!cancelled) {
+          setIsSearching(false);
+        }
+      }
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [isOpen, query, urlUniverseCode]);
+
+  const visibleLocalItems = useMemo(() => {
+    if (query.trim().length < 2) {
+      return localFallbackItems;
     }
-  }
+    return localItems;
+  }, [localFallbackItems, localItems, query]);
+
+  const visibleGlobalItems = useMemo(() => {
+    if (query.trim().length < 2) return [];
+    return globalItems;
+  }, [globalItems, query]);
+
+  const handleSelectItem = useCallback(
+    (item: RankingItem) => {
+      replaceUrlParams((params) => {
+        if (item.universeCode && item.universeCode !== DEFAULT_UNIVERSE_CODE) {
+          params.set("universe", item.universeCode);
+        } else {
+          params.delete("universe");
+        }
+
+        params.set("complexId", item.complexId);
+      }, "push");
+
+      setIsOpen(false);
+    },
+    [replaceUrlParams],
+  );
+
+  const renderResultCard = (item: RankingItem) => (
+    <button
+      key={`${item.universeCode ?? "KOREA_ALL"}::${item.complexId}`}
+      type="button"
+      onClick={() => handleSelectItem(item)}
+      className="group flex w-full items-start justify-between rounded-2xl border border-slate-800 bg-[#0f1620] px-4 py-4 text-left transition hover:border-cyan-500/30 hover:bg-[#111b27]"
+    >
+      <div className="min-w-0 pr-4">
+        <div className="flex items-center gap-2">
+          <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400">
+            #{item.rank_all ?? item.rank ?? "-"}
+          </span>
+          <span className="truncate text-[28px] font-semibold leading-none text-white">
+            {item.name}
+          </span>
+        </div>
+
+        <p className="mt-2 truncate text-sm text-slate-400">
+          {item.locationLabel || `${item.sigunguName ?? ""} ${item.legalDongName ?? ""}`}
+          {" · "}
+          ID {item.complexId}
+        </p>
+      </div>
+
+      <div className="shrink-0 text-right">
+        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+          MARKET CAP
+        </p>
+        <p className="mt-1 text-3xl font-semibold text-slate-100">
+          {typeof item.marketCapTrillionKrw === "number" && item.marketCapTrillionKrw > 0
+            ? `${item.marketCapTrillionKrw.toFixed(2)}조원`
+            : `${Math.round((item.marketCapKrw ?? 0) / 100000000).toLocaleString()}억원`}
+        </p>
+      </div>
+    </button>
+  );
 
   return (
     <>
       <button
         type="button"
-        onClick={() => openPalette()}
-        className="fixed bottom-4 right-4 z-[74] hidden items-center gap-2 rounded-full border border-cyan-300/20 bg-[#0b1118]/85 px-3 py-2 text-xs font-medium uppercase tracking-[0.18em] text-cyan-100 shadow-[0_12px_30px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-cyan-300/35 hover:bg-[#0b1118] lg:inline-flex"
-        aria-label="커맨드 팔레트 열기"
+        onClick={() => setIsOpen(true)}
+        className="fixed bottom-6 right-6 z-[980] rounded-full border border-slate-700 bg-slate-950/95 px-4 py-2 text-xs font-medium text-slate-200 shadow-2xl backdrop-blur transition hover:border-cyan-400/30 hover:text-cyan-300"
       >
-        <CommandIcon />
-        Command
+        ⌘ COMMAND
       </button>
 
-      {open ? (
-        <div
-          ref={rootRef}
-          data-command-palette-root="true"
-          className="fixed inset-0 z-[80]"
-        >
-          <div
-            className="absolute inset-0 bg-black/72 backdrop-blur-md"
-            onClick={closePalette}
-          />
+      {isOpen && (
+        <div className="fixed inset-0 z-[999] bg-black/60 backdrop-blur-sm">
+          <div className="mx-auto mt-24 w-[92%] max-w-[820px] rounded-[28px] border border-cyan-500/20 bg-[#0b1118]/95 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_24px_80px_rgba(0,0,0,0.55)]">
+            <div className="border-b border-slate-800/80 px-6 py-5">
+              <p className="text-[12px] uppercase tracking-[0.24em] text-cyan-300/80">
+                KOAPTIX COMMAND PALETTE
+              </p>
 
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="koaptix-command-title"
-            className="absolute left-1/2 top-[12vh] w-[min(92vw,760px)] -translate-x-1/2 overflow-hidden rounded-3xl border border-cyan-300/18 bg-[#0b1118]/92 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_0_36px_rgba(34,211,238,0.12),0_26px_80px_rgba(0,0,0,0.42)] backdrop-blur"
-          >
-            <div
-              className="pointer-events-none absolute inset-0 opacity-75"
-              style={{
-                backgroundImage:
-                  "radial-gradient(circle at top right, rgba(34,211,238,0.14), transparent 34%), radial-gradient(circle at bottom left, rgba(232,121,249,0.10), transparent 28%), repeating-linear-gradient(180deg, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, transparent 1px, transparent 8px)",
-              }}
-            />
-
-            <div className="relative border-b border-white/6 px-4 py-4 sm:px-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/18 bg-cyan-300/10 text-cyan-100">
-                  <SearchIcon />
+              <div className="mt-4 flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
+                  🔎
                 </div>
 
-                <div className="min-w-0 flex-1">
-                  <p
-                    id="koaptix-command-title"
-                    className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70"
-                  >
-                    KOAPTIX COMMAND PALETTE
-                  </p>
+                <input
+                  ref={inputRef}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="단지명, 구, 동으로 바로 검색..."
+                  className="h-12 w-full rounded-2xl border border-slate-700 bg-black/30 px-4 text-lg text-white outline-none transition focus:border-cyan-400/50"
+                />
 
-                  <div className="relative mt-2">
-                    <input
-                      ref={inputRef}
-                      value={query}
-                      onChange={(event) => setQuery(event.target.value)}
-                      onKeyDown={onInputKeyDown}
-                      placeholder="단지명 또는 지역명을 입력해라..."
-                      className="h-12 w-full rounded-2xl border border-white/10 bg-black/25 pl-4 pr-28 text-sm text-white outline-none placeholder:text-white/28 focus:border-cyan-300/35"
-                      aria-controls="koaptix-command-results"
-                      aria-expanded="true"
-                      aria-activedescendant={
-                        activeIndex >= 0 ? `koaptix-command-option-${activeIndex}` : undefined
-                      }
-                    />
-
-                    <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[11px] uppercase tracking-[0.16em] text-white/35">
-                      [esc] to close
-                    </div>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="rounded-xl border border-slate-700 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-400 transition hover:border-slate-500 hover:text-white"
+                >
+                  [ESC] TO CLOSE
+                </button>
               </div>
             </div>
 
-            <div className="relative max-h-[58vh] overflow-y-auto p-2 sm:p-3">
-              <div className="mb-2 flex items-center justify-between px-2 text-[11px] uppercase tracking-[0.18em] text-white/35">
-                <span>{normalize(query) ? "Search Results" : "Quick Access"}</span>
-                <span>{results.length} items</span>
-              </div>
+            <div className="px-6 py-4">
+              {(query.trim().length < 2) && (
+                <div className="mb-4 rounded-2xl border border-slate-800 bg-black/20 px-4 py-3 text-sm text-slate-400">
+                  두 글자 이상 입력하면 현재 유니버스 결과를 먼저 보여주고, 부족하면 전국 결과까지 자동으로 이어서 보여준다.
+                </div>
+              )}
 
-              {results.length > 0 ? (
-                <div id="koaptix-command-results" role="listbox" className="grid gap-2">
-                  {results.map((item, index) => {
-                    const active = index === activeIndex;
+              {isSearching ? (
+                <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
+                  검색 중...
+                </div>
+              ) : searchError ? (
+                <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-5 py-8 text-center text-rose-300">
+                  {searchError}
+                </div>
+              ) : query.trim().length < 2 ? (
+                <div className="space-y-3">
+                  {visibleLocalItems.length > 0 ? (
+                    <>
+                      <div className="mb-2 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-slate-500">
+                        <span>현재 보드 미리보기</span>
+                        <span>{visibleLocalItems.length} ITEMS</span>
+                      </div>
+                      <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                        {visibleLocalItems.map(renderResultCard)}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
+                      두 글자 이상 입력해 검색을 시작해라.
+                    </div>
+                  )}
+                </div>
+              ) : visibleLocalItems.length > 0 || visibleGlobalItems.length > 0 ? (
+                <div className="max-h-[520px] space-y-5 overflow-y-auto pr-1">
+                  {visibleLocalItems.length > 0 && (
+                    <div>
+                      <div className="mb-3 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-cyan-300/80">
+                        <span>현재 유니버스 결과</span>
+                        <span>{visibleLocalItems.length} ITEMS</span>
+                      </div>
+                      <div className="space-y-3">
+                        {visibleLocalItems.map(renderResultCard)}
+                      </div>
+                    </div>
+                  )}
 
-                    return (
-                      <button
-                        key={item.complexId}
-                        id={`koaptix-command-option-${index}`}
-                        ref={(element) => {
-                          resultRefs.current[index] = element;
-                        }}
-                        type="button"
-                        role="option"
-                        aria-selected={active}
-                        onMouseEnter={() => setActiveIndex(index)}
-                        onClick={() => selectItem(item)}
-                        className={`grid w-full grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-2xl border px-4 py-3 text-left transition ${
-                          active
-                            ? "border-cyan-300/28 bg-cyan-300/[0.10] shadow-[0_0_0_1px_rgba(34,211,238,0.10),0_0_26px_rgba(34,211,238,0.14)]"
-                            : "border-white/8 bg-white/[0.03] hover:border-cyan-300/16 hover:bg-white/[0.05]"
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-white/45">
-                              #{item.rank}
-                            </span>
-                            <h3 className="truncate text-sm font-semibold text-white sm:text-base">
-                              {item.name}
-                            </h3>
-                          </div>
-
-                          <p className="mt-1 truncate text-xs text-white/45 sm:text-sm">
-                            {item.locationLabel || "위치 정보 없음"} · ID {item.complexId}
-                          </p>
-                        </div>
-
-                        <div className="text-right">
-                          <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">
-                            Market Cap
-                          </p>
-                          <p className="mt-1 text-sm font-semibold text-cyan-100 sm:text-base">
-                            {formatMarketCapKrw(item.marketCapKrw)}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
+                  {visibleGlobalItems.length > 0 && (
+                    <div>
+                      <div className="mb-3 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-slate-400">
+                        <span>전국 결과</span>
+                        <span>{visibleGlobalItems.length} ITEMS</span>
+                      </div>
+                      <div className="space-y-3">
+                        {visibleGlobalItems.map(renderResultCard)}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-8 text-center text-sm leading-6 text-white/50">
+                <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
                   검색 결과가 없다. 단지명, 구, 동 이름을 바꿔서 다시 입력해라.
                 </div>
               )}
             </div>
 
-            <div className="relative border-t border-white/6 px-4 py-3 text-[11px] uppercase tracking-[0.16em] text-white/35 sm:px-5">
-              ↑ ↓ navigate · enter open detail · esc close · cmd/ctrl + k reopen
+            <div className="border-t border-slate-800/80 px-6 py-3 text-[12px] uppercase tracking-[0.18em] text-slate-500">
+              ↑ ↓ NAVIGATE · ENTER OPEN DETAIL · ESC CLOSE · CMD/CTRL + K REOPEN
             </div>
-          </section>
+          </div>
         </div>
-      ) : null}
+      )}
     </>
   );
 }

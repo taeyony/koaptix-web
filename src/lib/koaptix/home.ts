@@ -23,7 +23,7 @@ export async function getKoaptixHomePayload(
   const supabase = getSupabaseAdminClient();
 
   const { data, error } = await supabase
-    .from("v_koaptix_home_seoul_latest_payload")
+    .from("v_koaptix_home_latest_payload")
     .select("*")
     .single();
 
