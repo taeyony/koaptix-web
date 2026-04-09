@@ -84,7 +84,19 @@ async function readRankingItems(
 
   return json.items ?? [];
 }
-
+/**
+ * 핵심 상태 관리 컴포넌트.
+ *
+ * 역할:
+ * - home client-side universe transition
+ * - /api/rankings tactical delivery consume
+ * - URL query(district / complexId / universe) 동기화
+ *
+ * 주의:
+ * - page-level SSR full reload 패턴으로 되돌리지 않는다.
+ * - universe selector는 universes.ts registry만 바라보게 유지한다.
+ * - 이전 universe 잔상과 stale cache 정합성은 계속 주요 점검 포인트다.
+ */
 export function RankingBoardClient({
   items,
   initialUniverseCode = DEFAULT_UNIVERSE_CODE,

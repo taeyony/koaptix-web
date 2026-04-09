@@ -283,7 +283,18 @@ function roundUpToStep(value: number, step: number) {
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
-
+/**
+ * Home tactical radar.
+ *
+ * 역할:
+ * - /api/map delivery path consume
+ * - current universe 기준 district aggregate 렌더
+ *
+ * 주의:
+ * - source rollback 없이 tactical delivery path를 유지한다.
+ * - range / topN 조작으로 지도 중심이 흔들리지 않는 UX를 유지한다.
+ * - map timeout 재발 시 프론트가 아니라 read path/contract부터 다시 본다.
+ */
 export function NeonMap({ items }: { items: RankingItem[] }) {
   const searchParams = useSearchParams();
   const currentDistrict = searchParams?.get("district");

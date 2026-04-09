@@ -17,6 +17,14 @@ export const revalidate = 0;
  * -> v_koaptix_universe_rank_history_dynamic
  * -> v_koaptix_latest_universe_rank_board_u
  */
+/**
+ * 운영 메모:
+ * - 이 route는 home tactical board client transition 전용 delivery path다.
+ * - source of truth는 계속 v_koaptix_latest_universe_rank_board_u를 유지한다.
+ * - initial SSR seed는 src/app/page.tsx -> getLatestRankBoard direct path를 사용한다.
+ * - BUSAN cold timeout은 프론트가 아니라 DB read path 병목이 원인이었고,
+ *   snapshot 기반 universe read path 정렬 후 완화됐다.
+ */
 const HOME_DEFAULT_LIMIT = 20;
 const HOME_MAX_LIMIT = 20;
 

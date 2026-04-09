@@ -46,7 +46,17 @@ export default async function Home({
   const universeCode = normalizeUniverseCode(
     rawUniverseParam ?? DEFAULT_UNIVERSE_CODE,
   );
-
+/**
+ * Home initial SSR seed limit.
+ *
+ * 현재는 page-level SSR seed에서
+ * - KOREA_ALL = 40
+ * - regional = 60
+ * 으로 가져오고 있다.
+ *
+ * 반면 client tactical transition은 /api/rankings route의 limit 20 기준이다.
+ * 이 차이는 의도적 분리인지, 추후 정렬할지 다음 방에서 판단해야 한다.
+ */
 const boardLimit =
   universeCode === DEFAULT_UNIVERSE_CODE ? 40 : 60;
 

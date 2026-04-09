@@ -2,7 +2,10 @@ import { createClient } from "@supabase/supabase-js";
 import {
   DEFAULT_UNIVERSE_CODE,
   normalizeUniverseCode,
+  type KnownUniverseCode,
 } from "./universes";
+
+
 import type {
   DbComplexDetailSheetBaseRow,
   DbComplexDetailSheetWeeklyRow,
@@ -451,16 +454,31 @@ function isStatementTimeout(
   if (!error) return false;
   return error.code === "57014" || (error.message ?? "").includes("statement timeout");
 }
-
+/**
+ * Home initial SSR seed path.
+ *
+ * 현재 home page는 initial seed를
+ * src/app/page.tsx -> getLatestRankBoard -> v_koaptix_latest_universe_rank_board_u
+ * direct query path로 가져온다.
+ *
+ * 주의:
+ * - 입력 universe는 반드시 normalizeUniverseCode()를 거친다.
+ * - client universe transition은 /api/rankings delivery path를 사용하므로,
+ *   SSR seed path와 client tactical path의 계약 차이(boardLimit 40/60 vs route tactical 20)는
+ *   후속 정렬 검토 대상이다.
+ * - source of truth rollback으로 이 함수를 우회하지 않는다.
+ */
 export async function getLatestRankBoard(
-  universeCode = DEFAULT_UNIVERSE_CODE,
-  limit = 500
+  universeCode: KnownUniverseCode | string = DEFAULT_UNIVERSE_CODE,
+  limit: number = 500,
 ): Promise<DbLatestRankBoardWeeklyRow[]> {
   const supabase = createServerSupabase();
-  const requestedLimit = Math.max(1, Math.min(limit, 500));
+
   const safeUniverseCode = normalizeUniverseCode(
     universeCode ?? DEFAULT_UNIVERSE_CODE,
   );
+
+  const requestedLimit = Math.max(1, Math.min(limit, 500));
 
   const retryLimits =
     safeUniverseCode === DEFAULT_UNIVERSE_CODE
@@ -506,7 +524,7 @@ export async function getLatestRankBoard(
           tier_label,
           tier_sort,
           is_top1000
-        `
+        `,
       )
       .eq("universe_code", safeUniverseCode)
       .order("rank_all", { ascending: true })
@@ -530,7 +548,7 @@ export async function getLatestRankBoard(
 
   if (lastError) {
     throw new Error(
-      `Failed to fetch v_koaptix_latest_universe_rank_board_u: ${lastError.message}`
+      `Failed to fetch v_koaptix_latest_universe_rank_board_u: ${lastError.message}`,
     );
   }
 

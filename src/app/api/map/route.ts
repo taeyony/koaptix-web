@@ -14,6 +14,13 @@ export const revalidate = 0;
  * Keep source of truth on v_koaptix_latest_universe_rank_board_u.
  * Solve timeouts by lighter limits / cache / retry, not by source rollback.
  */
+/**
+ * 운영 메모:
+ * - 이 route는 home tactical radar client transition 전용 delivery path다.
+ * - home board와 같은 universe_code contract를 유지해야 한다.
+ * - map과 board의 contract mismatch를 다시 만들지 않도록
+ *   tactical board 기준과 함께 점검한다.
+ */
 const HOME_BOARD_TACTICAL_LIMIT = 20;
 
 const MAP_DEFAULT_LIMIT_KOREA = 160;
