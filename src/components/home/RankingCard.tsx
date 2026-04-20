@@ -64,6 +64,9 @@ export function RankingCard({
   return (
     <div
       onClick={onClick}
+      data-testid="ranking-card"
+      data-complex-id={item.complexId}
+      data-universe-code={item.universeCode ?? item.universe_code ?? ""}
       className="group relative flex cursor-pointer flex-col justify-center rounded-xl border border-transparent bg-white/[0.02] p-3 transition-all duration-300 hover:border-cyan-500/30 hover:bg-cyan-500/[0.03] hover:shadow-[0_0_20px_rgba(34,211,238,0.1)] sm:p-4"
     >
       <div className="flex items-center gap-3">

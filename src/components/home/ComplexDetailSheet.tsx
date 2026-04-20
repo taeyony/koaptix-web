@@ -325,6 +325,8 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
           role="dialog"
           aria-modal="true"
           aria-labelledby="complex-detail-title"
+          data-testid="complex-detail-sheet"
+          data-complex-id={item.complexId}
           className="absolute inset-x-0 bottom-0 z-[1001] max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
         >
           <div className="border-b border-white/5 bg-[#0b1118] px-4 pb-4 pt-3 md:px-5 md:pt-4">
@@ -366,6 +368,7 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
                 <button
                   type="button"
                   onClick={onClose}
+                  data-testid="complex-detail-close"
                   className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/70 transition hover:bg-white/[0.06]"
                 >
                   닫기
