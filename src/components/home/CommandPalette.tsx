@@ -250,6 +250,9 @@ export function CommandPalette({
       key={`${item.universeCode ?? "KOREA_ALL"}::${item.complexId}`}
       type="button"
       onClick={() => handleSelectItem(item)}
+      data-testid="command-result-card"
+      data-complex-id={item.complexId}
+      data-universe-code={item.universeCode ?? item.universe_code ?? ""}
       className="group flex w-full items-start justify-between rounded-2xl border border-slate-800 bg-[#0f1620] px-4 py-4 text-left transition hover:border-cyan-500/30 hover:bg-[#111b27]"
     >
       <div className="min-w-0 pr-4">
@@ -287,6 +290,7 @@ export function CommandPalette({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
+        data-testid="command-palette-open"
         className="fixed bottom-6 right-6 z-[980] rounded-full border border-slate-700 bg-slate-950/95 px-4 py-2 text-xs font-medium text-slate-200 shadow-2xl backdrop-blur transition hover:border-cyan-400/30 hover:text-cyan-300"
       >
         ⌘ COMMAND
@@ -309,6 +313,7 @@ export function CommandPalette({
                   ref={inputRef}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  data-testid="command-palette-input"
                   placeholder="단지명, 구, 동으로 바로 검색..."
                   className="h-12 w-full rounded-2xl border border-slate-700 bg-black/30 px-4 text-lg text-white outline-none transition focus:border-cyan-400/50"
                 />
