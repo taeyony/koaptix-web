@@ -5,6 +5,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "smoke:regional": "node scripts/smoke-regional-identity.mjs",
+    "smoke:browser": "node scripts/smoke-browser-regional-identity.mjs",
+    "audit:sgg": "node scripts/audit-sgg-readiness.mjs",
+    "diagnose:sgg-direct": "node scripts/diagnose-sgg-direct-read.mjs",
+    "gate:sgg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sgg-release-gate.ps1",
     "lint": "next lint"
   },
   "dependencies": {
