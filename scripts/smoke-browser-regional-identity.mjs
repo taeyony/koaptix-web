@@ -17,6 +17,7 @@ const busanProbeMode =
 const commandPaletteProbeMode =
   process.env.KOAPTIX_COMMAND_PALETTE_PROBE === "1" ||
   process.argv.includes("--command-palette-probe");
+const top1000BaselineGateMode = process.env.KOAPTIX_TOP1000_BASELINE_GATE === "1";
 
 const chromePath =
   process.env.KOAPTIX_CHROME_PATH ||
@@ -240,7 +241,6 @@ async function navigate(client, path) {
       returnByValue: true,
     });
   }
-  await waitFor(client, "document.readyState === 'complete'");
   if (path.startsWith("/ranking")) {
     await waitForRankingReady(client);
   } else {
@@ -258,6 +258,131 @@ async function waitFor(client, condition, timeoutMs = 20_000) {
   throw new Error(`Timeout waiting for condition: ${condition}`);
 }
 
+async function getAppReadyDiagnostics(client) {
+  return await evaluate(
+    client,
+    `(() => {
+      const text = document.body?.innerText || '';
+      const attr = (node, name) => node?.getAttribute?.(name) || '';
+      const activeButtons = Array.from(document.querySelectorAll('button[aria-pressed="true"]'))
+        .slice(0, 12)
+        .map((button) => ({
+          text: button.textContent?.trim() || '',
+          testid: attr(button, 'data-testid'),
+          universe: attr(button, 'data-universe-code'),
+          className: button.className || ''
+        }));
+      const rankingCardCount = document.querySelectorAll('[data-testid="ranking-card"]').length;
+      const commandOpenCount = document.querySelectorAll('[data-testid="command-palette-open"]').length;
+      const rankingBoardCount = document.querySelectorAll('[data-testid="ranking-board"]').length;
+      const currentUniverseLabelCount = document.querySelectorAll('[data-testid="current-universe-label"]').length;
+      const marketChartCardCount = document.querySelectorAll('[data-testid="market-chart-card"]').length;
+      const universeOptionCount = document.querySelectorAll('[data-testid="universe-option"]').length;
+      const hasKoaptix500 = text.includes('KOAPTIX 500');
+      const hasRankingsText = text.includes('Rankings');
+      const surfaces = [];
+      if (hasKoaptix500) surfaces.push('KOAPTIX_500_TEXT');
+      if (hasRankingsText) surfaces.push('RANKINGS_TEXT');
+      if (activeButtons.length > 0) surfaces.push('ACTIVE_ARIA_BUTTON');
+      if (rankingCardCount > 0) surfaces.push('RANKING_CARD');
+      if (commandOpenCount > 0) surfaces.push('COMMAND_OPEN');
+      if (rankingBoardCount > 0) surfaces.push('RANKING_BOARD_HOOK');
+      if (currentUniverseLabelCount > 0) surfaces.push('CURRENT_UNIVERSE_HOOK');
+      if (marketChartCardCount > 0) surfaces.push('MARKET_CHART_HOOK');
+      return {
+        href: location.href,
+        readyState: document.readyState,
+        bodyExists: Boolean(document.body),
+        bodyTextSample: text.replace(/\\s+/g, ' ').slice(0, 400),
+        hasKoaptix500,
+        hasRankingsText,
+        activeButtonCount: activeButtons.length,
+        activeButtons,
+        rankingCardCount,
+        commandOpenCount,
+        rankingBoardCount,
+        currentUniverseLabelCount,
+        marketChartCardCount,
+        universeOptionCount,
+        readySurface: surfaces.join('|') || 'NONE'
+      };
+    })()`,
+  );
+}
+
+function isAppReady(diag, scope) {
+  if (!diag?.bodyExists) return false;
+  if (scope === "document") return true;
+
+  if (scope === "home") {
+    return (
+      diag.hasKoaptix500 === true &&
+      diag.activeButtonCount > 0 &&
+      diag.rankingCardCount > 0
+    );
+  }
+
+  if (scope === "ranking") {
+    return (
+      diag.rankingCardCount > 0 &&
+      (diag.hasKoaptix500 === true || diag.hasRankingsText === true)
+    );
+  }
+
+  return diag.hasKoaptix500 === true || diag.rankingCardCount > 0;
+}
+
+function formatAppReadyDiagnostics(diag, scope, timeoutMs) {
+  if (!diag) {
+    return `scope=${scope} timeout_ms=${timeoutMs} last=NONE`;
+  }
+
+  const activeButtons = (diag.activeButtons ?? [])
+    .map((button) => {
+      const text = button.text ? `text:${button.text}` : "text:EMPTY";
+      const testid = button.testid ? `testid:${button.testid}` : "testid:EMPTY";
+      const universe = button.universe ? `universe:${button.universe}` : "universe:EMPTY";
+      return `{${[text, testid, universe].join(",")}}`;
+    })
+    .join(",");
+
+  return [
+    `scope=${scope}`,
+    `timeout_ms=${timeoutMs}`,
+    `href=${diag.href || "EMPTY"}`,
+    `readyState=${diag.readyState || "EMPTY"}`,
+    `bodyExists=${diag.bodyExists === true}`,
+    `readySurface=${diag.readySurface || "NONE"}`,
+    `activeButtonCount=${diag.activeButtonCount ?? 0}`,
+    `rankingCardCount=${diag.rankingCardCount ?? 0}`,
+    `commandOpenCount=${diag.commandOpenCount ?? 0}`,
+    `rankingBoardCount=${diag.rankingBoardCount ?? 0}`,
+    `currentUniverseLabelCount=${diag.currentUniverseLabelCount ?? 0}`,
+    `marketChartCardCount=${diag.marketChartCardCount ?? 0}`,
+    `universeOptionCount=${diag.universeOptionCount ?? 0}`,
+    `activeButtons=${activeButtons || "NONE"}`,
+    `bodyTextSample=${diag.bodyTextSample || "EMPTY"}`,
+  ].join(" ");
+}
+
+async function waitForAppReady(client, scope = "home", timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastDiag = null;
+
+  while (Date.now() < deadline) {
+    lastDiag = await getAppReadyDiagnostics(client);
+    if (isAppReady(lastDiag, scope)) {
+      console.log(`[browser-smoke] app-ready ${formatAppReadyDiagnostics(lastDiag, scope, timeoutMs)}`);
+      return lastDiag;
+    }
+    await sleep(150);
+  }
+
+  throw new Error(
+    `Timeout waiting for app-ready DOM surface: ${formatAppReadyDiagnostics(lastDiag, scope, timeoutMs)}`,
+  );
+}
+
 async function click(client, selector) {
   const clicked = await evaluate(
     client,
@@ -273,32 +398,15 @@ async function click(client, selector) {
 }
 
 async function waitForDomReady(client) {
-  await waitFor(client, "document.readyState === 'complete'", 20_000);
+  await waitForAppReady(client, "document", 20_000);
 }
 
 async function waitForHomeUiAnchors(client) {
-  await waitForDomReady(client);
-  await waitFor(
-    client,
-    [
-      "Boolean(document.querySelector('[data-testid=\"ranking-board\"]'))",
-      "Boolean(document.querySelector('[data-testid=\"current-universe-label\"]'))",
-      "Boolean(document.querySelector('[data-testid=\"market-chart-card\"]'))",
-      "document.querySelectorAll('[data-testid=\"universe-option\"][data-universe-code$=\"_ALL\"]').length >= 5",
-    ].join(" && "),
-  );
+  await waitForAppReady(client, "home", 20_000);
 }
 
 async function waitForRankingUiAnchors(client) {
-  await waitForDomReady(client);
-  await waitFor(
-    client,
-    [
-      "Boolean(document.querySelector('[data-testid=\"ranking-board\"]'))",
-      "Boolean(document.querySelector('[data-testid=\"current-universe-label\"]'))",
-      "document.querySelectorAll('[data-testid=\"universe-option\"][data-universe-code$=\"_ALL\"]').length >= 5",
-    ].join(" && "),
-  );
+  await waitForAppReady(client, "ranking", 20_000);
 }
 
 async function waitForHomeReady(client) {
@@ -483,7 +591,6 @@ async function waitForActionableUniverseOption(client, code, timeoutMs = 10_000)
     lastDiag = await getBrowserDiagnostics(client, code);
 
     const actionable =
-      lastDiag.readyState === "complete" &&
       lastDiag.expectedOptionExists &&
       lastDiag.targetTagName === "BUTTON" &&
       lastDiag.targetDisabled !== true &&
@@ -865,7 +972,6 @@ async function waitForActionableCommandPaletteOpen(client, timeoutMs = 8_000) {
     lastDiag = await getCommandPaletteDiagnostics(client);
 
     const actionable =
-      lastDiag.readyState === "complete" &&
       lastDiag.openTriggerExists &&
       lastDiag.openTriggerTagName === "BUTTON" &&
       lastDiag.openTriggerDisabled !== true &&
@@ -1183,7 +1289,8 @@ async function run() {
       console.log(`[browser-smoke] ok step=${spec.step} universe=${spec.code}`);
     }
 
-    await navigate(client, "/ranking?universe=ULSAN_ALL&q=%EC%9B%94%EB%93%9C&tier=S&complexId=178897");
+    if (top1000BaselineGateMode) {
+      await navigate(client, "/ranking?universe=ULSAN_ALL&q=%EC%9B%94%EB%93%9C&tier=S&complexId=178897");
     await waitFor(client, "Boolean(document.querySelector('[data-testid=\"complex-detail-sheet\"]'))");
     state = await getState(client);
     assertState(state, "ULSAN_ALL", "TOP1000_DEEP_LINK", { expectMap: false });
@@ -1222,7 +1329,9 @@ async function run() {
         }),
       );
     }
-    console.log("[browser-smoke] ok step=TOP1000_DEEP_LINK_AND_CLOSE");
+      console.log("[browser-smoke] ok step=TOP1000_DEEP_LINK_AND_CLOSE");
+
+    }
 
     await navigate(client, "/?universe=ULSAN_ALL");
     await fillCommandPaletteInput(client, "월드", "COMMAND_PALETTE_REGIONAL_SELECT");

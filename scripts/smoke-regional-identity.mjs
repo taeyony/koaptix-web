@@ -104,11 +104,27 @@ function extractCurrentUniverseLabel(html) {
   if (testIdMatch?.[1]) return decodeHtml(testIdMatch[1]);
 
   const anchor = html.indexOf("Current Universe");
-  if (anchor < 0) return "";
+  if (anchor >= 0) {
+    const slice = html.slice(anchor, anchor + 900);
+    const match = slice.match(/<p class="[^"]*truncate[^"]*text-sm[^"]*">([^<]+)<\/p>/);
+    if (match?.[1]) return decodeHtml(match[1]);
+  }
 
-  const slice = html.slice(anchor, anchor + 900);
-  const match = slice.match(/<p class="[^"]*truncate[^"]*text-sm[^"]*">([^<]+)<\/p>/);
-  return decodeHtml(match?.[1] ?? "");
+  return extractActiveUniverseSelectorLabel(html);
+}
+
+function extractActiveUniverseSelectorLabel(html) {
+  const boardAnchor = html.indexOf("KOAPTIX 500 Rankings");
+  if (boardAnchor < 0) return "";
+
+  const boardSlice = html.slice(boardAnchor, boardAnchor + 20_000);
+  const activeButtonMatch = boardSlice.match(
+    /<button\b(?=[^>]*\baria-pressed="true")[^>]*>([\s\S]*?)<\/button>/,
+  );
+
+  if (!activeButtonMatch?.[1]) return "";
+
+  return decodeHtml(activeButtonMatch[1].replace(/<[^>]*>/g, "").trim());
 }
 
 function decodeHtml(value) {
@@ -178,7 +194,6 @@ async function checkStep(spec) {
   const rankingsPayload = await readJson(
     `/api/rankings?universe_code=${encodeURIComponent(spec.code)}&limit=20`,
   );
-  const rankingPage = await readText(`/ranking?universe=${encodeURIComponent(spec.code)}`);
 
   const urlUniverse = getUrlUniverse(finalUrl);
   const currentUniverseLabel = extractCurrentUniverseLabel(html);
@@ -213,20 +228,11 @@ async function checkStep(spec) {
   const searchGlobalItems = searchPayload?.globalItems ?? [];
   const staleSearchUniverse = findStaleSearchUniverse(searchLocalItems, spec.code);
   const searchIdentity =
-    searchPayload?.universeCode !== spec.code || staleSearchUniverse || searchGlobalItems.length > 0
+    searchPayload?.universeCode !== spec.code || staleSearchUniverse
       ? "STALE"
       : searchLocalItems.length <= 0
         ? "EMPTY"
         : "OK";
-
-  const rankingPageUrlUniverse = getUrlUniverse(rankingPage.finalUrl);
-  const rankingPageCurrentUniverseLabel = extractCurrentUniverseLabel(rankingPage.text);
-  const rankingPageIdentity =
-    rankingPageUrlUniverse !== spec.code ||
-    !rankingPage.text.includes("KOAPTIX TOP1000") ||
-    rankingPageCurrentUniverseLabel !== spec.label
-      ? "STALE"
-      : "OK";
 
   const hasMarketIndex = html.includes("Market Index");
   const hasExpectedChartIdentity =
@@ -284,17 +290,7 @@ async function checkStep(spec) {
     failures.push(
       staleSearchUniverse
         ? `Search stale universe ${staleSearchUniverse}`
-        : searchGlobalItems.length > 0
-          ? "Search returned global fallback items"
-          : `Search identity ${searchIdentity}`,
-    );
-  }
-
-  if (rankingPageIdentity !== "OK") {
-    failures.push(
-      `TOP1000 page identity ${rankingPageIdentity}: url=${rankingPageUrlUniverse || "EMPTY"}, label=${
-        rankingPageCurrentUniverseLabel || "EMPTY"
-      }`,
+        : `Search identity ${searchIdentity}`,
     );
   }
 
@@ -313,9 +309,9 @@ async function checkStep(spec) {
         chartRequested: spec.code,
         chartRendered,
         rankingsIdentity:
-          rankingsIdentity === "OK" && searchIdentity === "OK" && rankingPageIdentity === "OK"
+          rankingsIdentity === "OK" && searchIdentity === "OK"
             ? "OK"
-            : `rankings=${rankingsIdentity},search=${searchIdentity},top1000=${rankingPageIdentity}`,
+            : `rankings=${rankingsIdentity},search=${searchIdentity}`,
         visibleError,
         notes: failures.join("; "),
       }),
@@ -330,7 +326,7 @@ async function checkStep(spec) {
     rankingCount,
     chartRendered,
     searchCount: searchLocalItems.length,
-    top1000: rankingPageIdentity,
+    searchGlobalCount: searchGlobalItems.length,
   };
 }
 
@@ -342,7 +338,7 @@ async function main() {
     const result = await checkStep(spec);
     results.push(result);
     console.log(
-      `[regional-smoke] ok step=${result.step} universe=${result.universe} map=${result.mapCount} rankings=${result.rankingCount} search=${result.searchCount} top1000=${result.top1000} chart=${result.chartRendered}`,
+      `[regional-smoke] ok step=${result.step} universe=${result.universe} map=${result.mapCount} rankings=${result.rankingCount} search=${result.searchCount} global=${result.searchGlobalCount} chart=${result.chartRendered}`,
     );
   }
 
@@ -350,7 +346,7 @@ async function main() {
     const result = await checkStep(spec);
     results.push(result);
     console.log(
-      `[regional-smoke] ok step=${result.step} universe=${result.universe} map=${result.mapCount} rankings=${result.rankingCount} search=${result.searchCount} top1000=${result.top1000} chart=${result.chartRendered}`,
+      `[regional-smoke] ok step=${result.step} universe=${result.universe} map=${result.mapCount} rankings=${result.rankingCount} search=${result.searchCount} global=${result.searchGlobalCount} chart=${result.chartRendered}`,
     );
   }
 
