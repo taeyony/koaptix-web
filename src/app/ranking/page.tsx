@@ -10,7 +10,6 @@ import {
   DEFAULT_UNIVERSE_CODE,
   resolveServiceUniverseCode,
   getUniverseLabel,
-  RANKING_UNIVERSE_OPTIONS,
 } from "../../lib/koaptix/universes";
 import {
   getLatestRankBoard,
@@ -25,9 +24,24 @@ export const revalidate = 0;
 
 type SearchParamValue = string | string[] | undefined;
 type SearchParamsShape = Record<string, SearchParamValue>;
+type RankingTierKey = "ALL" | "S" | "A" | "B" | "C" | "D";
 
 function pickSingleParam(value: SearchParamValue): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function parseRankingTier(value: string | undefined): RankingTierKey {
+  if (
+    value === "S" ||
+    value === "A" ||
+    value === "B" ||
+    value === "C" ||
+    value === "D"
+  ) {
+    return value;
+  }
+
+  return "ALL";
 }
 
 async function resolveSearchParams(
@@ -47,6 +61,13 @@ export default async function RankingPage({
   const universeCode = resolveServiceUniverseCode(
     rawUniverseParam ?? DEFAULT_UNIVERSE_CODE,
   );
+  const initialTier = parseRankingTier(
+    pickSingleParam(resolvedSearchParams?.tier),
+  );
+  const initialSearchQuery =
+    pickSingleParam(resolvedSearchParams?.q)?.trim() ?? "";
+  const initialComplexId =
+    pickSingleParam(resolvedSearchParams?.complexId)?.trim() || null;
 
   // 🚨 지차장 지시 B: Label 추출 및 홈으로 돌아갈 경로(현재 유니버스 유지) 생성
   const universeLabel = getUniverseLabel(universeCode);
@@ -118,7 +139,14 @@ export default async function RankingPage({
   });
 
   return (
-    <main className="min-h-screen bg-[#06090f] px-2 py-4 sm:p-4 lg:p-6">
+    <main
+      className="min-h-screen bg-[#06090f] px-2 py-4 sm:p-4 lg:p-6"
+      data-testid="ranking-page"
+      data-universe-code={universeCode}
+      data-tier-filter={initialTier}
+      data-has-query={initialSearchQuery ? "true" : "false"}
+      data-selected-complex-id={initialComplexId ?? ""}
+    >
       <div className="mx-auto w-full max-w-[1600px] space-y-4">
         <section className="overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_rgba(0,0,0,0.4)]">
           <div className="border-b border-slate-800/80 px-4 py-3 lg:px-5 lg:py-4">
