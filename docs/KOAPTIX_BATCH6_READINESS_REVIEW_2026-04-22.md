@@ -2,9 +2,12 @@
 
 ## Purpose
 
-This document records a read-only batch-6 SGG readiness scan. It does not open
-batch-6 and does not modify the registry, DB, SQL, source of truth, API routes,
-gate scripts, package files, or runtime code.
+This document records the read-only batch-6 SGG readiness scan and the later
+post-open verification result from commit `dee214d`.
+
+The readiness review itself did not open batch-6 and did not modify the
+registry, DB, SQL, source of truth, API routes, gate scripts, package files, or
+runtime code.
 
 The source of truth remains:
 
@@ -21,6 +24,8 @@ koaptix_rank_snapshot
 - Batch-4 open commit: `306f3dc feat(koaptix): open batch-4 ready sgg exposure`
 - Batch-5 open commit: `7cac4e8 feat(koaptix): open batch-5 ready sgg exposure`
 - Batch-5 post-open docs commit: `1690a2b docs(koaptix): record batch-5 open verification`
+- Batch-6 readiness docs commit: `2a9759e docs(koaptix): add batch-6 readiness review`
+- Batch-6 open commit: `dee214d feat(koaptix): open batch-6 ready sgg exposure`
 
 ## Current Enabled Exposure
 
@@ -50,7 +55,7 @@ Macro universes intentionally not enabled:
 - `GANGWON_ALL`
 - `JEONBUK_ALL`
 
-Enabled SGG count: 28.
+Enabled SGG count at readiness-review time: 28.
 
 Batch-4 is already open:
 
@@ -63,6 +68,13 @@ Batch-5 is already open:
 - `SGG_48250`
 
 These four codes must not be treated as batch-6 candidates.
+
+Post-open status:
+
+- `dee214d feat(koaptix): open batch-6 ready sgg exposure` opened exactly
+  `SGG_41465` and `SGG_41220`.
+- Current enabled SGG count after that commit: 30.
+- No macro universe exposure policy changed.
 
 ## Candidate Scan Method
 
@@ -207,20 +219,67 @@ rollback should be needed for a registry-only open.
 
 ## Actual Open Status
 
-Batch-6 was not opened in this turn.
+Batch-6 was opened later by:
 
-No registry exposure was changed. No code, API route, DB, SQL, source-of-truth,
-package, component, or gate script was changed.
+- `dee214d feat(koaptix): open batch-6 ready sgg exposure`
 
-## Next Turn Exact Target
+That commit changed exactly one runtime file:
 
-If approved, the next actual open prompt should expose exactly:
+- `src/lib/koaptix/universes.ts`
+
+The open exposed exactly:
 
 - `SGG_41465`
 - `SGG_41220`
 
-After that registry-only open, run full post-open validation:
+The readiness review and the open result are aligned: the same two candidates
+recommended by the review were the only candidates exposed.
 
-1. `npm run build`
-2. `npm run dev -- --hostname 127.0.0.1 --port 3004 --webpack`
-3. `KOAPTIX_SMOKE_BASE_URL=http://127.0.0.1:3004 npm run gate:sgg`
+## Post-Open Result
+
+Open result:
+
+- enabled SGG count after open: 30
+- `npm run build`: PASS
+- home URL checks: PASS
+- `/ranking` URL checks: PASS
+- `/api/rankings`: PASS
+- `/api/map`: PASS
+- same-universe delivery retained
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+- `npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `failed_command=NONE`
+- `failed_universe_or_step=NONE`
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS, `enabled=30`, `confirmed=30`
+- home, ranking, manual API checks: PASS
+- build: PASS
+
+## Current Status After Batch-6 Open
+
+Batch-6 is open as of commit `dee214d`.
+
+No DB, SQL, source-of-truth, API route, gate script, package, script, component,
+or docs change was part of the open commit. The open commit changed only
+`src/lib/koaptix/universes.ts`.
+
+Do not treat batch-6 as an open-ended block. Any additional SGG exposure after
+`SGG_41465` and `SGG_41220` requires a separate readiness review and a separate
+explicit open prompt.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, manual checks, API checks, and the SGG
+release gate passed after the registry-only open.
+
+If a later batch-6-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-6 block:
+
+- `SGG_41465`
+- `SGG_41220`
+
+No DB, SQL, source-of-truth, API route, package, script, or component rollback
+should be needed for a batch-6 registry-only rollback.
