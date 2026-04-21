@@ -1,0 +1,39 @@
+이번 방에서 확정된 것, 앞으로 진행할 것, 계속 공유해야 할 것
+지금까지 확정된 것
+
+DB 기준 source of truth와 helper chain 원칙은 그대로 유지해야 한다. complex_rank_history는 universe_code 없는 단일 이력 엔진이고, universe board는 snapshot 기반 체인으로 해석해야 한다. 또한 통짜 wrapper는 봉인 상태로 유지하고, 개별 helper 체인을 공식 안전 경로로 본다.
+
+홈 구조도 기준선이 분명하다. home은 full board가 아니라 lightweight tactical board고, initial SSR seed는 page.tsx -> queries.ts:getLatestRankBoard -> latest board view, client transition은 /api/rankings, /api/map, /api/search delivery path를 타는 구조다. 이 구조는 문서상 기준선으로 잡혀 있다.
+
+이번 방에서 사용자 검증으로 확인된 것
+
+DB read path 복구 이후, macro universe 확장은 최소 BUSAN/DAEGU/INCHEON/GWANGJU 수준까지 home/ranking read path에서 살아난 상태로 갔다. 또 대구 전체 문맥에서 중구가 서울 중구로 보이던 지도 혼선은 사라졌다고 사용자가 직접 확인했다.
+
+아직 미해결인 것
+
+가장 큰 미해결은 KOREA_ALL home 최초 진입 안정성이다. 과거 로그 기준으로 getLatestRankBoard direct SSR seed와 /api/map가 KOREA_ALL에서 timeout 민감했고, 그때 retryLimits: [40] 단일값과 MAP_TIMEOUT이 반복되었다. 이후 여러 패치가 있었지만, 최종적으로는 KOREA_ALL 홈 네온맵이 전국 분산 버블이 아니라 수도권 대형 버블 1개처럼 보이는 최신 현상이 남아 있다. 이 구간은 next chat에서 현재 파일 전체 본문 기준으로 다시 판정해야 한다.
+
+앞으로 진행할 것
+
+다음 방의 첫 작업은 코드 수정이 아니라 현재 로컬 파일 5개 전체 본문 확인이다.
+
+src/app/page.tsx
+src/lib/koaptix/queries.ts
+src/app/api/rankings/route.ts
+src/components/home/NeonMap.tsx
+src/app/api/map/route.ts
+
+그다음 순서는 아래가 맞다.
+
+queries.ts / api/rankings/route.ts 오염 여부 판정
+KOREA_ALL SSR seed / tactical board / map의 timeout/fallback 구조 재판정
+KOREA_ALL 네온맵이 왜 단일 수도권 bubble로 보이는지 원인 분리
+필요하면 whole-file replacement
+그 뒤에야 주요 구 개수 축소, chip UX, label polish로 넘어감
+계속 공유해야 하는 핵심 한 줄들
+
+KOREA_ALL 엔진은 다시 뜯지 않는다.
+멀티 유니버스는 additive only다.
+snapshot 체인을 우회하지 않는다.
+helper chain이 공식 안전 경로다.
+문맥이 꼬이면 즉시 새 채팅방으로 이동하고, 먼저 현재 파일 전체 본문부터 다시 본다.
