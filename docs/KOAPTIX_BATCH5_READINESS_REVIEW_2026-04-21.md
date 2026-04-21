@@ -2,9 +2,11 @@
 
 ## Purpose
 
-This document records a read-only batch-5 SGG readiness scan. It does not open
-batch-5 and does not modify the registry, DB, SQL, source of truth, API routes,
-gate scripts, or runtime code.
+This document records the read-only batch-5 SGG readiness scan and the later
+post-open verification result from commit `7cac4e8`.
+
+The readiness review itself did not open batch-5 and did not modify the
+registry, DB, SQL, source of truth, API routes, gate scripts, or runtime code.
 
 The source of truth remains:
 
@@ -21,6 +23,8 @@ koaptix_rank_snapshot
 - Batch-4 open commit: `306f3dc feat(koaptix): open batch-4 ready sgg exposure`
 - Batch-4 readiness docs commit: `cf9c2a4 docs(koaptix): add batch-4 readiness review`
 - Artifact cleanup commit: `0b1b42e chore(koaptix): ignore local build and dev artifacts`
+- Batch-5 readiness docs commit: `a1242d0 docs(koaptix): add batch-5 readiness review`
+- Batch-5 open commit: `7cac4e8 feat(koaptix): open batch-5 ready sgg exposure`
 
 ## Current Enabled Exposure
 
@@ -173,22 +177,66 @@ scope should be registry-only and exactly:
 No DB, SQL, source-of-truth, API route, or gate script rollback should be needed
 for a registry-only open.
 
-## Actual Open Status
+## Post-Open Result
 
-Batch-5 was not opened in this turn.
+Batch-5 was opened later by:
 
-No registry exposure was changed. No code, API route, DB, SQL, source-of-truth,
-or gate script was changed.
+- `7cac4e8 feat(koaptix): open batch-5 ready sgg exposure`
 
-## Next Turn Exact Target
+That commit changed exactly one runtime file:
 
-If approved, the next actual open prompt should expose exactly:
+- `src/lib/koaptix/universes.ts`
+
+The open exposed exactly:
 
 - `SGG_41360`
 - `SGG_48250`
 
-After that registry-only open, run full post-open validation:
+Open result:
 
-1. `npm run build`
-2. `npm run dev -- --hostname 127.0.0.1 --port 3004 --webpack`
-3. `KOAPTIX_SMOKE_BASE_URL=http://127.0.0.1:3004 npm run gate:sgg`
+- enabled SGG count after open: 28
+- `npm run build`: PASS
+- home URLs: PASS
+- `/ranking` URLs: PASS
+- `/api/rankings`: PASS for both new SGG, same-universe delivery retained
+- `/api/map`: PASS for both new SGG, dynamic source with `isFallback=false`
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+- `KOAPTIX_SMOKE_BASE_URL=http://127.0.0.1:3004 npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `failed_command=NONE`
+- `failed_universe_or_step=NONE`
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS, `enabled=28`, `confirmed=28`
+- `smoke:regional`: PASS
+- `smoke:browser`: PASS
+- `build`: PASS
+
+The readiness review and the open result are aligned: the same two candidates
+recommended by the review were the only candidates exposed.
+
+## Current Status After Batch-5 Open
+
+Batch-5 is open as of commit `7cac4e8`.
+
+No DB, SQL, source-of-truth, API route, gate script, package, component, or docs
+change was part of the open commit.
+
+Do not treat batch-5 as an open-ended block. Any additional SGG exposure after
+`SGG_41360` and `SGG_48250` requires a separate readiness review and a separate
+explicit open prompt.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, manual checks, and the full release gate
+passed after the registry-only open.
+
+If a later batch-5-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-5 block:
+
+- `SGG_41360`
+- `SGG_48250`
+
+No DB, SQL, source-of-truth, API route, package, script, or component rollback
+should be needed for a batch-5 registry-only rollback.
