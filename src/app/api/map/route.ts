@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import {
   DEFAULT_UNIVERSE_CODE,
+  getUniverseLabel,
   resolveServiceUniverseCode,
 } from "../../../lib/koaptix/universes";
 
@@ -114,6 +115,12 @@ type MapDistrictItem = {
 type CachedMapPayload = {
   ok: true;
   universeCode: string;
+  requestedUniverseCode: string;
+  renderedUniverseCode: string;
+  mapScopeLabel: string;
+  isFallback: boolean;
+  fallbackMode: "none" | "stale-cache";
+  source: "dynamic" | "stale-cache";
   count: number;
   items: MapDistrictItem[];
 };
@@ -627,8 +634,29 @@ async function rowsToMapPayload(
   return {
     ok: true,
     universeCode,
+    requestedUniverseCode: universeCode,
+    renderedUniverseCode: universeCode,
+    mapScopeLabel: getUniverseLabel(universeCode),
+    isFallback: false,
+    fallbackMode: "none",
+    source: "dynamic",
     count: items.length,
     items,
+  };
+}
+
+function withStaleMapIdentity(
+  payload: CachedMapPayload,
+  requestedUniverseCode: string,
+): CachedMapPayload {
+  return {
+    ...payload,
+    requestedUniverseCode,
+    renderedUniverseCode: payload.universeCode,
+    mapScopeLabel: getUniverseLabel(payload.universeCode),
+    isFallback: payload.universeCode !== requestedUniverseCode,
+    fallbackMode: "stale-cache",
+    source: "stale-cache",
   };
 }
 
@@ -655,6 +683,12 @@ async function fetchMapPayloadFromDynamic(
     return {
       ok: true,
       universeCode,
+      requestedUniverseCode: universeCode,
+      renderedUniverseCode: universeCode,
+      mapScopeLabel: getUniverseLabel(universeCode),
+      isFallback: false,
+      fallbackMode: "none",
+      source: "dynamic",
       count: 0,
       items: [],
     };
@@ -847,7 +881,7 @@ export async function GET(request: NextRequest) {
       readStaleMapCache(cacheKey) ?? readAnyUniverseMapCache(universeCode);
 
     if (staleCached) {
-      return NextResponse.json(staleCached, {
+      return NextResponse.json(withStaleMapIdentity(staleCached, universeCode), {
         headers: {
           "Cache-Control": "no-store",
           "X-Koaptix-Map-Cache": "stale",
@@ -859,6 +893,12 @@ export async function GET(request: NextRequest) {
       {
         ok: false,
         universeCode,
+        requestedUniverseCode: universeCode,
+        renderedUniverseCode: universeCode,
+        mapScopeLabel: getUniverseLabel(universeCode),
+        isFallback: false,
+        fallbackMode: "miss",
+        source: "miss",
         count: 0,
         items: [],
         message: getErrorMessage(error),
