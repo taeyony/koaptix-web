@@ -205,6 +205,14 @@ function filterItemsByQuery(items: RankingItem[], q: string) {
   });
 }
 
+function excludeAlreadyShownItems(
+  items: RankingItem[],
+  alreadyShownItems: RankingItem[],
+) {
+  const shownIds = new Set(alreadyShownItems.map((item) => item.complexId));
+  return items.filter((item) => !shownIds.has(item.complexId));
+}
+
 async function fetchSourceItems(
   universeCode: string,
   sourceLimit: number,
@@ -279,6 +287,39 @@ async function loadSourceItems(
   }
 }
 
+async function loadGlobalAuxiliaryItems(
+  q: string,
+  requestedUniverseCode: string,
+  localItems: RankingItem[],
+  limit: number,
+) {
+  if (requestedUniverseCode === DEFAULT_UNIVERSE_CODE) {
+    return [];
+  }
+
+  const globalLimit = Math.max(0, Math.min(4, limit));
+  if (globalLimit <= 0) {
+    return [];
+  }
+
+  try {
+    const globalSourceItems = await loadSourceItems(DEFAULT_UNIVERSE_CODE);
+    const matchedGlobalItems = filterItemsByQuery(globalSourceItems, q);
+    return excludeAlreadyShownItems(matchedGlobalItems, localItems).slice(
+      0,
+      globalLimit,
+    );
+  } catch (error) {
+    console.info("[API /api/search] global auxiliary skipped", {
+      requestedUniverseCode,
+      q,
+      message: getErrorMessage(error),
+    });
+
+    return [];
+  }
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
 
@@ -309,13 +350,20 @@ export async function GET(request: NextRequest) {
   try {
     const localSourceItems = await loadSourceItems(requestedUniverseCode);
     const localItems = filterItemsByQuery(localSourceItems, q).slice(0, limit);
+    const globalItems = await loadGlobalAuxiliaryItems(
+      q,
+      requestedUniverseCode,
+      localItems,
+      limit,
+    );
 
     return NextResponse.json(
       {
         ok: true,
         universeCode: requestedUniverseCode,
+        resultOrder: ["localItems", "globalItems"],
         localItems,
-        globalItems: [],
+        globalItems,
       },
       {
         headers: { "Cache-Control": "no-store" },

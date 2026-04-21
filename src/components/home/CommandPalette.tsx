@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { RankingItem } from "../../lib/koaptix/types";
 import {
   DEFAULT_UNIVERSE_CODE,
@@ -55,6 +55,7 @@ export function CommandPalette({
   initialUniverseCode = DEFAULT_UNIVERSE_CODE,
 }: CommandPaletteProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const urlUniverseCode = normalizeUniverseCode(
@@ -228,6 +229,18 @@ export function CommandPalette({
     return globalItems;
   }, [globalItems, query]);
 
+  const rankingSearchHref = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("universe", urlUniverseCode);
+
+    const q = query.trim();
+    if (q) {
+      params.set("q", q);
+    }
+
+    return `/ranking?${params.toString()}`;
+  }, [query, urlUniverseCode]);
+
   const handleSelectItem = useCallback(
     (item: RankingItem) => {
       replaceUrlParams((params) => {
@@ -244,6 +257,11 @@ export function CommandPalette({
     },
     [replaceUrlParams],
   );
+
+  const handleOpenRankingSearch = useCallback(() => {
+    router.push(rankingSearchHref);
+    setIsOpen(false);
+  }, [rankingSearchHref, router]);
 
   const renderResultCard = (item: RankingItem) => (
     <button
@@ -317,6 +335,15 @@ export function CommandPalette({
                   placeholder="단지명, 구, 동으로 바로 검색..."
                   className="h-12 w-full rounded-2xl border border-slate-700 bg-black/30 px-4 text-lg text-white outline-none transition focus:border-cyan-400/50"
                 />
+
+                <button
+                  type="button"
+                  onClick={handleOpenRankingSearch}
+                  data-testid="command-open-ranking-search"
+                  className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-300 transition hover:border-cyan-400/50 hover:bg-cyan-500/20"
+                >
+                  TOP1000
+                </button>
 
                 <button
                   type="button"
