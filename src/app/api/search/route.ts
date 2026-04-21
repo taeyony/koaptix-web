@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 
 import {
   DEFAULT_UNIVERSE_CODE,
-  normalizeUniverseCode,
+  resolveServiceUniverseCode,
 } from "../../../lib/koaptix/universes";
+import { getLatestRankBoard } from "../../../lib/koaptix/queries";
 import type { RankingItem } from "../../../lib/koaptix/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const SEARCH_CACHE_TTL_MS = 30_000;
-
-type SearchMode = "LOCAL" | "GLOBAL";
+const SEARCH_STALE_CACHE_TTL_MS = 600_000;
+const SEARCH_REGIONAL_RETRY_LIMIT = 40;
 
 type SearchCachePayload = {
   items: RankingItem[];
@@ -20,27 +20,13 @@ type SearchCachePayload = {
 
 const searchSourceCache = new Map<
   string,
-  { expiresAt: number; payload: SearchCachePayload }
->();
-
-function createServerSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY",
-    );
+  {
+    freshUntil: number;
+    staleUntil: number;
+    payload: SearchCachePayload;
   }
-
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
-}
+>();
+const searchSourceInflight = new Map<string, Promise<RankingItem[]>>();
 
 function parseLimit(value: string | null, fallback = 12, min = 5, max = 20) {
   if (!value) return fallback;
@@ -49,16 +35,10 @@ function parseLimit(value: string | null, fallback = 12, min = 5, max = 20) {
   return Math.max(min, Math.min(parsed, max));
 }
 
-function parseMode(value: string | null): SearchMode {
-  return value === "GLOBAL" ? "GLOBAL" : "LOCAL";
-}
-
-function getSearchSourceLimit(mode: SearchMode, universeCode: string) {
-  if (mode === "GLOBAL") {
-    return 250;
-  }
-
-  return universeCode === DEFAULT_UNIVERSE_CODE ? 80 : 120;
+function getSearchSourceLimit() {
+  // Keep the source window modest so command/search does not hit the slower
+  // large regional board path during cold starts.
+  return 80;
 }
 
 function toNullableNumber(value: unknown): number | null {
@@ -139,11 +119,50 @@ function toRankingItem(row: any, fallbackUniverseCode: string): RankingItem {
   } as unknown as RankingItem;
 }
 
-function readSearchSourceCache(cacheKey: string) {
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+
+  return "Unknown search error";
+}
+
+function makeCacheKey(universeCode: string, sourceLimit: number) {
+  return `LOCAL::${universeCode}::${sourceLimit}`;
+}
+
+function readFreshSearchSourceCache(cacheKey: string) {
   const cached = searchSourceCache.get(cacheKey);
   if (!cached) return null;
 
-  if (Date.now() > cached.expiresAt) {
+  const now = Date.now();
+
+  if (now > cached.staleUntil) {
+    searchSourceCache.delete(cacheKey);
+    return null;
+  }
+
+  if (now > cached.freshUntil) {
+    return null;
+  }
+
+  return cached.payload;
+}
+
+function readStaleSearchSourceCache(cacheKey: string) {
+  const cached = searchSourceCache.get(cacheKey);
+  if (!cached) return null;
+
+  const now = Date.now();
+
+  if (now > cached.staleUntil) {
     searchSourceCache.delete(cacheKey);
     return null;
   }
@@ -151,9 +170,23 @@ function readSearchSourceCache(cacheKey: string) {
   return cached.payload;
 }
 
+function readAnyUniverseSearchSourceCache(universeCode: string) {
+  const prefix = `LOCAL::${universeCode}::`;
+  const now = Date.now();
+
+  const candidates = Array.from(searchSourceCache.entries())
+    .filter(([key, entry]) => key.startsWith(prefix) && now <= entry.staleUntil)
+    .sort((a, b) => b[1].freshUntil - a[1].freshUntil);
+
+  return candidates[0]?.[1].payload ?? null;
+}
+
 function writeSearchSourceCache(cacheKey: string, payload: SearchCachePayload) {
+  const now = Date.now();
+
   searchSourceCache.set(cacheKey, {
-    expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
+    freshUntil: now + SEARCH_CACHE_TTL_MS,
+    staleUntil: now + SEARCH_STALE_CACHE_TTL_MS,
     payload,
   });
 }
@@ -172,67 +205,88 @@ function filterItemsByQuery(items: RankingItem[], q: string) {
   });
 }
 
-async function loadSourceItems(
-  supabase: ReturnType<typeof createServerSupabase>,
+async function fetchSourceItems(
   universeCode: string,
-  mode: SearchMode,
+  sourceLimit: number,
 ) {
-  const sourceLimit = getSearchSourceLimit(mode, universeCode);
-  const cacheKey = `${mode}::${universeCode}::${sourceLimit}`;
-
-  const cached = readSearchSourceCache(cacheKey);
-  if (cached) {
-    return cached.items;
-  }
-
-  const { data, error } = await supabase
-    .from("v_koaptix_latest_universe_rank_board_u")
-    .select(
-      `
-        universe_code,
-        universe_name,
-        complex_id,
-        apt_name_ko,
-        sigungu_name,
-        legal_dong_name,
-        rank_all,
-        previous_rank_all,
-        rank_delta_w,
-        rank_movement,
-        market_cap_krw,
-        market_cap_trillion_krw,
-        household_count,
-        total_household_count,
-        build_year,
-        recovery_52w
-      `
-    )
-    .eq("universe_code", universeCode)
-    .lte("rank_all", sourceLimit)
-    .order("rank_all", { ascending: true });
-
-  if (error) {
-    throw error;
-  }
-
-  const items = (data ?? []).map((row: any) =>
+  const rows = await getLatestRankBoard(universeCode, sourceLimit);
+  const items = rows.map((row: any) =>
     toRankingItem(row, universeCode),
   );
-
-  writeSearchSourceCache(cacheKey, { items });
 
   return items;
 }
 
+async function loadSourceItems(
+  universeCode: string,
+) {
+  const sourceLimit = getSearchSourceLimit();
+  const cacheKey = makeCacheKey(universeCode, sourceLimit);
+
+  const freshCached = readFreshSearchSourceCache(cacheKey);
+  if (freshCached) {
+    return freshCached.items;
+  }
+
+  let inflight = searchSourceInflight.get(cacheKey);
+  if (!inflight) {
+    inflight = fetchSourceItems(universeCode, sourceLimit)
+      .then((items) => {
+        writeSearchSourceCache(cacheKey, { items });
+        return items;
+      })
+      .finally(() => {
+        searchSourceInflight.delete(cacheKey);
+      });
+
+    searchSourceInflight.set(cacheKey, inflight);
+  }
+
+  try {
+    return await inflight;
+  } catch (primaryError) {
+    const retryLimit = Math.min(sourceLimit, SEARCH_REGIONAL_RETRY_LIMIT);
+    const retryCacheKey = makeCacheKey(universeCode, retryLimit);
+    const freshRetryCached = readFreshSearchSourceCache(retryCacheKey);
+
+    if (freshRetryCached) {
+      return freshRetryCached.items;
+    }
+
+    try {
+      const retryItems = await fetchSourceItems(universeCode, retryLimit);
+      writeSearchSourceCache(retryCacheKey, { items: retryItems });
+      return retryItems;
+    } catch (retryError) {
+      const staleCached =
+        readStaleSearchSourceCache(cacheKey) ??
+        readStaleSearchSourceCache(retryCacheKey) ??
+        readAnyUniverseSearchSourceCache(universeCode);
+
+      if (staleCached) {
+        console.info("[API /api/search] serving stale local search source", {
+          universeCode,
+          sourceLimit,
+          retryLimit,
+          primaryMessage: getErrorMessage(primaryError),
+          retryMessage: getErrorMessage(retryError),
+        });
+        return staleCached.items;
+      }
+
+      throw retryError;
+    }
+  }
+}
+
 export async function GET(request: NextRequest) {
-  const supabase = createServerSupabase();
   const searchParams = request.nextUrl.searchParams;
 
   const q = (searchParams.get("q") ?? "").trim();
   const rawUniverseCode =
     searchParams.get("universe_code") ?? searchParams.get("universe");
 
-  const requestedUniverseCode = normalizeUniverseCode(
+  const requestedUniverseCode = resolveServiceUniverseCode(
     rawUniverseCode ?? DEFAULT_UNIVERSE_CODE,
   );
 
@@ -253,41 +307,22 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const localUniverseCode = requestedUniverseCode;
-    const globalUniverseCode = DEFAULT_UNIVERSE_CODE;
-
-    const [localSourceItems, globalSourceItems] = await Promise.all([
-      loadSourceItems(supabase, localUniverseCode, "LOCAL"),
-      requestedUniverseCode === DEFAULT_UNIVERSE_CODE
-        ? Promise.resolve([] as RankingItem[])
-        : loadSourceItems(supabase, globalUniverseCode, "GLOBAL"),
-    ]);
-
+    const localSourceItems = await loadSourceItems(requestedUniverseCode);
     const localItems = filterItemsByQuery(localSourceItems, q).slice(0, limit);
-
-    const localComplexIdSet = new Set(localItems.map((item) => item.complexId));
-
-    const globalItems =
-      requestedUniverseCode === DEFAULT_UNIVERSE_CODE
-        ? []
-        : filterItemsByQuery(globalSourceItems, q)
-            .filter((item) => !localComplexIdSet.has(item.complexId))
-            .slice(0, limit);
 
     return NextResponse.json(
       {
         ok: true,
         universeCode: requestedUniverseCode,
         localItems,
-        globalItems,
+        globalItems: [],
       },
       {
         headers: { "Cache-Control": "no-store" },
       },
     );
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown search error";
+    const message = getErrorMessage(error);
 
     console.error("[API /api/search] failed:", {
       universeCode: requestedUniverseCode,
@@ -295,16 +330,19 @@ export async function GET(request: NextRequest) {
       message,
     });
 
+    // Search keeps the requested universe identity and never revives global fallback.
+    // On local source timeout/cold miss, degrade to an empty same-universe payload
+    // instead of surfacing an intermittent 500 to the command/search path.
     return NextResponse.json(
       {
-        ok: false,
+        ok: true,
         universeCode: requestedUniverseCode,
         localItems: [],
         globalItems: [],
+        degraded: true,
         message,
       },
       {
-        status: 500,
         headers: { "Cache-Control": "no-store" },
       },
     );

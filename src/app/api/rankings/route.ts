@@ -1,36 +1,39 @@
+/**
+ * Tactical ranking delivery route.
+ * 특정 macro timeout은 readiness 문제와 분리해 cold-path delivery 이슈로 본다.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+/**
+ * Route role marker:
+ * - /api/rankings is the home lightweight tactical board endpoint.
+ * - It is intentionally capped for fast regional transitions.
+ * - Canonical request contract is universe_code.
+ * - Do not merge with /api/ranking; TOP1000 uses the full-board route.
+ */
+
 import {
   DEFAULT_UNIVERSE_CODE,
-  normalizeUniverseCode,
+  resolveServiceUniverseCode,
 } from "../../../lib/koaptix/universes";
 import type { RankingItem } from "../../../lib/koaptix/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-/**
- * Home tactical board delivery only.
- * Do not revert to legacy board source.
- * Source of truth:
- * koaptix_rank_snapshot
- * -> v_koaptix_universe_rank_history_dynamic
- * -> v_koaptix_latest_universe_rank_board_u
- */
-/**
- * 운영 메모:
- * - 이 route는 home tactical board client transition 전용 delivery path다.
- * - source of truth는 계속 v_koaptix_latest_universe_rank_board_u를 유지한다.
- * - initial SSR seed는 src/app/page.tsx -> getLatestRankBoard direct path를 사용한다.
- * - BUSAN cold timeout은 프론트가 아니라 DB read path 병목이 원인이었고,
- *   snapshot 기반 universe read path 정렬 후 완화됐다.
- */
+
 const HOME_DEFAULT_LIMIT = 20;
 const HOME_MAX_LIMIT = 20;
 
-const BOARD_CACHE_FRESH_TTL_MS = 20_000;
-const BOARD_CACHE_STALE_TTL_MS = 180_000;
-const QUERY_TIMEOUT_MS = 3_400;
+const BOARD_CACHE_FRESH_TTL_MS = 60_000;
+const BOARD_CACHE_STALE_TTL_MS = 600_000;
+
+const LATEST_BOARD_TIMEOUT_MS_REGIONAL = 1_100;
+const DYNAMIC_BOARD_TIMEOUT_MS_KOREA = 7_000;
+const DYNAMIC_BOARD_TIMEOUT_MS_REGIONAL = 4_500;
+
+const LATEST_BOARD_COOLDOWN_MS = 180_000;
 
 type CachedBoardPayload = {
   ok: true;
@@ -47,6 +50,36 @@ type CachedBoardEntry = {
 
 const boardCache = new Map<string, CachedBoardEntry>();
 const boardInflight = new Map<string, Promise<CachedBoardPayload>>();
+
+// 🚨 지차장 지시 A: 로그 다이어트용 헬퍼 및 상수 추가 🚨
+const QUIET_RANKINGS_LOG_WINDOW_MS = 180_000;
+const quietRankingsLogAt = new Map<string, number>();
+
+function shouldEmitQuietRankingsLog(key: string) {
+  const now = Date.now();
+  const last = quietRankingsLogAt.get(key) ?? 0;
+
+  if (now - last < QUIET_RANKINGS_LOG_WINDOW_MS) {
+    return false;
+  }
+
+  quietRankingsLogAt.set(key, now);
+  return true;
+}
+
+function logQuietRankingsFallback(
+  key: string,
+  message: string,
+  payload: Record<string, unknown>,
+) {
+  const verbose = process.env.KOAPTIX_VERBOSE_FALLBACK_LOGS === "1";
+
+  if (verbose || shouldEmitQuietRankingsLog(key)) {
+    console.info(message, payload);
+  }
+}
+
+const latestBoardCooldownUntil = new Map<string, number>();
 
 function createServerSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -79,15 +112,48 @@ function parseLimit(
   return Math.max(min, Math.min(Math.trunc(parsed), max));
 }
 
+function getEffectiveBoardLimit(requestedLimit: number, universeCode: string) {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) {
+    return Math.min(requestedLimit, 12);
+  }
+
+  return requestedLimit;
+}
+
 function getRetryLimits(requestedLimit: number) {
-  const candidates = [requestedLimit, 16, 12, 8];
+  const secondary = Math.max(8, Math.min(requestedLimit, 12));
+
   return Array.from(
     new Set(
-      candidates.filter(
-        (n) => Number.isFinite(n) && n > 0 && n <= Math.max(requestedLimit, 8),
+      [requestedLimit, secondary].filter(
+        (n) => Number.isFinite(n) && n > 0 && n <= requestedLimit,
       ),
     ),
   );
+}
+
+function isLatestBoardCoolingDown(universeCode: string) {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) return false;
+
+  const until = latestBoardCooldownUntil.get(universeCode) ?? 0;
+  if (until <= Date.now()) {
+    latestBoardCooldownUntil.delete(universeCode);
+    return false;
+  }
+
+  return true;
+}
+
+function markLatestBoardCooldown(universeCode: string) {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) return;
+  latestBoardCooldownUntil.set(
+    universeCode,
+    Date.now() + LATEST_BOARD_COOLDOWN_MS,
+  );
+}
+
+function clearLatestBoardCooldown(universeCode: string) {
+  latestBoardCooldownUntil.delete(universeCode);
 }
 
 function toNullableNumber(value: unknown): number | null {
@@ -112,41 +178,30 @@ function toRankingItem(row: any, universeCode: string): RankingItem {
 
   return {
     complexId: String(row.complex_id ?? row.id),
-
     name: row.apt_name_ko ?? row.name ?? "",
     apt_name_ko: row.apt_name_ko ?? row.name ?? "",
-
     rank: row.rank_all ?? row.rank ?? 0,
     rank_all: row.rank_all ?? row.rank ?? 0,
-
     sigunguName: row.sigungu_name ?? "",
     sigungu_name: row.sigungu_name ?? "",
-
     legalDongName: row.legal_dong_name ?? "",
     legal_dong_name: row.legal_dong_name ?? "",
-
     marketCapKrw: row.market_cap_krw ?? 0,
     market_cap_krw: row.market_cap_krw ?? 0,
-
     marketCapTrillionKrw: row.market_cap_trillion_krw ?? 0,
     market_cap_trillion_krw: row.market_cap_trillion_krw ?? 0,
-
     rankDelta7d: toNullableNumber(row.rank_delta_w ?? row.rank_delta_7d),
     rank_delta_w: toNullableNumber(row.rank_delta_w ?? row.rank_delta_7d),
-
     rankMovement: row.rank_movement ?? null,
     rank_movement: row.rank_movement ?? null,
-
     previousRankAll: toNullableNumber(row.previous_rank_all),
     previous_rank_all: toNullableNumber(row.previous_rank_all),
-
     recoveryRate52w: toNullableNumber(
       row.recovery_52w ?? row.recovery_rate_52w,
     ),
     recovery_52w: toNullableNumber(
       row.recovery_52w ?? row.recovery_rate_52w,
     ),
-
     locationLabel: [
       row.sigungu_name ?? "",
       row.legal_dong_name ?? "",
@@ -154,20 +209,16 @@ function toRankingItem(row: any, universeCode: string): RankingItem {
     ]
       .filter(Boolean)
       .join(" "),
-
     households: toNullableNumber(
       row.household_count ?? row.total_household_count ?? row.households,
     ),
     household_count: toNullableNumber(
       row.household_count ?? row.total_household_count ?? row.households,
     ),
-
     buildYear,
     build_year: buildYear,
-
     ageYears: buildYear ? new Date().getFullYear() - buildYear : null,
     age_years: buildYear ? new Date().getFullYear() - buildYear : null,
-
     universeCode: row.universe_code ?? universeCode,
     universe_code: row.universe_code ?? universeCode,
     universeName: row.universe_name ?? null,
@@ -270,7 +321,154 @@ function getErrorMessage(error: unknown) {
   return "Unknown rankings error";
 }
 
-async function fetchBoardPayload(
+function buildTierMeta(rankAll: number | null) {
+  if (rankAll === null) {
+    return {
+      tier_code: "E",
+      tier_label: "Top 1000+",
+      tier_sort: 6,
+      is_top1000: false,
+    };
+  }
+
+  if (rankAll <= 10) {
+    return {
+      tier_code: "S",
+      tier_label: "Top 10",
+      tier_sort: 1,
+      is_top1000: true,
+    };
+  }
+
+  if (rankAll <= 50) {
+    return {
+      tier_code: "A",
+      tier_label: "Top 50",
+      tier_sort: 2,
+      is_top1000: true,
+    };
+  }
+
+  if (rankAll <= 100) {
+    return {
+      tier_code: "B",
+      tier_label: "Top 100",
+      tier_sort: 3,
+      is_top1000: true,
+    };
+  }
+
+  if (rankAll <= 300) {
+    return {
+      tier_code: "C",
+      tier_label: "Top 300",
+      tier_sort: 4,
+      is_top1000: true,
+    };
+  }
+
+  if (rankAll <= 1000) {
+    return {
+      tier_code: "D",
+      tier_label: "Top 1000",
+      tier_sort: 5,
+      is_top1000: true,
+    };
+  }
+
+  return {
+    tier_code: "E",
+    tier_label: "Top 1000+",
+    tier_sort: 6,
+    is_top1000: false,
+  };
+}
+
+async function fetchBoardPayloadFromDynamic(
+  supabase: ReturnType<typeof createServerSupabase>,
+  universeCode: string,
+  requestedLimit: number,
+): Promise<CachedBoardPayload> {
+  const effectiveLimit = getEffectiveBoardLimit(requestedLimit, universeCode);
+
+  const { data: latestSnapshot, error: latestSnapshotError } = await supabase
+    .from("koaptix_rank_snapshot")
+    .select("snapshot_date")
+    .eq("universe_code", universeCode)
+    .order("snapshot_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestSnapshotError) {
+    throw latestSnapshotError;
+  }
+
+  if (!latestSnapshot?.snapshot_date) {
+    return {
+      ok: true,
+      universeCode,
+      count: 0,
+      items: [],
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("v_koaptix_universe_rank_history_dynamic")
+    .select(
+      `
+        snapshot_date,
+        universe_code,
+        universe_name,
+        universe_scope,
+        complex_id,
+        apt_name_ko,
+        sigungu_name,
+        legal_dong_name,
+        build_year,
+        household_count,
+        total_household_count,
+        recovery_52w,
+        rank_all,
+        market_cap_krw,
+        market_cap_trillion_krw,
+        market_cap_share,
+        market_cap_share_pct
+      `,
+    )
+    .eq("universe_code", universeCode)
+    .eq("snapshot_date", latestSnapshot.snapshot_date)
+    .order("rank_all", { ascending: true })
+    .limit(effectiveLimit);
+
+  if (error) {
+    throw error;
+  }
+
+  const items = (data ?? []).map((row: any) => {
+    const rankAll = toNullableNumber(row.rank_all);
+    const tier = buildTierMeta(rankAll);
+
+    return toRankingItem(
+      {
+        ...row,
+        previous_rank_all: null,
+        rank_delta_w: null,
+        rank_movement: null,
+        ...tier,
+      },
+      universeCode,
+    );
+  });
+
+  return {
+    ok: true,
+    universeCode,
+    count: items.length,
+    items,
+  };
+}
+
+async function fetchBoardPayloadFromLatestBoard(
   supabase: ReturnType<typeof createServerSupabase>,
   universeCode: string,
   requestedLimit: number,
@@ -309,10 +507,12 @@ async function fetchBoardPayload(
       const queryResult = await withTimeout<{
         data: any[] | null;
         error: { message: string } | null;
-      }>(queryPromise, QUERY_TIMEOUT_MS);
+      }>(queryPromise, LATEST_BOARD_TIMEOUT_MS_REGIONAL);
 
       const { data, error } = queryResult;
       if (error) throw error;
+
+      clearLatestBoardCooldown(universeCode);
 
       const items = (data ?? []).map((row: any) =>
         toRankingItem(row, universeCode),
@@ -326,10 +526,53 @@ async function fetchBoardPayload(
       };
     } catch (error) {
       lastError = error;
+      markLatestBoardCooldown(universeCode);
+
+      // 🚨 지차장 지시 B: latest attempt failed warn 교체 🚨
+      logQuietRankingsFallback(
+        `rankings:latest-attempt:${universeCode}`,
+        "[API /api/rankings] latest board attempt timed out",
+        {
+          universeCode,
+          attemptLimit,
+          message: getErrorMessage(error),
+        },
+      );
+
+      break;
     }
   }
 
   throw lastError;
+}
+
+async function fetchBoardPayload(
+  supabase: ReturnType<typeof createServerSupabase>,
+  universeCode: string,
+  requestedLimit: number,
+): Promise<CachedBoardPayload> {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) {
+    const payload = await withTimeout<CachedBoardPayload>(
+      fetchBoardPayloadFromDynamic(supabase, universeCode, requestedLimit),
+      DYNAMIC_BOARD_TIMEOUT_MS_KOREA,
+    );
+
+    if (process.env.KOAPTIX_VERBOSE_FALLBACK_LOGS === "1") {
+      console.info("[API /api/rankings] KOREA_ALL dynamic-only path hit", {
+        universeCode,
+        requestedLimit,
+        count: payload.items.length,
+      });
+    }
+
+    return payload;
+  }
+
+  // Regional client transitions avoid the slow latest-board cold path.
+  return await withTimeout<CachedBoardPayload>(
+    fetchBoardPayloadFromDynamic(supabase, universeCode, requestedLimit),
+    DYNAMIC_BOARD_TIMEOUT_MS_REGIONAL,
+  );
 }
 
 export async function GET(request: NextRequest) {
@@ -339,7 +582,7 @@ export async function GET(request: NextRequest) {
   const rawUniverseCode =
     searchParams.get("universe_code") ?? searchParams.get("universe");
 
-  const universeCode = normalizeUniverseCode(
+  const universeCode = resolveServiceUniverseCode(
     rawUniverseCode ?? DEFAULT_UNIVERSE_CODE,
   );
 

@@ -1,35 +1,97 @@
+/**
+ * Tactical map delivery route.
+ * KOREA_ALL / macro map은 source of truth 체인을 유지한 채 delivery 최적화로 안정화한다.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 import {
   DEFAULT_UNIVERSE_CODE,
-  normalizeUniverseCode,
+  resolveServiceUniverseCode,
 } from "../../../lib/koaptix/universes";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-/**
- * Home tactical radar delivery only.
- * Keep source of truth on v_koaptix_latest_universe_rank_board_u.
- * Solve timeouts by lighter limits / cache / retry, not by source rollback.
- */
-/**
- * 운영 메모:
- * - 이 route는 home tactical radar client transition 전용 delivery path다.
- * - home board와 같은 universe_code contract를 유지해야 한다.
- * - map과 board의 contract mismatch를 다시 만들지 않도록
- *   tactical board 기준과 함께 점검한다.
- */
 const HOME_BOARD_TACTICAL_LIMIT = 20;
 
-const MAP_DEFAULT_LIMIT_KOREA = 160;
-const MAP_DEFAULT_LIMIT_REGIONAL = 72;
-const MAP_MAX_LIMIT = 220;
+const MAP_DEFAULT_LIMIT_KOREA = 32;
+const MAP_DEFAULT_LIMIT_REGIONAL = 44;
+const MAP_MAX_LIMIT = 120;
 
-const MAP_CACHE_FRESH_TTL_MS = 45_000;
-const MAP_CACHE_STALE_TTL_MS = 300_000;
-const MAP_QUERY_TIMEOUT_MS = 2_200;
+const MAP_CACHE_FRESH_TTL_MS = 90_000;
+const MAP_CACHE_STALE_TTL_MS = 900_000;
+
+const LATEST_MAP_TIMEOUT_MS_REGIONAL = 1_100;
+const DYNAMIC_MAP_TIMEOUT_MS_KOREA = 8_500;
+const DYNAMIC_MAP_TIMEOUT_MS_REGIONAL = 5_500;
+
+const LATEST_MAP_COOLDOWN_MS = 180_000;
+
+const UNIVERSE_SCOPE_LABELS: Record<string, string> = {
+  SEOUL_ALL: "서울특별시",
+  BUSAN_ALL: "부산광역시",
+  DAEGU_ALL: "대구광역시",
+  INCHEON_ALL: "인천광역시",
+  GWANGJU_ALL: "광주광역시",
+  DAEJEON_ALL: "대전광역시",
+  ULSAN_ALL: "울산광역시",
+  SEJONG_ALL: "세종특별자치시",
+  GYEONGGI_ALL: "경기도",
+  GANGWON_ALL: "강원특별자치도",
+  CHUNGBUK_ALL: "충청북도",
+  CHUNGNAM_ALL: "충청남도",
+  JEONBUK_ALL: "전북특별자치도",
+  JEONNAM_ALL: "전라남도",
+  GYEONGBUK_ALL: "경상북도",
+  GYEONGNAM_ALL: "경상남도",
+  JEJU_ALL: "제주특별자치도",
+};
+
+const SGG_PREFIX_SCOPE_LABELS: Record<string, string> = {
+  "11": "서울특별시",
+  "26": "부산광역시",
+  "27": "대구광역시",
+  "28": "인천광역시",
+  "29": "광주광역시",
+  "30": "대전광역시",
+  "31": "울산광역시",
+  "36": "세종특별자치시",
+  "41": "경기도",
+  "42": "강원특별자치도",
+  "43": "충청북도",
+  "44": "충청남도",
+  "45": "전북특별자치도",
+  "46": "전라남도",
+  "47": "경상북도",
+  "48": "경상남도",
+  "50": "제주특별자치도",
+  "51": "강원특별자치도",
+  "52": "전북특별자치도",
+};
+
+const SGG_PREFIX_SCOPE_SHORT_LABELS: Record<string, string> = {
+  "11": "서울",
+  "26": "부산",
+  "27": "대구",
+  "28": "인천",
+  "29": "광주",
+  "30": "대전",
+  "31": "울산",
+  "36": "세종",
+  "41": "경기",
+  "42": "강원",
+  "43": "충북",
+  "44": "충남",
+  "45": "전북",
+  "46": "전남",
+  "47": "경북",
+  "48": "경남",
+  "50": "제주",
+  "51": "강원",
+  "52": "전북",
+};
 
 type MapDistrictItem = {
   name: string;
@@ -62,8 +124,66 @@ type CachedMapEntry = {
   payload: CachedMapPayload;
 };
 
+type ComplexRegionMapRow = {
+  complex_id: number | string | null;
+  lawd_cd: number | string | null;
+  sgg_cd: number | string | null;
+};
+
+type ComplexScopeMeta = {
+  fullLabel: string | null;
+  shortLabel: string | null;
+};
+
 const mapCache = new Map<string, CachedMapEntry>();
 const mapInflight = new Map<string, Promise<CachedMapPayload>>();
+
+// 🚨 지차장 지시 A: 로그 다이어트용 헬퍼 및 상수 추가 🚨
+const QUIET_MAP_LOG_WINDOW_MS = 180_000;
+const quietMapLogAt = new Map<string, number>();
+
+function shouldEmitQuietMapLog(key: string) {
+  const now = Date.now();
+  const last = quietMapLogAt.get(key) ?? 0;
+
+  if (now - last < QUIET_MAP_LOG_WINDOW_MS) {
+    return false;
+  }
+
+  quietMapLogAt.set(key, now);
+  return true;
+}
+
+function logQuietMapFallback(
+  key: string,
+  message: string,
+  payload: Record<string, unknown>,
+) {
+  const verbose = process.env.KOAPTIX_VERBOSE_FALLBACK_LOGS === "1";
+
+  if (verbose || shouldEmitQuietMapLog(key)) {
+    console.info(message, payload);
+  }
+}
+
+const latestMapCooldownUntil = new Map<string, number>();
+
+function isLatestMapCoolingDown(universeCode: string) {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) return false;
+
+  const until = latestMapCooldownUntil.get(universeCode) ?? 0;
+  if (until <= Date.now()) {
+    latestMapCooldownUntil.delete(universeCode);
+    return false;
+  }
+
+  return true;
+}
+
+function markLatestMapCooldown(universeCode: string) {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) return;
+  latestMapCooldownUntil.set(universeCode, Date.now() + LATEST_MAP_COOLDOWN_MS);
+}
 
 function createServerSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -102,21 +222,27 @@ function getDefaultMapLimit(universeCode: string) {
     : MAP_DEFAULT_LIMIT_REGIONAL;
 }
 
-function getRetryLimits(requestedLimit: number, universeCode: string) {
-  const floor = universeCode === DEFAULT_UNIVERSE_CODE ? 60 : 36;
+function getEffectiveRequestedLimit(
+  requestedLimit: number,
+  universeCode: string,
+) {
+  if (universeCode !== DEFAULT_UNIVERSE_CODE) {
+    return requestedLimit;
+  }
 
-  const candidates = [
-    requestedLimit,
-    Math.max(Math.floor(requestedLimit * 0.75), floor),
-    Math.max(Math.floor(requestedLimit * 0.56), floor),
-    floor,
-  ];
+  if (requestedLimit <= 32) return 56;
+  if (requestedLimit <= 52) return 72;
+  return 88;
+}
+
+function getRetryLimits(requestedLimit: number) {
+  const secondary = Math.max(20, Math.floor(requestedLimit * 0.7));
 
   return Array.from(
     new Set(
-      candidates
-        .map((n) => Math.max(20, Math.min(n, requestedLimit)))
-        .filter((n) => Number.isFinite(n) && n > 0),
+      [requestedLimit, secondary].filter(
+        (n) => Number.isFinite(n) && n > 0 && n <= requestedLimit,
+      ),
     ),
   );
 }
@@ -143,16 +269,145 @@ function toNumber(value: unknown) {
   return toNullableNumber(value) ?? 0;
 }
 
-function buildRepresentativeQuery(row: any) {
+function getUniverseScopeLabel(universeCode: string) {
+  if (universeCode.startsWith("SGG_")) {
+    const prefix = universeCode.slice(4, 6);
+    return SGG_PREFIX_SCOPE_LABELS[prefix] ?? "";
+  }
+
+  return UNIVERSE_SCOPE_LABELS[universeCode] ?? "";
+}
+
+function resolveScopePrefix(row: ComplexRegionMapRow) {
+  if (row.sgg_cd != null && String(row.sgg_cd).trim() !== "") {
+    return String(row.sgg_cd).slice(0, 2);
+  }
+
+  if (row.lawd_cd != null && String(row.lawd_cd).trim() !== "") {
+    return String(row.lawd_cd).slice(0, 2);
+  }
+
+  return null;
+}
+
+function getScopeMetaByPrefix(prefix: string | null): ComplexScopeMeta {
+  if (!prefix) {
+    return {
+      fullLabel: null,
+      shortLabel: null,
+    };
+  }
+
+  return {
+    fullLabel: SGG_PREFIX_SCOPE_LABELS[prefix] ?? null,
+    shortLabel: SGG_PREFIX_SCOPE_SHORT_LABELS[prefix] ?? null,
+  };
+}
+
+function extractComplexIds(rows: any[]): number[] {
+  return rows
+    .map((row) => {
+      const parsed = Number(row.complex_id);
+      return Number.isFinite(parsed) ? parsed : null;
+    })
+    .filter((value): value is number => value !== null);
+}
+
+async function fetchComplexScopeMetaMap(
+  supabase: ReturnType<typeof createServerSupabase>,
+  complexIds: number[],
+): Promise<Map<string, ComplexScopeMeta>> {
+  if (complexIds.length === 0) return new Map();
+
+  try {
+    const { data, error } = await supabase
+      .from("koaptix_complex_region_map")
+      .select("complex_id, lawd_cd, sgg_cd")
+      .in("complex_id", complexIds);
+
+    if (error) throw error;
+
+    const result = new Map<string, ComplexScopeMeta>();
+
+    for (const row of (data ?? []) as ComplexRegionMapRow[]) {
+      const key =
+        row.complex_id === null || row.complex_id === undefined
+          ? ""
+          : String(row.complex_id);
+
+      if (!key || result.has(key)) continue;
+
+      result.set(key, getScopeMetaByPrefix(resolveScopePrefix(row)));
+    }
+
+    return result;
+  } catch (error) {
+    console.warn("[API /api/map] scope meta lookup failed:", error);
+    return new Map();
+  }
+}
+
+function buildRepresentativeQuery(
+  row: any,
+  universeCode: string,
+  explicitScopeLabel?: string | null,
+) {
+  const scopeLabel = explicitScopeLabel ?? getUniverseScopeLabel(universeCode);
   const sigungu = row.sigungu_name?.trim?.() ?? "";
   const dong = row.legal_dong_name?.trim?.() ?? "";
   const aptName = row.apt_name_ko?.trim?.() ?? "";
+
+  if (scopeLabel && sigungu && dong) return `${scopeLabel} ${sigungu} ${dong}`;
+  if (scopeLabel && sigungu && aptName)
+    return `${scopeLabel} ${sigungu} ${aptName}`;
+  if (scopeLabel && sigungu) return `${scopeLabel} ${sigungu}`;
 
   if (sigungu && dong) return `${sigungu} ${dong}`;
   if (sigungu && aptName) return `${sigungu} ${aptName}`;
   if (sigungu) return sigungu;
   if (dong) return dong;
   return aptName;
+}
+
+function buildDistrictIdentity(
+  row: any,
+  universeCode: string,
+  scopeMeta: ComplexScopeMeta | null,
+) {
+  const district =
+    typeof row.sigungu_name === "string" ? row.sigungu_name.trim() : "";
+
+  if (!district) {
+    return {
+      groupKey: "",
+      displayName: "",
+      query: "",
+    };
+  }
+
+  if (universeCode === DEFAULT_UNIVERSE_CODE && scopeMeta?.shortLabel) {
+    const displayName = `${scopeMeta.shortLabel} ${district}`;
+
+    return {
+      groupKey: displayName,
+      displayName,
+      query: buildRepresentativeQuery(
+        row,
+        universeCode,
+        scopeMeta.fullLabel ?? null,
+      ),
+    };
+  }
+
+  return {
+    groupKey: district,
+    displayName: district,
+    query: buildRepresentativeQuery(
+      row,
+      universeCode,
+      scopeMeta?.fullLabel ?? null,
+    ),
+  };
 }
 
 function makeCacheKey(universeCode: string, limit: number) {
@@ -250,10 +505,17 @@ function getErrorMessage(error: unknown) {
   return "Unknown map error";
 }
 
-function rowsToMapPayload(
+async function rowsToMapPayload(
+  supabase: ReturnType<typeof createServerSupabase>,
   rows: any[],
   universeCode: string,
-): CachedMapPayload {
+): Promise<CachedMapPayload> {
+  const complexIds = extractComplexIds(rows);
+  const scopeMetaMap =
+    universeCode === DEFAULT_UNIVERSE_CODE
+      ? await fetchComplexScopeMetaMap(supabase, complexIds)
+      : new Map<string, ComplexScopeMeta>();
+
   const grouped = new Map<
     string,
     {
@@ -262,36 +524,38 @@ function rowsToMapPayload(
       totalMarketCap: number;
       totalDelta: number;
       count: number;
-
       boardCount: number;
-
       primaryComplexId: string | null;
       primaryComplexName: string | null;
       primaryRank: number | null;
-
       peakComplexMarketCap: number;
       peakComplexName: string | null;
     }
   >();
 
   for (const row of rows) {
-    const district =
-      typeof row.sigungu_name === "string" ? row.sigungu_name.trim() : "";
-
-    if (!district) continue;
-
-    const rankAll = toNullableNumber(row.rank_all);
-    const marketCap = toNumber(row.market_cap_krw);
-    const delta = toNullableNumber(row.rank_delta_w) ?? 0;
-    const query = buildRepresentativeQuery(row);
     const complexId =
       row.complex_id === null || row.complex_id === undefined
         ? null
         : String(row.complex_id);
+
+    const scopeMeta = complexId ? scopeMetaMap.get(complexId) ?? null : null;
+
+    const { groupKey, displayName, query } = buildDistrictIdentity(
+      row,
+      universeCode,
+      scopeMeta,
+    );
+
+    if (!groupKey || !displayName) continue;
+
+    const rankAll = toNullableNumber(row.rank_all);
+    const marketCap = toNumber(row.market_cap_krw);
+    const delta = toNullableNumber(row.rank_delta_w) ?? 0;
     const complexName =
       typeof row.apt_name_ko === "string" ? row.apt_name_ko : null;
 
-    const existing = grouped.get(district);
+    const existing = grouped.get(groupKey);
 
     if (existing) {
       existing.totalMarketCap += marketCap;
@@ -327,20 +591,17 @@ function rowsToMapPayload(
       continue;
     }
 
-    grouped.set(district, {
-      name: district,
+    grouped.set(groupKey, {
+      name: displayName,
       query,
       totalMarketCap: marketCap,
       totalDelta: delta,
       count: 1,
-
       boardCount:
         rankAll !== null && rankAll <= HOME_BOARD_TACTICAL_LIMIT ? 1 : 0,
-
       primaryComplexId: complexId,
       primaryComplexName: complexName,
       primaryRank: rankAll,
-
       peakComplexMarketCap: marketCap,
       peakComplexName: complexName,
     });
@@ -353,14 +614,11 @@ function rowsToMapPayload(
       totalMarketCap: group.totalMarketCap,
       averageDelta: group.count > 0 ? group.totalDelta / group.count : 0,
       count: group.count,
-
       boardCount: group.boardCount,
       isBoardBacked: group.boardCount > 0,
-
       primaryComplexId: group.primaryComplexId,
       primaryComplexName: group.primaryComplexName,
       primaryRank: group.primaryRank,
-
       peakComplexMarketCap: group.peakComplexMarketCap,
       peakComplexName: group.peakComplexName,
     }))
@@ -374,12 +632,71 @@ function rowsToMapPayload(
   };
 }
 
-async function fetchMapPayload(
+async function fetchMapPayloadFromDynamic(
   supabase: ReturnType<typeof createServerSupabase>,
   universeCode: string,
   requestedLimit: number,
 ): Promise<CachedMapPayload> {
-  const retryLimits = getRetryLimits(requestedLimit, universeCode);
+  const effectiveLimit = getEffectiveRequestedLimit(requestedLimit, universeCode);
+
+  const { data: latestSnapshot, error: latestSnapshotError } = await supabase
+    .from("koaptix_rank_snapshot")
+    .select("snapshot_date")
+    .eq("universe_code", universeCode)
+    .order("snapshot_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestSnapshotError) {
+    throw latestSnapshotError;
+  }
+
+  if (!latestSnapshot?.snapshot_date) {
+    return {
+      ok: true,
+      universeCode,
+      count: 0,
+      items: [],
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("v_koaptix_universe_rank_history_dynamic")
+    .select(
+      `
+        snapshot_date,
+        universe_code,
+        complex_id,
+        apt_name_ko,
+        sigungu_name,
+        legal_dong_name,
+        rank_all,
+        market_cap_krw
+      `,
+    )
+    .eq("universe_code", universeCode)
+    .eq("snapshot_date", latestSnapshot.snapshot_date)
+    .order("rank_all", { ascending: true })
+    .limit(effectiveLimit);
+
+  if (error) {
+    throw error;
+  }
+
+  const normalizedRows = (data ?? []).map((row: any) => ({
+    ...row,
+    rank_delta_w: null,
+  }));
+
+  return rowsToMapPayload(supabase, normalizedRows, universeCode);
+}
+
+async function fetchMapPayloadFromLatestBoard(
+  supabase: ReturnType<typeof createServerSupabase>,
+  universeCode: string,
+  requestedLimit: number,
+): Promise<CachedMapPayload> {
+  const retryLimits = getRetryLimits(requestedLimit);
   let lastError: unknown = new Error("MAP_FAILED");
 
   for (const attemptLimit of retryLimits) {
@@ -405,18 +722,63 @@ async function fetchMapPayload(
       const queryResult = await withTimeout<{
         data: any[] | null;
         error: { message: string } | null;
-      }>(queryPromise, MAP_QUERY_TIMEOUT_MS);
+      }>(queryPromise, LATEST_MAP_TIMEOUT_MS_REGIONAL);
 
       const { data, error } = queryResult;
       if (error) throw error;
 
-      return rowsToMapPayload(data ?? [], universeCode);
+      latestMapCooldownUntil.delete(universeCode);
+
+      return rowsToMapPayload(supabase, data ?? [], universeCode);
     } catch (error) {
       lastError = error;
+      markLatestMapCooldown(universeCode);
+
+      // 🚨 지차장 지시 B: latest attempt failed warn을 logQuietMapFallback으로 교체 🚨
+      logQuietMapFallback(
+        `map:latest-attempt:${universeCode}`,
+        "[API /api/map] latest board attempt timed out",
+        {
+          universeCode,
+          attemptLimit,
+          message: getErrorMessage(error),
+        },
+      );
+
+      break;
     }
   }
 
   throw lastError;
+}
+
+async function fetchMapPayload(
+  supabase: ReturnType<typeof createServerSupabase>,
+  universeCode: string,
+  requestedLimit: number,
+): Promise<CachedMapPayload> {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) {
+    const payload = await withTimeout(
+      fetchMapPayloadFromDynamic(supabase, universeCode, requestedLimit),
+      DYNAMIC_MAP_TIMEOUT_MS_KOREA,
+    );
+
+    if (process.env.KOAPTIX_VERBOSE_FALLBACK_LOGS === "1") {
+      console.info("[API /api/map] KOREA_ALL dynamic-only path hit", {
+        universeCode,
+        requestedLimit,
+        count: payload.items.length,
+      });
+    }
+
+    return payload;
+  }
+
+  // Regional client transitions avoid the slow latest-board cold path.
+  return withTimeout(
+    fetchMapPayloadFromDynamic(supabase, universeCode, requestedLimit),
+    DYNAMIC_MAP_TIMEOUT_MS_REGIONAL,
+  );
 }
 
 export async function GET(request: NextRequest) {
@@ -426,7 +788,7 @@ export async function GET(request: NextRequest) {
   const rawUniverseCode =
     searchParams.get("universe_code") ?? searchParams.get("universe");
 
-  const universeCode = normalizeUniverseCode(
+  const universeCode = resolveServiceUniverseCode(
     rawUniverseCode ?? DEFAULT_UNIVERSE_CODE,
   );
 

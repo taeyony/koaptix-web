@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Map, CustomOverlayMap, useKakaoLoader } from "react-kakao-maps-sdk";
 import type { RankingItem } from "../../lib/koaptix/types";
@@ -66,6 +66,21 @@ const SEOUL_DISTRICT_COORDS: Record<string, Coord> = {
 };
 
 const DEFAULT_KOREA_CENTER: Coord = { lat: 36.35, lng: 127.85 };
+function getFixedDistrictCoords(
+  universeCode: string,
+  districtName: string,
+): Coord | null {
+  if (universeCode === "SEOUL_ALL") {
+    return SEOUL_DISTRICT_COORDS[districtName] ?? null;
+  }
+
+  if (universeCode === DEFAULT_UNIVERSE_CODE) {
+    const normalizedName = districtName.replace(/^서울\s+/, "").trim();
+    return SEOUL_DISTRICT_COORDS[normalizedName] ?? null;
+  }
+
+  return null;
+}
 const RANGE_STEP_TRILLION = 0.05;
 const RANGE_MIN_TRILLION = 0.1;
 const MIN_GAP_TRILLION = RANGE_STEP_TRILLION;
@@ -76,8 +91,20 @@ const TOP_N_OPTIONS: TopNOption[] = [
   { label: "80", value: 80 },
 ];
 
-const MAP_API = (universeCode: string) =>
-  `/api/map?universe_code=${encodeURIComponent(universeCode)}`;
+function getDesiredMapSourceLimit(topN: number, universeCode: string) {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) {
+    if (topN <= 20) return 32;
+    if (topN <= 40) return 52;
+    return 72;
+  }
+
+  if (topN <= 20) return 28;
+  if (topN <= 40) return 44;
+  return 60;
+}
+
+const MAP_API = (universeCode: string, limit: number) =>
+  `/api/map?universe_code=${encodeURIComponent(universeCode)}&limit=${encodeURIComponent(limit)}`;
 
 function formatMarketCapKrw(value: number) {
   if (!Number.isFinite(value) || value <= 0) return "0원";
@@ -187,7 +214,7 @@ function buildFallbackAggregate(items: RankingItem[]): DistrictAggregate[] {
     if (!district) return;
 
     const query =
-      `${item.sigunguName ?? ""} ${item.legalDongName ?? ""}`.trim() ||
+      `${item.sigungu_name ?? ""} ${item.legal_dong_name ?? ""}`.trim() ||
       item.locationLabel ||
       "";
 
@@ -285,15 +312,6 @@ function clamp(value: number, min: number, max: number) {
 }
 /**
  * Home tactical radar.
- *
- * 역할:
- * - /api/map delivery path consume
- * - current universe 기준 district aggregate 렌더
- *
- * 주의:
- * - source rollback 없이 tactical delivery path를 유지한다.
- * - range / topN 조작으로 지도 중심이 흔들리지 않는 UX를 유지한다.
- * - map timeout 재발 시 프론트가 아니라 read path/contract부터 다시 본다.
  */
 export function NeonMap({ items }: { items: RankingItem[] }) {
   const searchParams = useSearchParams();
@@ -303,7 +321,18 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   );
 
   const [showBubbles, setShowBubbles] = useState(true);
-  const [topN, setTopN] = useState<number>(40);
+  const [topN, setTopN] = useState<number>(() =>
+    currentUniverseCode === DEFAULT_UNIVERSE_CODE ? 20 : 40,
+  );
+
+  useEffect(() => {
+    setTopN(currentUniverseCode === DEFAULT_UNIVERSE_CODE ? 20 : 40);
+  }, [currentUniverseCode]);
+
+  const mapSourceLimit = useMemo(
+    () => getDesiredMapSourceLimit(topN, currentUniverseCode),
+    [topN, currentUniverseCode],
+  );
 
   const [rangeMinTrillion, setRangeMinTrillion] =
     useState<number>(RANGE_MIN_TRILLION);
@@ -312,8 +341,16 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   const [editingMin, setEditingMin] = useState<string | null>(null);
   const [editingMax, setEditingMax] = useState<string | null>(null);
 
+  const fallbackMapItems = useMemo(
+    () => buildFallbackAggregate(items),
+    [items],
+  );
+
+  const fallbackMapItemsRef = useRef<DistrictAggregate[]>(fallbackMapItems);
+  fallbackMapItemsRef.current = fallbackMapItems;
+
   const [mapItems, setMapItems] = useState<DistrictAggregate[]>(
-    buildFallbackAggregate(items),
+    fallbackMapItems,
   );
   const [mapItemsError, setMapItemsError] = useState<string | null>(null);
 
@@ -330,6 +367,64 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     level: 13,
   });
 
+  // 🚨 지차장 지시 A: 고유 좌표 키 생성을 위한 헬퍼 추가
+  // Universe-scoped coord cache: never reuse geocoded coordinates across
+  // universe transitions, because region labels can repeat with different map
+  // identity.
+  const resolvedCoordStorageKey = useMemo(
+    () => `koaptix:neon-map:coords:${currentUniverseCode}`,
+    [currentUniverseCode],
+  );
+
+  function getCoordCacheKey(
+    universeCode: string,
+    group: Pick<DistrictAggregate, "name" | "query">,
+  ) {
+    const base = (group.query || group.name || "").trim();
+    return `${universeCode}::${base}`;
+  }
+
+  const [resolvedCoords, setResolvedCoords] = useState<Record<string, Coord>>(
+    {},
+  );
+  const resolvedCoordsRef = useRef<Record<string, Coord>>({});
+  resolvedCoordsRef.current = resolvedCoords;
+
+  // 🚨 지차장 지시 B: sessionStorage 복원 로직 교체 (정밀한 리셋 및 복구)
+  useEffect(() => {
+    setResolvedCoords({});
+
+    try {
+      const raw = window.sessionStorage.getItem(resolvedCoordStorageKey);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as Record<string, Coord>;
+      if (!parsed || typeof parsed !== "object") return;
+
+      setResolvedCoords(parsed);
+    } catch {
+      setResolvedCoords({});
+    }
+  }, [resolvedCoordStorageKey]);
+
+  useEffect(() => {
+    if (Object.keys(resolvedCoords).length === 0) return;
+
+    try {
+      window.sessionStorage.setItem(
+        resolvedCoordStorageKey,
+        JSON.stringify(resolvedCoords),
+      );
+    } catch {
+      // no-op
+    }
+  }, [resolvedCoords, resolvedCoordStorageKey]);
+
+  useEffect(() => {
+    setMapItems(fallbackMapItemsRef.current);
+    setMapItemsError(null);
+  }, [currentUniverseCode]);
+
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
@@ -339,7 +434,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
       try {
         const nextItems = await readMapItems(
-          MAP_API(currentUniverseCode),
+          MAP_API(currentUniverseCode, mapSourceLimit),
           controller.signal,
         );
 
@@ -353,11 +448,12 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
         console.warn("[NeonMap] map fetch warn", {
           currentUniverseCode,
+          mapSourceLimit,
           message,
         });
 
         setMapItemsError(message);
-        setMapItems(buildFallbackAggregate(items));
+        setMapItems(fallbackMapItemsRef.current);
       }
     };
 
@@ -367,11 +463,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       cancelled = true;
       controller.abort();
     };
-  }, [currentUniverseCode, items]);
-
-  const [resolvedCoords, setResolvedCoords] = useState<Record<string, Coord>>(
-    {},
-  );
+  }, [currentUniverseCode, mapSourceLimit]);
 
   useEffect(() => {
     if (loading || error) return;
@@ -382,78 +474,77 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     const geocoder = new kakao.maps.services.Geocoder();
     let cancelled = false;
 
-    const unresolved = mapItems.filter(
-      (group) =>
-        !SEOUL_DISTRICT_COORDS[group.name] &&
-        !resolvedCoords[group.name] &&
-        group.query,
-    );
+    // 🚨 지차장 지시 C: geocoder 필터 시 고유 coordKey 사용
+    // Filter unresolved geocoding work by the universe-scoped coord key.
+    const unresolved = mapItems
+      .filter((group) => {
+        if (!group.query) return false;
+        if (getFixedDistrictCoords(currentUniverseCode, group.name)) return false;
+
+        const coordKey = getCoordCacheKey(currentUniverseCode, group);
+        if (resolvedCoordsRef.current[coordKey]) return false;
+
+        return true;
+      })
+      .slice(0, 12);
 
     if (unresolved.length === 0) return;
 
-    const geocodeOne = (group: DistrictAggregate) =>
-      new Promise<{ name: string; coord: Coord | null }>((resolve) => {
-        const tryQueries = [group.query, group.name].filter(Boolean);
-        let index = 0;
+    const geocodeOne = async (group: DistrictAggregate) => {
+      const tryQueries = [group.query, group.name].filter(Boolean);
 
-        const attempt = () => {
-          if (index >= tryQueries.length) {
-            resolve({ name: group.name, coord: null });
-            return;
-          }
-
-          const query = tryQueries[index++];
-
+      for (const query of tryQueries) {
+        const coord = await new Promise<Coord | null>((resolve) => {
           geocoder.addressSearch(query, (result: any[], status: string) => {
             if (status === kakao.maps.services.Status.OK && result?.[0]) {
               resolve({
-                name: group.name,
-                coord: {
-                  lat: Number(result[0].y),
-                  lng: Number(result[0].x),
-                },
+                lat: Number(result[0].y),
+                lng: Number(result[0].x),
               });
               return;
             }
-
-            attempt();
+            resolve(null);
           });
-        };
-
-        attempt();
-      });
-
-    void Promise.all(unresolved.map(geocodeOne)).then((results) => {
-      if (cancelled) return;
-
-      const nextEntries = results.filter(
-        (r) => r.coord !== null,
-      ) as Array<{ name: string; coord: Coord }>;
-
-      if (nextEntries.length === 0) return;
-
-      setResolvedCoords((prev) => {
-        const next = { ...prev };
-
-        nextEntries.forEach(({ name, coord }) => {
-          next[name] = coord;
         });
 
-        return next;
-      });
+        if (!coord) continue;
+        if (cancelled) return;
+
+        // 🚨 지차장 지시 D: geocoder 결과 저장 시 고유 coordKey 사용
+        // Store geocoder results under the universe-scoped coord key.
+        setResolvedCoords((prev) => {
+          const coordKey = getCoordCacheKey(currentUniverseCode, group);
+          if (prev[coordKey]) return prev;
+
+          return {
+            ...prev,
+            [coordKey]: coord,
+          };
+        });
+
+        return;
+      }
+    };
+
+    unresolved.forEach((group) => {
+      void geocodeOne(group);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [mapItems, loading, error, resolvedCoords]);
+  }, [mapItems, loading, error, currentUniverseCode]);
 
+  // 🚨 지차장 지시 E: baseMapData에서 좌표를 읽을 때 고유 coordKey 사용
+  // Read coordinates through the same universe-scoped key when rendering.
   const baseMapData = useMemo(() => {
     return mapItems
       .map((group) => {
+        const coordKey = getCoordCacheKey(currentUniverseCode, group);
+
         const coords =
-          SEOUL_DISTRICT_COORDS[group.name] ??
-          resolvedCoords[group.name] ??
+          getFixedDistrictCoords(currentUniverseCode, group.name) ??
+          resolvedCoords[coordKey] ??
           null;
 
         if (!coords) return null;
@@ -467,7 +558,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         (value): value is Omit<ResolvedMapItem, "visualRank" | "bubbleSize"> =>
           value !== null,
       );
-  }, [mapItems, resolvedCoords]);
+  }, [mapItems, resolvedCoords, currentUniverseCode]);
 
   const universeAnchorCenter = useMemo(() => {
     if (baseMapData.length === 0) return DEFAULT_KOREA_CENTER;
@@ -628,17 +719,33 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   }, []);
 
   if (error) {
-    return <div className="p-4 text-sm text-rose-400">지도 로딩 에러</div>;
+    return (
+      <div
+        className="p-4 text-sm text-rose-400"
+        data-testid="neon-map"
+        data-universe-code={currentUniverseCode}
+      >
+        지도 로딩 에러
+      </div>
+    );
   }
 
   if (loading) {
     return (
-      <div className="h-[650px] w-full animate-pulse rounded-2xl border border-slate-800 bg-slate-900/50" />
+      <div
+        className="h-[650px] w-full animate-pulse rounded-2xl border border-slate-800 bg-slate-900/50"
+        data-testid="neon-map"
+        data-universe-code={currentUniverseCode}
+      />
     );
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)]">
+    <section
+      className="overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)]"
+      data-testid="neon-map"
+      data-universe-code={currentUniverseCode}
+    >
       <div className="flex flex-col gap-4 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
@@ -660,11 +767,10 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   key={option.value}
                   type="button"
                   onClick={() => setTopN(option.value)}
-                  className={`rounded-full border px-3.5 py-1.5 text-[11px] font-semibold transition ${
-                    topN === option.value
-                      ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
-                      : "border-slate-700 bg-slate-800/30 text-slate-400 hover:text-slate-200"
-                  }`}
+                  className={`rounded-full border px-3.5 py-1.5 text-[11px] font-semibold transition ${topN === option.value
+                    ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
+                    : "border-slate-700 bg-slate-800/30 text-slate-400 hover:text-slate-200"
+                    }`}
                 >
                   TOP {option.label}
                 </button>
@@ -674,11 +780,10 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
             <button
               type="button"
               onClick={() => setShowBubbles((prev) => !prev)}
-              className={`rounded-full border px-3.5 py-1.5 text-[11px] font-semibold transition ${
-                showBubbles
-                  ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
-                  : "border-slate-700 bg-slate-800/30 text-slate-400"
-              }`}
+              className={`rounded-full border px-3.5 py-1.5 text-[11px] font-semibold transition ${showBubbles
+                ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
+                : "border-slate-700 bg-slate-800/30 text-slate-400"
+                }`}
             >
               표시 {showBubbles ? "ON" : "OFF"}
             </button>
@@ -888,9 +993,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   deltaBadgeColor = "bg-cyan-500/20 text-cyan-100";
                 }
 
-                const finalBoxShadow = `${
-                  isSelected ? "0 0 0 2px rgba(255,255,255,0.75), " : ""
-                }0 0 18px ${glowColor}, inset 0 0 10px ${glowColor}`;
+                const finalBoxShadow = `${isSelected ? "0 0 0 2px rgba(255,255,255,0.75), " : ""
+                  }0 0 18px ${glowColor}, inset 0 0 10px ${glowColor}`;
 
                 const titleParts = [
                   data.name,
@@ -915,11 +1019,10 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   >
                     <div
                       onClick={() => handleDistrictClick(data)}
-                      className={`group relative flex flex-col items-center justify-center rounded-full border transition-all duration-300 ${
-                        isActionable
-                          ? "cursor-pointer hover:scale-110 hover:border-cyan-300/80"
-                          : "cursor-default opacity-75"
-                      } ${ringColor} ${bgColor} ${isSelected ? "scale-110" : ""}`}
+                      className={`group relative flex flex-col items-center justify-center rounded-full border transition-all duration-300 ${isActionable
+                        ? "cursor-pointer hover:scale-110 hover:border-cyan-300/80"
+                        : "cursor-default opacity-75"
+                        } ${ringColor} ${bgColor} ${isSelected ? "scale-110" : ""}`}
                       style={{
                         width: `${data.bubbleSize}px`,
                         height: `${data.bubbleSize}px`,

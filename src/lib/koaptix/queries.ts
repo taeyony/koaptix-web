@@ -1,16 +1,20 @@
+/**
+ * Query layer for KOAPTIX home/ranking/detail.
+ * KOREA_ALL cold-path는 민감할 수 있으므로 source rollback 없이 fallback / delivery 최적화로 다룬다.
+ */
+
 import { createClient } from "@supabase/supabase-js";
 import {
   DEFAULT_UNIVERSE_CODE,
-  normalizeUniverseCode,
+  getUniverseLabel,
+  resolveServiceUniverseCode,
   type KnownUniverseCode,
 } from "./universes";
-
 
 import type {
   DbComplexDetailSheetBaseRow,
   DbComplexDetailSheetWeeklyRow,
   DbComplexChartHistoryRow,
-  DbIndexHistoryRow,
   DbLatestRankBoardRow,
   DbLatestRankBoardWeeklyRow,
   DbRankHistoryRow,
@@ -452,21 +456,223 @@ function isStatementTimeout(
   error: { code?: string | null; message?: string | null } | null | undefined
 ) {
   if (!error) return false;
-  return error.code === "57014" || (error.message ?? "").includes("statement timeout");
+  return (
+    error.code === "57014" ||
+    (error.message ?? "").includes("statement timeout")
+  );
 }
+
+function isLocalLatestBoardTimeout(
+  error: { code?: string | null; message?: string | null } | null | undefined
+) {
+  if (!error) return false;
+
+  return (
+    error.code === "LOCAL_TIMEOUT" ||
+    (error.message ?? "").includes("LATEST_BOARD_LOCAL_TIMEOUT") ||
+    (error.message ?? "").includes("DYNAMIC_FALLBACK_LOCAL_TIMEOUT")
+  );
+}
+
+async function withLocalQueryTimeout<T>(
+  promise: PromiseLike<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(label));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([Promise.resolve(promise), timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+const MAX_LATEST_RANK_BOARD_LIMIT = 1000;
+
+const latestRankBoardCooldownUntil = new Map<string, number>();
+const LATEST_RANK_BOARD_COOLDOWN_MS = 180_000;
+
+function isLatestRankBoardCoolingDown(universeCode: string) {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) return false;
+
+  const until = latestRankBoardCooldownUntil.get(universeCode) ?? 0;
+  if (until <= Date.now()) {
+    latestRankBoardCooldownUntil.delete(universeCode);
+    return false;
+  }
+
+  return true;
+}
+
+function markLatestRankBoardCooldown(universeCode: string) {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) return;
+  latestRankBoardCooldownUntil.set(
+    universeCode,
+    Date.now() + LATEST_RANK_BOARD_COOLDOWN_MS,
+  );
+}
+
+function clearLatestRankBoardCooldown(universeCode: string) {
+  latestRankBoardCooldownUntil.delete(universeCode);
+}
+
+function buildRankBoardRetryLimits(
+  requestedLimit: number,
+  universeCode: string,
+): number[] {
+  const ladder =
+    universeCode === DEFAULT_UNIVERSE_CODE
+      ? [requestedLimit, 20, 12]
+      : [requestedLimit, 30, 20];
+
+  return Array.from(
+    new Set(
+      ladder.filter(
+        (n) => Number.isFinite(n) && n > 0 && n <= requestedLimit,
+      ),
+    ),
+  );
+}
+
+function buildTierMeta(rankAll: number | null) {
+  if (rankAll === null) {
+    return {
+      tier_code: "E",
+      tier_label: "Top 1000+",
+      tier_sort: 6,
+      is_top1000: false,
+    };
+  }
+
+  if (rankAll <= 10) {
+    return {
+      tier_code: "S",
+      tier_label: "Top 10",
+      tier_sort: 1,
+      is_top1000: true,
+    };
+  }
+
+  if (rankAll <= 50) {
+    return {
+      tier_code: "A",
+      tier_label: "Top 50",
+      tier_sort: 2,
+      is_top1000: true,
+    };
+  }
+
+  if (rankAll <= 100) {
+    return {
+      tier_code: "B",
+      tier_label: "Top 100",
+      tier_sort: 3,
+      is_top1000: true,
+    };
+  }
+
+  if (rankAll <= 300) {
+    return {
+      tier_code: "C",
+      tier_label: "Top 300",
+      tier_sort: 4,
+      is_top1000: true,
+    };
+  }
+
+  if (rankAll <= 1000) {
+    return {
+      tier_code: "D",
+      tier_label: "Top 1000",
+      tier_sort: 5,
+      is_top1000: true,
+    };
+  }
+
+  return {
+    tier_code: "E",
+    tier_label: "Top 1000+",
+    tier_sort: 6,
+    is_top1000: false,
+  };
+}
+
+async function fetchLatestRankBoardFallbackFromDynamic(
+  supabase: ReturnType<typeof createServerSupabase>,
+  universeCode: KnownUniverseCode | string,
+  limit: number,
+) {
+  const { data: latestSnapshot, error: latestSnapshotError } = await supabase
+    .from("koaptix_rank_snapshot")
+    .select("snapshot_date")
+    .eq("universe_code", universeCode)
+    .order("snapshot_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestSnapshotError) {
+    throw latestSnapshotError;
+  }
+
+  if (!latestSnapshot?.snapshot_date) {
+    return [] as any[];
+  }
+
+  const { data, error } = await supabase
+    .from("v_koaptix_universe_rank_history_dynamic")
+    .select(
+      `
+        snapshot_date,
+        universe_code,
+        universe_name,
+        universe_scope,
+        complex_id,
+        apt_name_ko,
+        sigungu_name,
+        legal_dong_name,
+        build_year,
+        household_count,
+        total_household_count,
+        recovery_52w,
+        rank_all,
+        market_cap_krw,
+        market_cap_trillion_krw,
+        market_cap_share,
+        market_cap_share_pct
+      `,
+    )
+    .eq("universe_code", universeCode)
+    .eq("snapshot_date", latestSnapshot.snapshot_date)
+    .order("rank_all", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map((row: any) => {
+    const rankAll = toNullableNumber(row.rank_all);
+    const tier = buildTierMeta(rankAll);
+
+    return {
+      ...row,
+      previous_rank_all: null,
+      rank_delta_w: null,
+      rank_movement: null,
+      ...tier,
+    };
+  });
+}
+
 /**
  * Home initial SSR seed path.
- *
- * 현재 home page는 initial seed를
- * src/app/page.tsx -> getLatestRankBoard -> v_koaptix_latest_universe_rank_board_u
- * direct query path로 가져온다.
- *
- * 주의:
- * - 입력 universe는 반드시 normalizeUniverseCode()를 거친다.
- * - client universe transition은 /api/rankings delivery path를 사용하므로,
- *   SSR seed path와 client tactical path의 계약 차이(boardLimit 40/60 vs route tactical 20)는
- *   후속 정렬 검토 대상이다.
- * - source of truth rollback으로 이 함수를 우회하지 않는다.
  */
 export async function getLatestRankBoard(
   universeCode: KnownUniverseCode | string = DEFAULT_UNIVERSE_CODE,
@@ -474,76 +680,152 @@ export async function getLatestRankBoard(
 ): Promise<DbLatestRankBoardWeeklyRow[]> {
   const supabase = createServerSupabase();
 
-  const safeUniverseCode = normalizeUniverseCode(
+  const safeUniverseCode = resolveServiceUniverseCode(
     universeCode ?? DEFAULT_UNIVERSE_CODE,
   );
 
-  const requestedLimit = Math.max(1, Math.min(limit, 500));
+  const requestedLimit = Math.max(
+    1,
+    Math.min(limit, MAX_LATEST_RANK_BOARD_LIMIT),
+  );
 
-  const retryLimits =
-    safeUniverseCode === DEFAULT_UNIVERSE_CODE
-      ? Array.from(new Set([requestedLimit, 200, 120, 60]))
-      : Array.from(new Set([requestedLimit, 300, 200]));
+  // KOREA_ALL home SSR seed is more stable through the dynamic read layer.
+  if (safeUniverseCode === DEFAULT_UNIVERSE_CODE) {
+    const fallbackRows = await withLocalQueryTimeout<any[]>(
+      fetchLatestRankBoardFallbackFromDynamic(
+        supabase,
+        safeUniverseCode,
+        requestedLimit,
+      ),
+      6500,
+      "DYNAMIC_FALLBACK_LOCAL_TIMEOUT",
+    );
 
-  console.log("[QUERY DEBUG - INPUT]", {
-    universeCode,
-    safeUniverseCode,
+    return fallbackRows.map((row: any) => ({
+      ...row,
+      universe_code: row.universe_code ?? safeUniverseCode,
+      universe_name: row.universe_name ?? null,
+      location_search_label: [
+        row.sigungu_name ?? null,
+        row.legal_dong_name ?? null,
+        row.apt_name_ko ?? null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    })) as DbLatestRankBoardWeeklyRow[];
+  }
+
+  const retryLimits = buildRankBoardRetryLimits(
     requestedLimit,
-    retryLimits,
-  });
+    safeUniverseCode,
+  );
+
+  const latestBoardAttemptTimeoutMs = 900;
+  const dynamicFallbackTimeoutMs = 5200;
+  const shouldTryLatestBoard = !isLatestRankBoardCoolingDown(safeUniverseCode);
 
   let data: any[] | null = null;
-  let lastError: { code?: string | null; message?: string | null } | null = null;
+  let lastError: { code?: string | null; message?: string | null } | null =
+    null;
 
-  for (const attemptLimit of retryLimits) {
-    const result = await supabase
-      .from("v_koaptix_latest_universe_rank_board_u")
-      .select(
-        `
-          snapshot_date,
-          universe_code,
-          universe_name,
-          universe_scope,
-          complex_id,
-          apt_name_ko,
-          sigungu_name,
-          legal_dong_name,
-          build_year,
-          household_count,
-          total_household_count,
-          recovery_52w,
-          rank_all,
-          previous_rank_all,
-          rank_delta_w,
-          rank_movement,
-          market_cap_krw,
-          market_cap_trillion_krw,
-          market_cap_share,
-          market_cap_share_pct,
-          tier_code,
-          tier_label,
-          tier_sort,
-          is_top1000
-        `,
-      )
-      .eq("universe_code", safeUniverseCode)
-      .order("rank_all", { ascending: true })
-      .limit(attemptLimit);
+  if (shouldTryLatestBoard) {
+    for (const attemptLimit of retryLimits) {
+      try {
+        const result = await withLocalQueryTimeout<{
+          data: any[] | null;
+          error: { code?: string | null; message?: string | null } | null;
+        }>(
+          supabase
+            .from("v_koaptix_latest_universe_rank_board_u")
+            .select(
+              `
+                snapshot_date,
+                universe_code,
+                universe_name,
+                universe_scope,
+                complex_id,
+                apt_name_ko,
+                sigungu_name,
+                legal_dong_name,
+                build_year,
+                household_count,
+                total_household_count,
+                recovery_52w,
+                rank_all,
+                previous_rank_all,
+                rank_delta_w,
+                rank_movement,
+                market_cap_krw,
+                market_cap_trillion_krw,
+                market_cap_share,
+                market_cap_share_pct,
+                tier_code,
+                tier_label,
+                tier_sort,
+                is_top1000
+              `,
+            )
+            .eq("universe_code", safeUniverseCode)
+            .order("rank_all", { ascending: true })
+            .limit(attemptLimit),
+          latestBoardAttemptTimeoutMs,
+          "LATEST_BOARD_LOCAL_TIMEOUT",
+        );
 
-    data = result.data ?? null;
-    lastError = result.error ?? null;
+        data = result.data ?? null;
+        lastError = result.error ?? null;
 
-    console.log("[QUERY DEBUG - ATTEMPT]", {
-      safeUniverseCode,
-      attemptLimit,
-      rowCount: result.data?.length ?? 0,
-      firstUniverse: (result.data?.[0] as any)?.universe_code ?? null,
-      firstName: (result.data?.[0] as any)?.apt_name_ko ?? null,
-      error: result.error?.message ?? null,
-    });
+        if (!lastError && data && data.length > 0) {
+          clearLatestRankBoardCooldown(safeUniverseCode);
+          break;
+        }
 
-    if (!lastError) break;
-    if (!isStatementTimeout(lastError)) break;
+        markLatestRankBoardCooldown(safeUniverseCode);
+        lastError = lastError ?? {
+          code: "LOCAL_TIMEOUT",
+          message: "LATEST_BOARD_EMPTY_DYNAMIC_FALLBACK",
+        };
+        break;
+      } catch (error) {
+        data = null;
+        lastError = {
+          code: "LOCAL_TIMEOUT",
+          message:
+            error instanceof Error
+              ? error.message
+              : "LATEST_BOARD_LOCAL_TIMEOUT",
+        };
+
+        markLatestRankBoardCooldown(safeUniverseCode);
+        break;
+      }
+    }
+  } else {
+    lastError = {
+      code: "LOCAL_TIMEOUT",
+      message: "LATEST_BOARD_COOLDOWN_SKIP",
+    };
+  }
+
+  if (
+    lastError &&
+    (isStatementTimeout(lastError) ||
+      isLocalLatestBoardTimeout(lastError) ||
+      lastError.message === "LATEST_BOARD_COOLDOWN_SKIP" ||
+      lastError.message === "LATEST_BOARD_EMPTY_DYNAMIC_FALLBACK")
+  ) {
+    const fallbackRows = await withLocalQueryTimeout<any[]>(
+      fetchLatestRankBoardFallbackFromDynamic(
+        supabase,
+        safeUniverseCode,
+        requestedLimit,
+      ),
+      dynamicFallbackTimeoutMs,
+      "DYNAMIC_FALLBACK_LOCAL_TIMEOUT",
+    );
+
+    data = fallbackRows;
+    lastError = null;
   }
 
   if (lastError) {
@@ -638,23 +920,195 @@ export async function getComplexDetailById(
   } as DbComplexDetailSheetWeeklyRow;
 }
 
-export async function getIndexChartRows(
-  limit = 180
-): Promise<DbIndexHistoryRow[]> {
-  const supabase = createServerSupabase();
-  const safeLimit = Math.max(12, Math.min(limit, 365));
+type DbIndexLatestCardRow = {
+  snapshot_date: string;
+  universe_code: string | null;
+  index_code: string | null;
+  index_name: string | null;
+  index_value: number | string | null;
+  change_1m: number | string | null;
+  change_pct_1m: number | string | null;
+  total_market_cap_krw: number | string | null;
+  component_complex_count: number | string | null;
+  movement_1m: string | null;
+};
 
-  const { data, error } = await supabase
-    .from("v_koaptix_total_market_cap_history")
-    .select("snapshot_date, total_market_cap")
-    .order("snapshot_date", { ascending: false })
-    .limit(safeLimit);
+type DbIndexTimeseriesRow = {
+  snapshot_date: string;
+  universe_code: string | null;
+  index_code: string | null;
+  index_name: string | null;
+  index_value: number | string | null;
+  total_market_cap_krw: number | string | null;
+  component_complex_count: number | string | null;
+};
 
-  if (error) {
-    throw new Error(`Failed to fetch v_koaptix_total_market_cap_history: ${error.message}`);
+export type HomeIndexChartRow = {
+  snapshotDate: string;
+  value: number;
+  totalMarketCapKrw: number | null;
+  componentComplexCount: number | null;
+};
+
+export type HomeIndexChartPayload = {
+  requestedUniverseCode: string;
+  renderedUniverseCode: string;
+  renderedUniverseLabel: string;
+  isFallbackToKorea: boolean;
+
+  indexCode: string | null;
+  indexName: string | null;
+
+  latestSnapshotDate: string | null;
+  indexValue: number | null;
+  change1m: number | null;
+  changePct1m: number | null;
+  totalMarketCapKrw: number | null;
+  componentComplexCount: number | null;
+  movement1m: string | null;
+
+  rows: HomeIndexChartRow[];
+};
+
+async function fetchIndexChartChain(
+  supabase: ReturnType<typeof createServerSupabase>,
+  universeCode: string,
+  limit: number,
+): Promise<{
+  latestCard: DbIndexLatestCardRow | null;
+  rows: DbIndexTimeseriesRow[];
+}> {
+  const [latestCardResult, rowsResult] = await Promise.all([
+    supabase
+      .from("v_koaptix_latest_index_card")
+      .select(
+        `
+          snapshot_date,
+          universe_code,
+          index_code,
+          index_name,
+          index_value,
+          change_1m,
+          change_pct_1m,
+          total_market_cap_krw,
+          component_complex_count,
+          movement_1m
+        `,
+      )
+      .eq("universe_code", universeCode)
+      .order("snapshot_date", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("v_koaptix_index_timeseries")
+      .select(
+        `
+          snapshot_date,
+          universe_code,
+          index_code,
+          index_name,
+          index_value,
+          total_market_cap_krw,
+          component_complex_count
+        `,
+      )
+      .eq("universe_code", universeCode)
+      .order("snapshot_date", { ascending: false })
+      .limit(limit),
+  ]);
+
+  if (latestCardResult.error) {
+    throw new Error(
+      `Failed to fetch v_koaptix_latest_index_card: ${latestCardResult.error.message}`,
+    );
   }
 
-  return (data ?? []) as DbIndexHistoryRow[];
+  if (rowsResult.error) {
+    throw new Error(
+      `Failed to fetch v_koaptix_index_timeseries: ${rowsResult.error.message}`,
+    );
+  }
+
+  return {
+    latestCard: (latestCardResult.data ?? null) as DbIndexLatestCardRow | null,
+    rows: (rowsResult.data ?? []) as DbIndexTimeseriesRow[],
+  };
+}
+
+function buildHomeIndexChartPayload(
+  requestedUniverseCode: string,
+  renderedUniverseCode: string,
+  latestCard: DbIndexLatestCardRow | null,
+  rawRows: DbIndexTimeseriesRow[],
+): HomeIndexChartPayload {
+  const scopedLatestCard =
+    latestCard?.universe_code === renderedUniverseCode ? latestCard : null;
+
+  const rows = [...rawRows]
+    .filter((row) => row.universe_code === renderedUniverseCode)
+    .filter((row) => {
+      const snapshotDate = row.snapshot_date?.slice?.(0, 10) ?? "";
+      const value = toNullableNumber(row.index_value);
+      return Boolean(snapshotDate) && value !== null;
+    })
+    .sort((a, b) => a.snapshot_date.slice(0, 10).localeCompare(b.snapshot_date.slice(0, 10)))
+    .map((row) => ({
+      snapshotDate: row.snapshot_date.slice(0, 10),
+      value: toNullableNumber(row.index_value) ?? 0,
+      totalMarketCapKrw: toNullableNumber(row.total_market_cap_krw),
+      componentComplexCount: toNullableNumber(row.component_complex_count),
+    }));
+
+  return {
+    requestedUniverseCode,
+    renderedUniverseCode,
+    renderedUniverseLabel: getUniverseLabel(renderedUniverseCode),
+    isFallbackToKorea:
+      requestedUniverseCode !== renderedUniverseCode &&
+      renderedUniverseCode === DEFAULT_UNIVERSE_CODE,
+
+    indexCode: scopedLatestCard?.index_code ?? null,
+    indexName: scopedLatestCard?.index_name ?? null,
+
+    latestSnapshotDate: scopedLatestCard?.snapshot_date?.slice?.(0, 10) ?? null,
+    indexValue: toNullableNumber(scopedLatestCard?.index_value),
+    change1m: toNullableNumber(scopedLatestCard?.change_1m),
+    changePct1m: toNullableNumber(scopedLatestCard?.change_pct_1m),
+    totalMarketCapKrw: toNullableNumber(scopedLatestCard?.total_market_cap_krw),
+    componentComplexCount: toNullableNumber(scopedLatestCard?.component_complex_count),
+    movement1m: scopedLatestCard?.movement_1m ?? null,
+
+    rows,
+  };
+}
+
+export async function getIndexChartPayload(
+  universeCode: KnownUniverseCode | string = DEFAULT_UNIVERSE_CODE,
+  limit = 24,
+): Promise<HomeIndexChartPayload> {
+  const supabase = createServerSupabase();
+  const requestedUniverseCode = resolveServiceUniverseCode(
+    universeCode ?? DEFAULT_UNIVERSE_CODE,
+  );
+  const safeLimit = Math.max(6, Math.min(limit, 60));
+
+  // Product policy: regional index cards preserve the requested universe
+  // identity and show History Building for sparse data instead of falling
+  // back to KOREA_ALL. Do not reintroduce regional -> KOREA chart fallback
+  // unless the product direction changes explicitly.
+  const renderedUniverseCode = requestedUniverseCode;
+  const { latestCard, rows } = await fetchIndexChartChain(
+    supabase,
+    requestedUniverseCode,
+    safeLimit,
+  );
+
+  return buildHomeIndexChartPayload(
+    requestedUniverseCode,
+    renderedUniverseCode,
+    latestCard,
+    rows,
+  );
 }
 
 export async function getHomeKpi() {
