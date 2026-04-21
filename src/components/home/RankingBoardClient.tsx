@@ -200,6 +200,8 @@ export function RankingBoardClient({
     boardError ?? null,
   );
   const [isBoardLoading, setIsBoardLoading] = useState(false);
+  const [staleBoardUniverseCode, setStaleBoardUniverseCode] =
+    useState<string | null>(null);
 
   const [districtQueryLocal, setDistrictQueryLocal] =
     useState<string>(initialDistrictQuery);
@@ -376,6 +378,7 @@ export function RankingBoardClient({
 
       if (hasUsableServerSeed) {
         boardCacheRef.current[getBoardCacheKey(boardUniverseCode)] = items;
+        setStaleBoardUniverseCode(null);
         setIsBoardLoading(false);
         return;
       }
@@ -389,6 +392,7 @@ export function RankingBoardClient({
     if (cachedItems !== undefined) {
       setBoardItems(cachedItems);
       setLiveBoardError(null);
+      setStaleBoardUniverseCode(null);
       setIsBoardLoading(false);
       return;
     }
@@ -408,6 +412,7 @@ export function RankingBoardClient({
 
         if (cancelled) return;
         setBoardItems(nextItems);
+        setStaleBoardUniverseCode(null);
       } catch (error) {
         if (controller.signal.aborted || cancelled || isAbortError(error)) {
           return;
@@ -416,7 +421,7 @@ export function RankingBoardClient({
         const message =
           error instanceof Error ? error.message : "보드 로딩 실패";
 
-        setBoardItems([]);
+        setBoardItems((prev) => (prev.length > 0 ? prev : []));
         setLiveBoardError(message);
 
         console.warn("[RankingBoardClient] board fetch warn", {
@@ -460,8 +465,11 @@ export function RankingBoardClient({
       setSelectedComplexId(null);
       setDistrictQueryLocal("");
 
-      setBoardItems(cachedNextItems ?? []);
+      setBoardItems(cachedNextItems ?? boardItems);
       setLiveBoardError(null);
+      setStaleBoardUniverseCode(
+        cachedNextItems === undefined ? boardUniverseCode : null,
+      );
       setIsBoardLoading(cachedNextItems === undefined);
 
       replaceUrlParams((params) => {
@@ -477,7 +485,7 @@ export function RankingBoardClient({
 
       setBoardUniverseCode(normalizedNext);
     },
-    [boardUniverseCode, replaceUrlParams, getBoardCacheKey],
+    [boardItems, boardUniverseCode, replaceUrlParams, getBoardCacheKey],
   );
 
   const toggleComparisonItem = useCallback((item: RankingItem) => {
@@ -604,6 +612,15 @@ export function RankingBoardClient({
     boardItems.find((i) => i.complexId === selectedComplexId) ??
     items.find((i) => i.complexId === selectedComplexId) ??
     null;
+  const isShowingStaleBoard =
+    isBoardLoading && staleBoardUniverseCode !== null && boardItems.length > 0;
+  const boardDeliveryState = isShowingStaleBoard
+    ? "stale-while-syncing"
+    : isBoardLoading
+      ? "loading"
+      : liveBoardError
+        ? "degraded"
+        : "ready";
 
   return (
     <>
@@ -613,6 +630,8 @@ export function RankingBoardClient({
         data-testid="ranking-board"
         data-universe-code={boardUniverseCode}
         data-api-base-path={apiBasePath}
+        data-board-delivery-state={boardDeliveryState}
+        data-board-stale-universe-code={staleBoardUniverseCode ?? ""}
       >
         <div className="shrink-0 flex flex-col gap-3 border-b border-slate-800/80 p-4 lg:p-5">
           <div className="flex items-center justify-between">
@@ -693,6 +712,18 @@ export function RankingBoardClient({
           {liveBoardError && (
             <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
               {liveBoardError}
+            </div>
+          )}
+
+          {isShowingStaleBoard && (
+            <div
+              className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+              data-testid="ranking-board-degraded-state"
+              data-board-delivery-state={boardDeliveryState}
+              data-board-stale-universe-code={staleBoardUniverseCode ?? ""}
+            >
+              Syncing {getUniverseLabel(boardUniverseCode)}. Keeping the last
+              tactical board visible until fresh data arrives.
             </div>
           )}
 
