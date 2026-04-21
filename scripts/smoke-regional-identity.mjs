@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 const DEFAULT_BASE_URL = "http://localhost:3000";
 const baseUrl = normalizeBaseUrl(
   process.env.KOAPTIX_SMOKE_BASE_URL || process.argv[2] || DEFAULT_BASE_URL,
 );
+const RECENT_STAGED_SGG_MIN_ORDER = 125;
 
 const steps = [
   { step: "BUSAN_ALL", code: "BUSAN_ALL", label: "부산 전체", title: "KOAPTIX BUSAN" },
@@ -13,7 +17,7 @@ const steps = [
   { step: "BUSAN_ALL_RETURN", code: "BUSAN_ALL", label: "부산 전체", title: "KOAPTIX BUSAN" },
 ];
 
-const sggSteps = [
+const baseSggSteps = [
   { step: "SGG_SONGPA", code: "SGG_11710", label: "송파구", title: "KOAPTIX SGG 11710" },
   { step: "SGG_BUNDANG", code: "SGG_41135", label: "분당구", title: "KOAPTIX SGG 41135" },
   { step: "SGG_JONGNO_BATCH1", code: "SGG_11110", label: "종로구", title: "KOAPTIX SGG 11110" },
@@ -24,8 +28,43 @@ const sggSteps = [
   { step: "SGG_DOBONG_BATCH2", code: "SGG_11320", label: "도봉구", title: "KOAPTIX SGG 11320" },
 ];
 
+const recentStagedSggSteps = readEnabledSggRegistry(RECENT_STAGED_SGG_MIN_ORDER)
+  .map((item) => ({
+    step: `SGG_ENABLED_${item.code}`,
+    code: item.code,
+    label: item.label,
+    title: `KOAPTIX SGG ${item.code.replace("SGG_", "")}`,
+  }));
+
+const sggSteps = mergeUniqueSggSteps(baseSggSteps, recentStagedSggSteps);
+
 function normalizeBaseUrl(value) {
   return value.replace(/\/+$/, "");
+}
+
+function readEnabledSggRegistry(minOrder) {
+  const raw = readFileSync(join(process.cwd(), "src/lib/koaptix/universes.ts"), "utf8");
+  const start = raw.indexOf("const SGG_UNIVERSE_REGISTRY");
+  const end = raw.indexOf("/**\n * KOAPTIX service-exposed universe registry.");
+  const block = raw.slice(start, end);
+
+  return [...block.matchAll(/code:\s*"(?<code>SGG_\d+)"[\s\S]*?label:\s*"(?<label>[^"]+)"[\s\S]*?enabled:\s*(?<enabled>true|false)[\s\S]*?order:\s*(?<order>\d+)/g)]
+    .map((match) => ({
+      code: match.groups.code,
+      label: match.groups.label,
+      enabled: match.groups.enabled === "true",
+      order: Number(match.groups.order),
+    }))
+    .filter((item) => item.enabled && item.order >= minOrder);
+}
+
+function mergeUniqueSggSteps(primary, secondary) {
+  const seen = new Set();
+  return [...primary, ...secondary].filter((item) => {
+    if (seen.has(item.code)) return false;
+    seen.add(item.code);
+    return true;
+  });
 }
 
 function buildUrl(path) {

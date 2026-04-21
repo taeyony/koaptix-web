@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +19,7 @@ const commandPaletteProbeMode =
   process.env.KOAPTIX_COMMAND_PALETTE_PROBE === "1" ||
   process.argv.includes("--command-palette-probe");
 const top1000BaselineGateMode = process.env.KOAPTIX_TOP1000_BASELINE_GATE === "1";
+const RECENT_STAGED_SGG_MIN_ORDER = 125;
 
 const chromePath =
   process.env.KOAPTIX_CHROME_PATH ||
@@ -32,15 +34,52 @@ const regionalSteps = [
   { step: "BUSAN_ALL_RETURN", code: "BUSAN_ALL", label: "부산 전체" },
 ];
 
-const sggBrowserSteps = [
+const baseSggBrowserSteps = [
   { step: "SGG_JONGNO_BROWSER", code: "SGG_11110", label: "종로구" },
   { step: "SGG_JUNG_BROWSER", code: "SGG_11140", label: "중구" },
   { step: "SGG_JUNGNANG_BROWSER", code: "SGG_11260", label: "중랑구" },
   { step: "SGG_GANGBUK_BROWSER", code: "SGG_11305", label: "강북구" },
 ];
 
+const recentStagedSggBrowserSteps = readEnabledSggRegistry(RECENT_STAGED_SGG_MIN_ORDER)
+  .map((item) => ({
+    step: `SGG_ENABLED_${item.code}_BROWSER`,
+    code: item.code,
+    label: item.label,
+  }));
+
+const sggBrowserSteps = mergeUniqueSggSteps(
+  baseSggBrowserSteps,
+  recentStagedSggBrowserSteps,
+);
+
 function normalizeBaseUrl(value) {
   return value.replace(/\/+$/, "");
+}
+
+function readEnabledSggRegistry(minOrder) {
+  const raw = readFileSync(join(process.cwd(), "src/lib/koaptix/universes.ts"), "utf8");
+  const start = raw.indexOf("const SGG_UNIVERSE_REGISTRY");
+  const end = raw.indexOf("/**\n * KOAPTIX service-exposed universe registry.");
+  const block = raw.slice(start, end);
+
+  return [...block.matchAll(/code:\s*"(?<code>SGG_\d+)"[\s\S]*?label:\s*"(?<label>[^"]+)"[\s\S]*?enabled:\s*(?<enabled>true|false)[\s\S]*?order:\s*(?<order>\d+)/g)]
+    .map((match) => ({
+      code: match.groups.code,
+      label: match.groups.label,
+      enabled: match.groups.enabled === "true",
+      order: Number(match.groups.order),
+    }))
+    .filter((item) => item.enabled && item.order >= minOrder);
+}
+
+function mergeUniqueSggSteps(primary, secondary) {
+  const seen = new Set();
+  return [...primary, ...secondary].filter((item) => {
+    if (seen.has(item.code)) return false;
+    seen.add(item.code);
+    return true;
+  });
 }
 
 function sleep(ms) {
