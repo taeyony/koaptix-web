@@ -47,6 +47,11 @@ type MarketChartCardProps = {
 };
 
 type PeriodKey = "3M" | "6M" | "1Y" | "ALL";
+type ChartScopeKind =
+  | "selected-universe"
+  | "national-fallback"
+  | "alternate-universe"
+  | "empty";
 
 const PERIOD_OPTIONS = [
   { key: "3M", label: "3M", points: 3 },
@@ -153,6 +158,24 @@ function getDistinctValueCount(points: ChartPoint[]): number {
 function formatUniverseCodeLabel(code?: string | null): string {
   if (!code) return "";
   return code.replace(/_ALL$/, "").replace(/^SGG_/, "SGG ");
+}
+
+function getChartScopeKind(
+  hasPayload: boolean,
+  isFallbackToKorea: boolean,
+  isSameUniverse: boolean,
+): ChartScopeKind {
+  if (!hasPayload) return "empty";
+  if (isFallbackToKorea) return "national-fallback";
+  if (isSameUniverse) return "selected-universe";
+  return "alternate-universe";
+}
+
+function getChartScopeLabel(scope: ChartScopeKind): string {
+  if (scope === "selected-universe") return "Selected universe index";
+  if (scope === "national-fallback") return "National fallback";
+  if (scope === "alternate-universe") return "Alternate chart scope";
+  return "Chart pending";
 }
 
 function EmptyState({
@@ -284,8 +307,20 @@ export default function MarketChartCard({
     chartBox.width > 0 &&
     chartBox.height >= MIN_CHART_HEIGHT;
 
-  const codeLabel = formatUniverseCodeLabel(payload?.renderedUniverseCode);
+  const requestedCode = payload?.requestedUniverseCode ?? "";
+  const renderedCode = payload?.renderedUniverseCode ?? "";
+  const requestedCodeLabel = formatUniverseCodeLabel(requestedCode);
+  const codeLabel = formatUniverseCodeLabel(renderedCode);
   const universeLabel = payload?.renderedUniverseLabel || codeLabel;
+  const hasChartPayload = payload != null;
+  const isSameUniverse =
+    hasChartPayload && requestedCode !== "" && requestedCode === renderedCode;
+  const chartScope = getChartScopeKind(
+    hasChartPayload,
+    payload?.isFallbackToKorea ?? false,
+    isSameUniverse,
+  );
+  const chartScopeLabel = getChartScopeLabel(chartScope);
   const title =
     payload?.indexName ?? (codeLabel ? `KOAPTIX ${codeLabel}` : "KOAPTIX INDEX");
   const latestValue = payload?.indexValue ?? lastValue ?? null;
@@ -320,6 +355,8 @@ export default function MarketChartCard({
       data-testid="market-chart-card"
       data-requested-universe-code={payload?.requestedUniverseCode ?? ""}
       data-rendered-universe-code={payload?.renderedUniverseCode ?? ""}
+      data-chart-scope={chartScope}
+      data-chart-same-universe={isSameUniverse ? "true" : "false"}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -344,11 +381,47 @@ export default function MarketChartCard({
               </span>
             ) : null}
 
+            <span
+              className="rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-400"
+              data-testid="market-chart-scope-chip"
+              data-chart-scope={chartScope}
+            >
+              {chartScopeLabel}
+            </span>
+
             {isHistoryBuilding ? (
               <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-cyan-300">
                 History Building
               </span>
             ) : null}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
+            <div
+              className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
+              data-testid="market-chart-requested-universe"
+              data-universe-code={requestedCode}
+            >
+              <span className="block uppercase tracking-[0.16em] text-slate-500">
+                Requested
+              </span>
+              <span className="mt-1 block truncate font-semibold text-slate-300">
+                {requestedCodeLabel || requestedCode || "-"}
+              </span>
+            </div>
+
+            <div
+              className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
+              data-testid="market-chart-rendered-universe"
+              data-universe-code={renderedCode}
+            >
+              <span className="block uppercase tracking-[0.16em] text-slate-500">
+                Chart scope
+              </span>
+              <span className="mt-1 block truncate font-semibold text-slate-300">
+                {universeLabel || codeLabel || renderedCode || "-"}
+              </span>
+            </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
