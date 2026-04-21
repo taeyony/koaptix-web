@@ -41,7 +41,7 @@ function pickSingleParam(value: SearchParamValue): string | undefined {
 }
 
 async function resolveSearchParams(
-  input: SearchParamsShape | Promise<SearchParamsShape> | undefined,
+  input: Promise<SearchParamsShape> | undefined,
 ): Promise<SearchParamsShape | undefined> {
   return input ? await input : undefined;
 }
@@ -108,7 +108,7 @@ function buildSafeChartFallback(
 export default async function Home({
   searchParams,
 }: {
-  searchParams?: SearchParamsShape | Promise<SearchParamsShape>;
+  searchParams?: Promise<SearchParamsShape>;
 }) {
   const resolvedSearchParams = await resolveSearchParams(searchParams);
 
