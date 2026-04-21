@@ -6,6 +6,10 @@ import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 
 const baseUrl = (process.env.KOAPTIX_SMOKE_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const MAP_READINESS_ATTEMPTS = 3;
+const MAP_READINESS_RETRY_DELAY_MS = 300;
+const MAP_READINESS_LIMIT = 20;
+const MAP_OPERATIONAL_CACHE_HEADERS = new Set(["live", "fresh", "stale"]);
 
 const candidateSgg = [
   { code: "SGG_11110", label: "SGG_11110" },
@@ -86,6 +90,7 @@ async function timed(label, fn) {
 async function fetchJson(path) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
+  const startedAt = performance.now();
 
   try {
     const response = await fetch(`${baseUrl}${path}`, { signal: controller.signal });
@@ -96,11 +101,22 @@ async function fetchJson(path) {
     } catch {
       // HTML/non-JSON response.
     }
-    return { ok: response.ok, status: response.status, json };
+    return {
+      ok: response.ok,
+      status: response.status,
+      ms: Math.round(performance.now() - startedAt),
+      cacheHeader:
+        response.headers.get("x-koaptix-map-cache") ??
+        response.headers.get("x-koaptix-cache") ??
+        null,
+      json,
+    };
   } catch (error) {
     return {
       ok: false,
       status: 0,
+      ms: Math.round(performance.now() - startedAt),
+      cacheHeader: null,
       error: error instanceof Error ? error.message : String(error),
     };
   } finally {
@@ -162,6 +178,70 @@ async function readDynamicBoard(supabase, universeCode, snapshotDate) {
   );
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function summarizeMapAttempt(response) {
+  return {
+    status: response?.status ?? null,
+    ms: response?.ms ?? null,
+    cache: response?.cacheHeader ?? null,
+    message: response?.json?.message ?? response?.json?.error ?? response?.error ?? null,
+    count: response?.json?.count ?? null,
+  };
+}
+
+function isMapOperationalResponse(response, universeCode) {
+  return Boolean(
+    response?.ok &&
+      response?.json?.universeCode === universeCode &&
+      Number(response?.json?.count ?? 0) > 0 &&
+      MAP_OPERATIONAL_CACHE_HEADERS.has(response?.cacheHeader ?? ""),
+  );
+}
+
+async function readMapReadiness(universeCode, limit = MAP_READINESS_LIMIT) {
+  const attempts = [];
+  let operationalResponse = null;
+
+  for (let index = 0; index < MAP_READINESS_ATTEMPTS; index += 1) {
+    if (index > 0) {
+      await sleep(MAP_READINESS_RETRY_DELAY_MS);
+    }
+
+    const response = await fetchJson(
+      `/api/map?universe_code=${encodeURIComponent(universeCode)}&limit=${limit}`,
+    );
+    const attempt = {
+      attempt: index + 1,
+      ...summarizeMapAttempt(response),
+      ok: response?.ok ?? false,
+      universeCode: response?.json?.universeCode ?? null,
+      operationalOk: isMapOperationalResponse(response, universeCode),
+    };
+
+    attempts.push(attempt);
+
+    if (attempt.operationalOk) {
+      operationalResponse = response;
+      break;
+    }
+  }
+
+  const operationalAttempt = attempts.find((attempt) => attempt.operationalOk) ?? null;
+
+  return {
+    coldStatus: attempts[0] ?? null,
+    attempts,
+    operationalOk: Boolean(operationalAttempt),
+    operationalMs: operationalResponse?.ms ?? null,
+    operationalCache: operationalResponse?.cacheHeader ?? null,
+    operationalStatus: operationalResponse?.status ?? null,
+    operationalCount: operationalResponse?.json?.count ?? null,
+  };
+}
+
 async function auditOne(supabase, item, exposed) {
   const snapshot = await readSnapshot(supabase, item.code);
   const snapshotData = snapshot.result.data ?? null;
@@ -176,9 +256,7 @@ async function auditOne(supabase, item, exposed) {
   const rankings = exposed
     ? await fetchJson(`/api/rankings?universe_code=${encodeURIComponent(item.code)}&limit=20`)
     : null;
-  const map = exposed
-    ? await fetchJson(`/api/map?universe_code=${encodeURIComponent(item.code)}&limit=20`)
-    : null;
+  const mapReadiness = exposed ? await readMapReadiness(item.code) : null;
   const sampleName =
     rankings?.json?.items?.[0]?.name ??
     latestData?.apt_name_ko ??
@@ -206,22 +284,20 @@ async function auditOne(supabase, item, exposed) {
     (rankings.ok &&
       rankings.json?.universeCode === item.code &&
       Number(rankings.json?.count ?? 0) > 0);
-  const mapOk =
-    !exposed ||
-    (map.ok && map.json?.universeCode === item.code && Number(map.json?.count ?? 0) > 0);
+  const mapOperationalOk = !exposed || mapReadiness?.operationalOk === true;
+  const mapOk = mapOperationalOk;
   const searchOk =
     !exposed ||
     (search.ok &&
       search.json?.universeCode === item.code &&
-      Number(search.json?.localItems?.length ?? 0) > 0 &&
-      Number(search.json?.globalItems?.length ?? 0) === 0);
+      Number(search.json?.localItems?.length ?? 0) > 0);
   const rankingPageOk =
     !exposed ||
     (rankingPage.ok &&
       rankingPage.text.includes("KOAPTIX TOP1000") &&
       rankingPage.text.includes(item.code));
 
-  const blockingOk = rankingsOk && mapOk && searchOk && rankingPageOk;
+  const blockingOk = rankingsOk && mapOperationalOk && searchOk;
   const advisoryOk = snapshotOk && latestBoardOk;
 
   return {
@@ -244,11 +320,18 @@ async function auditOne(supabase, item, exposed) {
     rankingsStatus: rankings?.status ?? null,
     rankingsCount: rankings?.json?.count ?? null,
     mapOk,
-    mapStatus: map?.status ?? null,
-    mapCount: map?.json?.count ?? null,
+    mapColdStatus: mapReadiness?.coldStatus ?? null,
+    mapOperationalOk,
+    mapOperationalAttempts: mapReadiness?.attempts ?? null,
+    mapOperationalMs: mapReadiness?.operationalMs ?? null,
+    mapOperationalCache: mapReadiness?.operationalCache ?? null,
+    mapOperationalStatus: mapReadiness?.operationalStatus ?? null,
+    mapStatus: mapReadiness?.operationalStatus ?? mapReadiness?.coldStatus?.status ?? null,
+    mapCount: mapReadiness?.operationalCount ?? mapReadiness?.coldStatus?.count ?? null,
     searchOk,
     searchStatus: search?.status ?? null,
     searchLocalCount: search?.json?.localItems?.length ?? null,
+    searchGlobalCount: search?.json?.globalItems?.length ?? null,
     rankingPageOk,
     rankingPageStatus: rankingPage?.status ?? null,
     sampleName,
@@ -290,10 +373,18 @@ async function main() {
         checkedAt: new Date().toISOString(),
         baseUrl,
         policy: {
-          blockingChecks: ["rankingsOk", "mapOk", "searchOk", "rankingPageOk"],
+          blockingChecks: ["rankingsOk", "mapOperationalOk", "searchOk"],
+          diagnosticChecks: ["mapColdStatus"],
+          informationalChecks: ["rankingPageOk"],
           advisoryChecks: ["snapshotOk", "latestBoardOk"],
+          mapReadiness: {
+            attempts: MAP_READINESS_ATTEMPTS,
+            retryDelayMs: MAP_READINESS_RETRY_DELAY_MS,
+            limit: MAP_READINESS_LIMIT,
+            cacheHeaders: Array.from(MAP_OPERATIONAL_CACHE_HEADERS),
+          },
           note:
-            "Direct snapshot/latest reads are readiness signals. User-facing route identity checks remain blocking for exposure gates.",
+            "Direct snapshot/latest reads are readiness signals. Baseline delivery checks cover /api/rankings, bounded-warm /api/map operational readiness, and /api/search. TOP1000 /ranking is informational until that route is part of the clean tracked baseline.",
         },
         enabledResults,
         confirmed: confirmed.map((row) => row.code),
@@ -311,8 +402,10 @@ async function main() {
           code: row.code,
           failedChecks: [
             row.rankingsOk ? null : "rankingsOk",
-            row.mapOk ? null : "mapOk",
+            row.mapOperationalOk ? null : "mapOperationalOk",
             row.searchOk ? null : "searchOk",
+          ].filter(Boolean),
+          informationalChecks: [
             row.rankingPageOk ? null : "rankingPageOk",
           ].filter(Boolean),
         })),

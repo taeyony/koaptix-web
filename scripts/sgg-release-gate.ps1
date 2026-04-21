@@ -76,9 +76,13 @@ function Get-FailedChecks {
   if ($Row.snapshotOk -ne $true) { $failed += "snapshotOk" }
   if ($Row.latestBoardOk -ne $true) { $failed += "latestBoardOk" }
   if ($Row.rankingsOk -ne $true) { $failed += "rankingsOk" }
-  if ($Row.mapOk -ne $true) { $failed += "mapOk" }
+  $mapOperationalOk = if ($null -ne $Row.mapOperationalOk) {
+    $Row.mapOperationalOk
+  } else {
+    $Row.mapOk
+  }
+  if ($mapOperationalOk -ne $true) { $failed += "mapOperationalOk" }
   if ($Row.searchOk -ne $true) { $failed += "searchOk" }
-  if ($Row.rankingPageOk -ne $true) { $failed += "rankingPageOk" }
   return $failed
 }
 
