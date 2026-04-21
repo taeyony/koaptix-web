@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   Line,
   LineChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -21,6 +20,7 @@ type ComplexHistoryMiniChartProps = {
 };
 
 const DEFAULT_COLORS = ["#22d3ee", "#e879f9", "#34d399", "#f59e0b"];
+const MIN_CHART_HEIGHT = 220;
 
 function formatMarketCapCompact(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "-";
@@ -78,7 +78,7 @@ function buildMergedDataset(series: HistoryChartSeries[]) {
   }
 
   return Array.from(merged.values()).sort((a, b) =>
-    String(a.snapshotDate).localeCompare(String(b.snapshotDate))
+    String(a.snapshotDate).localeCompare(String(b.snapshotDate)),
   );
 }
 
@@ -100,8 +100,51 @@ export function ComplexHistoryMiniChart({
 
   const mergedData = useMemo(
     () => buildMergedDataset(normalizedSeries),
-    [normalizedSeries]
+    [normalizedSeries],
   );
+
+  const [isMounted, setIsMounted] = useState(false);
+  const chartContainerRef = useRef<HTMLDivElement | null>(null);
+  const [chartBox, setChartBox] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted) return;
+
+    const node = chartContainerRef.current;
+    if (!node) return;
+
+    const updateBox = () => {
+      const rect = node.getBoundingClientRect();
+      setChartBox({
+        width: Math.max(0, Math.floor(rect.width)),
+        height: Math.max(0, Math.floor(rect.height)),
+      });
+    };
+
+    updateBox();
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+
+      setChartBox({
+        width: Math.max(0, Math.floor(entry.contentRect.width)),
+        height: Math.max(0, Math.floor(entry.contentRect.height)),
+      });
+    });
+
+    observer.observe(node);
+    window.addEventListener("resize", updateBox);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateBox);
+    };
+  }, [isMounted]);
 
   if (normalizedSeries.length === 0 || mergedData.length === 0) {
     return (
@@ -111,8 +154,11 @@ export function ComplexHistoryMiniChart({
     );
   }
 
+  const canRenderMeasuredChart =
+    isMounted && chartBox.width > 0 && chartBox.height >= MIN_CHART_HEIGHT;
+
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl border border-white/8 bg-black/25 [background-image:linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]">
+    <div className="relative w-full min-w-0 overflow-hidden rounded-2xl border border-white/8 bg-black/25 [background-image:linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]">
       <div
         className="pointer-events-none absolute inset-0 opacity-80"
         style={{
@@ -143,9 +189,19 @@ export function ComplexHistoryMiniChart({
         </div>
       </div>
 
-      <div className="relative h-[220px] w-full px-1 py-2">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={mergedData} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
+      <div
+        ref={chartContainerRef}
+        className="relative h-[220px] min-h-[220px] w-full min-w-0 overflow-hidden px-1 py-2"
+      >
+        {!canRenderMeasuredChart ? (
+          <div className="h-full min-h-[220px] w-full animate-pulse rounded-xl border border-white/8 bg-white/[0.02]" />
+        ) : (
+          <LineChart
+            width={Math.max(chartBox.width, 1)}
+            height={Math.max(chartBox.height, MIN_CHART_HEIGHT)}
+            data={mergedData}
+            margin={{ top: 12, right: 12, left: 0, bottom: 4 }}
+          >
             <CartesianGrid
               vertical={false}
               stroke="rgba(255,255,255,0.08)"
@@ -213,7 +269,7 @@ export function ComplexHistoryMiniChart({
               />
             ))}
           </LineChart>
-        </ResponsiveContainer>
+        )}
       </div>
     </div>
   );
