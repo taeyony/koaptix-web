@@ -2,11 +2,12 @@
 
 ## Purpose
 
-This document records the read-only batch-10 SGG readiness scan.
+This document records the read-only batch-10 SGG readiness scan and the later
+post-open verification result from commit `3ba22ef`.
 
-This is a pre-open readiness review. Batch-10 actual open was not performed in
-this turn. This document does not modify registry exposure, DB, SQL, source of
-truth, API routes, gate scripts, package files, components, or runtime code.
+The readiness review itself did not open batch-10 and did not modify registry
+exposure, DB, SQL, source of truth, API routes, gate scripts, package files,
+components, or runtime code.
 
 The source of truth remains:
 
@@ -30,6 +31,8 @@ koaptix_rank_snapshot
 - Batch-8 open commit: `b6245f0 feat(koaptix): open batch-8 ready sgg exposure`
 - Batch-9 open commit: `5a82c32 feat(koaptix): open batch-9 ready sgg exposure`
 - Batch-9 post-open docs commit: `00c2b37 docs(koaptix): record batch-9 open verification`
+- Batch-10 readiness docs commit: `825fcec docs(koaptix): add batch-10 readiness review`
+- Batch-10 open commit: `3ba22ef feat(koaptix): open batch-10 ready sgg exposure`
 
 ## Current Enabled Exposure
 
@@ -131,6 +134,13 @@ Batch-9 is already open:
 
 - `SGG_31140`
 - `SGG_27260`
+
+Post-open status:
+
+- `3ba22ef feat(koaptix): open batch-10 ready sgg exposure` opened exactly
+  `SGG_41150` and `SGG_41390`.
+- Current enabled SGG count after that commit: 38.
+- No macro universe exposure policy changed.
 
 These twelve already-open batch-4 through batch-9 codes were excluded from
 batch-10 candidate selection.
@@ -349,14 +359,99 @@ rollback should be needed for a registry-only open.
 
 ## Actual Open Status
 
-Batch-10 actual open has not been performed.
+Batch-10 was opened later by:
 
-Do not expose any batch-10 SGG from this document alone. A future actual-open
-turn must use a separate explicit open prompt and should open only:
+- `3ba22ef feat(koaptix): open batch-10 ready sgg exposure`
+
+That commit changed exactly one runtime file:
+
+- `src/lib/koaptix/universes.ts`
+
+The open exposed exactly:
 
 - `SGG_41150`
 - `SGG_41390`
 
+Registry entries opened:
+
+| code | label | order | enabled | homeEnabled | searchEnabled | rankingEnabled | mapEnabled |
+| --- | --- | ---: | --- | --- | --- | --- | --- |
+| `SGG_41150` | Uijeongbu-si | 137 | true | true | true | true | true |
+| `SGG_41390` | Siheung-si | 138 | true | true | true | true | true |
+
+The readiness review and the open result are aligned: the same two candidates
+recommended by the review were the only candidates exposed.
+
+## Post-Open Result
+
+Open result:
+
+- enabled SGG count after open: 38
+- `npm run build`: PASS
+- home URL checks: PASS
+  - `/?universe=SGG_41150`: 200
+  - `/?universe=SGG_41390`: 200
+- `/ranking` URL checks: PASS
+  - `/ranking?universe=SGG_41150`: 200
+  - `/ranking?universe=SGG_41390`: 200
+- `/api/rankings`: PASS
+  - `/api/rankings?universe_code=SGG_41150&limit=20`: 200, count 20
+  - `/api/rankings?universe_code=SGG_41390&limit=20`: 200, count 20
+- `/api/map`: PASS
+  - `/api/map?universe_code=SGG_41150&limit=20`: 200
+  - `/api/map?universe_code=SGG_41390&limit=20`: 200
+- map requested and rendered universe matched the requested SGG
+- map `isFallback=false`
+- map `source=dynamic`
+- same-universe delivery retained
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+- `npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `failed_command=NONE`
+- `failed_universe_or_step=NONE`
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS, `enabled=38`, `confirmed=38`
+- home, ranking, manual API checks: PASS
+- `smoke:regional`: PASS
+- `smoke:browser`: PASS
+- build: PASS
+
+## Current Status After Batch-10 Open
+
+Batch-10 is open as of commit `3ba22ef`.
+
+No DB, SQL, source-of-truth, API route, gate script, package, script, component,
+or docs change was part of the open commit. The open commit changed only
+`src/lib/koaptix/universes.ts`.
+
+This docs reconciliation turn is docs-only. It does not modify registry, code,
+API routes, scripts, SQL, source of truth, package files, components, or env.
+
 Do not treat batch-10 as an open-ended block. Any additional SGG exposure after
-these two candidates requires a separate readiness review and a separate
+`SGG_41150` and `SGG_41390` requires a separate readiness review and a separate
 explicit open prompt.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, manual checks, API checks, and the SGG
+release gate passed after the registry-only open.
+
+If a later batch-10-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-10 block:
+
+- `SGG_41150`
+- `SGG_41390`
+
+No DB, SQL, source-of-truth, API route, package, script, or component rollback
+should be needed for a batch-10 registry-only rollback.
+
+No prohibition was violated during the actual open:
+
+- no SGG beyond `SGG_41150` and `SGG_41390` was opened
+- no batch-4 through batch-9 SGG was reworked
+- no API route was modified
+- no DB, SQL, or source-of-truth object was modified
+- no docs file was modified by the open commit
+- `dev.log`, `tsconfig.tsbuildinfo`, and `next-env.d.ts` were not committed
