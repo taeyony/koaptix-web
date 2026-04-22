@@ -495,9 +495,11 @@ async function withLocalQueryTimeout<T>(
 }
 
 const MAX_LATEST_RANK_BOARD_LIMIT = 1000;
+const HOME_KPI_LOG_WINDOW_MS = 180_000;
 
 const latestRankBoardCooldownUntil = new Map<string, number>();
 const LATEST_RANK_BOARD_COOLDOWN_MS = 180_000;
+let lastHomeKpiWarningAt = 0;
 
 function isLatestRankBoardCoolingDown(universeCode: string) {
   if (universeCode === DEFAULT_UNIVERSE_CODE) return false;
@@ -1088,6 +1090,54 @@ function buildHomeIndexChartPayload(
   };
 }
 
+function formatKpiTrillionKrw(value: number | null) {
+  if (value === null) return null;
+  return `${value.toLocaleString("ko-KR", {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 0,
+  })}조원`;
+}
+
+function formatKpiCount(value: number | null) {
+  if (value === null) return null;
+  return `${Math.round(value).toLocaleString("ko-KR")}개`;
+}
+
+function shouldLogHomeKpiWarning() {
+  const now = Date.now();
+  if (now - lastHomeKpiWarningAt < HOME_KPI_LOG_WINDOW_MS) {
+    return false;
+  }
+
+  lastHomeKpiWarningAt = now;
+  return true;
+}
+
+function normalizeHomeKpiPayload(data: any | null) {
+  if (!data) return null;
+
+  const totalMarketCapTrillion =
+    toNullableNumber(data.market_cap_trillion_krw) ??
+    toNullableNumber(data.total_market_cap_trillion_krw) ??
+    (() => {
+      const totalMarketCap = toNullableNumber(data.total_market_cap);
+      return totalMarketCap === null ? null : totalMarketCap / 1_000_000_000_000;
+    })();
+
+  const listedUnits =
+    toNullableNumber(data.listed_units) ??
+    toNullableNumber(data.listed_complex_count);
+
+  return {
+    ...data,
+    total_market_cap_krw_string:
+      data.total_market_cap_krw_string ??
+      formatKpiTrillionKrw(totalMarketCapTrillion),
+    total_household_count_string:
+      data.total_household_count_string ?? formatKpiCount(listedUnits),
+  };
+}
+
 export async function getIndexChartPayload(
   universeCode: KnownUniverseCode | string = DEFAULT_UNIVERSE_CODE,
   limit = 24,
@@ -1126,9 +1176,18 @@ export async function getHomeKpi() {
       .maybeSingle();
 
     if (error) throw error;
-    return data;
+    return normalizeHomeKpiPayload(data);
   } catch (error) {
-    console.warn("[KOAPTIX] Failed to fetch KPI:", error);
+    if (shouldLogHomeKpiWarning()) {
+      console.info("[KOAPTIX] Home KPI unavailable; using fallback:", {
+        message: error instanceof Error ? error.message : String(error),
+        code:
+          error && typeof error === "object" && "code" in error
+            ? (error as { code?: unknown }).code
+            : null,
+      });
+    }
+
     return null;
   }
 }
