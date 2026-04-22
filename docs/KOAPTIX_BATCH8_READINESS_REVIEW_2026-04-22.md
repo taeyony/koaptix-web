@@ -2,10 +2,10 @@
 
 ## Purpose
 
-This document records the read-only batch-8 SGG readiness scan. It is a
-pre-open readiness review only.
+This document records the read-only batch-8 SGG readiness scan and the later
+post-open verification result from commit `b6245f0`.
 
-Batch-8 actual open has not been performed. This document does not modify the
+The readiness review itself did not open batch-8 and did not modify the
 registry, DB, SQL, source of truth, API routes, gate scripts, package files,
 components, or runtime code.
 
@@ -26,6 +26,8 @@ koaptix_rank_snapshot
 - Batch-5 open commit: `7cac4e8 feat(koaptix): open batch-5 ready sgg exposure`
 - Batch-6 open commit: `dee214d feat(koaptix): open batch-6 ready sgg exposure`
 - Batch-7 open commit: `a260e93 feat(koaptix): open batch-7 ready sgg exposure`
+- Batch-8 readiness docs commit: `4eb653c docs(koaptix): add batch-8 readiness review`
+- Batch-8 open commit: `b6245f0 feat(koaptix): open batch-8 ready sgg exposure`
 
 ## Current Enabled Exposure
 
@@ -114,6 +116,13 @@ Batch-7 is already open:
 
 These eight already-open batch-4 through batch-7 codes must not be treated as
 batch-8 candidates.
+
+Post-open status:
+
+- `b6245f0 feat(koaptix): open batch-8 ready sgg exposure` opened exactly
+  `SGG_28260` and `SGG_27290`.
+- Current enabled SGG count after that commit: 34.
+- No macro universe exposure policy changed.
 
 ## Gate Coverage Baseline
 
@@ -299,13 +308,69 @@ rollback should be needed for a registry-only open.
 
 ## Actual Open Status
 
-Batch-8 has not been opened.
+Batch-8 was opened later by:
 
-Do not treat batch-8 as an open-ended block. The next actual open prompt, if
-approved, should open exactly:
+- `b6245f0 feat(koaptix): open batch-8 ready sgg exposure`
+
+That commit changed exactly one runtime file:
+
+- `src/lib/koaptix/universes.ts`
+
+The open exposed exactly:
 
 - `SGG_28260`
 - `SGG_27290`
 
-Any SGG exposure beyond those two requires a separate readiness review and a
-separate explicit open prompt.
+The readiness review and the open result are aligned: the same two candidates
+recommended by the review were the only candidates exposed.
+
+## Post-Open Result
+
+Open result:
+
+- enabled SGG count after open: 34
+- `npm run build`: PASS
+- home URL checks: PASS
+- `/ranking` URL checks: PASS
+- `/api/rankings`: PASS
+- `/api/map`: PASS
+- same-universe delivery retained
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+- `npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `failed_command=NONE`
+- `failed_universe_or_step=NONE`
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS, `enabled=34`, `confirmed=34`
+- home, ranking, manual API checks: PASS
+- `smoke:regional`: PASS
+- `smoke:browser`: PASS
+- build: PASS
+
+## Current Status After Batch-8 Open
+
+Batch-8 is open as of commit `b6245f0`.
+
+No DB, SQL, source-of-truth, API route, gate script, package, script, component,
+or docs change was part of the open commit. The open commit changed only
+`src/lib/koaptix/universes.ts`.
+
+Do not treat batch-8 as an open-ended block. Any additional SGG exposure after
+`SGG_28260` and `SGG_27290` requires a separate readiness review and a separate
+explicit open prompt.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, manual checks, API checks, and the SGG
+release gate passed after the registry-only open.
+
+If a later batch-8-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-8 block:
+
+- `SGG_28260`
+- `SGG_27290`
+
+No DB, SQL, source-of-truth, API route, package, script, or component rollback
+should be needed for a batch-8 registry-only rollback.
