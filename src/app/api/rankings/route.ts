@@ -412,7 +412,7 @@ async function fetchBoardPayloadFromDynamic(
     };
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("v_koaptix_universe_rank_history_dynamic")
     .select(
       `
@@ -436,7 +436,13 @@ async function fetchBoardPayloadFromDynamic(
       `,
     )
     .eq("universe_code", universeCode)
-    .eq("snapshot_date", latestSnapshot.snapshot_date)
+    .eq("snapshot_date", latestSnapshot.snapshot_date);
+
+  if (universeCode === DEFAULT_UNIVERSE_CODE) {
+    query = query.lte("rank_all", effectiveLimit);
+  }
+
+  const { data, error } = await query
     .order("rank_all", { ascending: true })
     .limit(effectiveLimit);
 

@@ -125,8 +125,7 @@ export default async function Home({
   const boardPrimaryLimit =
     universeCode === DEFAULT_UNIVERSE_CODE ? 8 : 18;
 
-  const boardSeedTimeoutMs =
-    universeCode === DEFAULT_UNIVERSE_CODE ? 6200 : 7200;
+  const boardSeedTimeoutMs = 7200;
 
   // 🚨 2-A) 지차장 지시: 지역 페이지에서 KOREA 캐시를 주워오지 않도록 교체
   const chartFallback = buildSafeChartFallback(
@@ -134,28 +133,36 @@ export default async function Home({
     lastGoodIndexChartPayloadByUniverse,
   );
 
-  const [boardSeed, rawKpi, indexChartPayload] = await Promise.all([
-    withTimeoutFallback(
-      getLatestRankBoard(universeCode, boardPrimaryLimit)
-        .then((items) => ({
-          items,
+  const boardSeedPromise =
+    universeCode === DEFAULT_UNIVERSE_CODE
+      ? Promise.resolve({
+          items: [] as any[],
           boardError: null as string | null,
-        }))
-        .catch((error) => {
-          const message =
-            error instanceof Error ? error.message : "보드 로딩 실패";
-          console.warn("[HOME] getLatestRankBoard failed:", error);
-          return {
+        })
+      : withTimeoutFallback(
+          getLatestRankBoard(universeCode, boardPrimaryLimit)
+            .then((items) => ({
+              items,
+              boardError: null as string | null,
+            }))
+            .catch((error) => {
+              const message =
+                error instanceof Error ? error.message : "보드 로딩 실패";
+              console.warn("[HOME] getLatestRankBoard failed:", error);
+              return {
+                items: [] as any[],
+                boardError: message,
+              };
+            }),
+          boardSeedTimeoutMs,
+          {
             items: [] as any[],
-            boardError: message,
-          };
-        }),
-      boardSeedTimeoutMs,
-      {
-        items: [] as any[],
-        boardError: null as string | null,
-      },
-    ),
+            boardError: null as string | null,
+          },
+        );
+
+  const [boardSeed, rawKpi, indexChartPayload] = await Promise.all([
+    boardSeedPromise,
     withTimeoutFallback(
       getHomeKpi()
         .then((data) => {

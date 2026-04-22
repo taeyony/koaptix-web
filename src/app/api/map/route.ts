@@ -237,8 +237,8 @@ function getEffectiveRequestedLimit(
     return requestedLimit;
   }
 
-  if (requestedLimit <= 32) return 56;
-  if (requestedLimit <= 52) return 72;
+  if (requestedLimit <= 32) return 32;
+  if (requestedLimit <= 52) return 52;
   return 88;
 }
 
@@ -694,7 +694,7 @@ async function fetchMapPayloadFromDynamic(
     };
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("v_koaptix_universe_rank_history_dynamic")
     .select(
       `
@@ -709,7 +709,13 @@ async function fetchMapPayloadFromDynamic(
       `,
     )
     .eq("universe_code", universeCode)
-    .eq("snapshot_date", latestSnapshot.snapshot_date)
+    .eq("snapshot_date", latestSnapshot.snapshot_date);
+
+  if (universeCode === DEFAULT_UNIVERSE_CODE) {
+    query = query.lte("rank_all", effectiveLimit);
+  }
+
+  const { data, error } = await query
     .order("rank_all", { ascending: true })
     .limit(effectiveLimit);
 
