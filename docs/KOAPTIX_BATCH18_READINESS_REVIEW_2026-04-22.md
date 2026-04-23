@@ -220,3 +220,102 @@ Run a separate batch-18 actual-open prompt only for the refreshed READY set:
 - `SGG_26140`
 
 This readiness refresh did not perform the actual open. Do not include the original HOLD/watchlist candidates in the next actual-open step unless a separate future read-only audit produces fresh READY evidence for them.
+
+## Actual Open Status
+
+Batch-18 actual open was completed in a separate registry-only implementation commit:
+
+- Commit: `ce4d002`
+- Commit message: `feat(koaptix): open batch-18 ready sgg exposure`
+
+Registry entries opened:
+
+| code | label | order | enabled | homeEnabled | searchEnabled | rankingEnabled | mapEnabled |
+| --- | --- | ---: | --- | --- | --- | --- | --- |
+| `SGG_26110` | 중구 | 153 | true | true | true | true | true |
+| `SGG_26140` | 서구 | 154 | true | true | true | true | true |
+
+The readiness refresh and the open result are aligned: the same two candidates
+recommended by the refresh were the only candidates exposed.
+
+## Post-Open Result
+
+Open result:
+
+- enabled SGG count after open: 54
+- `npm run build`: PASS
+- build note: existing `metadataBase` warning only
+- home URL checks: PASS
+  - `/?universe=SGG_26110`: 200
+  - `/?universe=SGG_26140`: 200
+- `/ranking` URL checks: PASS
+  - `/ranking?universe=SGG_26110`: 200
+  - `/ranking?universe=SGG_26140`: 200
+- `/api/rankings`: PASS
+  - `/api/rankings?universe_code=SGG_26110&limit=20`: 200, count 13, same-universe rows
+  - `/api/rankings?universe_code=SGG_26140&limit=20`: 200, count 20, same-universe rows
+- `/api/map`: PASS
+  - `/api/map?universe_code=SGG_26110&limit=20`: 200
+  - `/api/map?universe_code=SGG_26140&limit=20`: 200
+- map requested and rendered universe matched the requested SGG
+- map `isFallback=false`
+- map `fallbackMode=none`
+- map `source=dynamic`
+- same-universe delivery retained
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+- `npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `failed_command=NONE`
+- `failed_universe_or_step=NONE`
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS, `enabled=54`, `confirmed=54`
+- home, ranking, manual API checks: PASS
+- `smoke:regional`: PASS
+- `smoke:browser`: PASS
+- build: PASS
+
+## Current Status After Batch-18 Open
+
+Batch-18 is open as of commit `ce4d002`.
+
+No DB, SQL, source-of-truth, API route, gate script, package, script, component,
+or docs change was part of the open commit. The open commit changed only
+`src/lib/koaptix/universes.ts`.
+
+This docs reconciliation turn is docs-only. It does not modify registry, code,
+API routes, scripts, SQL, source of truth, package files, components, tests,
+generated artifacts, or env.
+
+Do not treat batch-18 as an open-ended block. Any additional SGG exposure after
+`SGG_26110` and `SGG_26140` requires a separate readiness review and a separate
+explicit open prompt.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, manual checks, API checks, and the SGG
+release gate passed after the registry-only open.
+
+If a later batch-18-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-18 block:
+
+- `SGG_26110`
+- `SGG_26140`
+
+No DB, SQL, source-of-truth, API route, package, script, component, docs, test,
+or generated-artifact rollback should be needed for a batch-18 registry-only
+rollback.
+
+No prohibition was violated during the actual open:
+
+- no SGG beyond `SGG_26110` and `SGG_26140` was opened
+- no batch-4 through batch-17 SGG was reworked
+- no API route was modified
+- no DB, SQL, or source-of-truth object was modified
+- no docs file was modified by the open commit
+- `dev.log`, `tsconfig.tsbuildinfo`, and `next-env.d.ts` were not committed
+
+## Next Recommended Step After Batch-18
+
+Run a separate batch-19 readiness review before any additional SGG exposure.
