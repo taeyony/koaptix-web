@@ -146,17 +146,104 @@ Keep the following as `INSUFFICIENT_EVIDENCE` until repo-local evidence includes
 ## Current Status
 
 - Batch-17 readiness scan: complete
-- Actual open performed in this step: no
-- Registry/code/API/SQL/source-of-truth/components/scripts/package/env/test/gate/generated changes: none
-- Rollback required: no
+- Actual open performed during the readiness scan step: no
+- Registry/code/API/SQL/source-of-truth/components/scripts/package/env/test/gate/generated changes during the readiness scan step: none
+- Readiness-scan rollback required: no
 
-## Next Recommended Step
+## Actual Open Status
 
-Proceed to a separate batch-17 actual open turn only if explicitly approved.
+Batch-17 actual open was completed in a separate registry-only implementation commit:
 
-That actual open turn should open only the final READY set documented here:
+- Commit: `5ab0cbd`
+- Commit message: `feat(koaptix): open batch-17 ready sgg exposure`
+
+Registry entries opened:
+
+| code | label | order | enabled | homeEnabled | searchEnabled | rankingEnabled | mapEnabled |
+| --- | --- | ---: | --- | --- | --- | --- | --- |
+| `SGG_50110` | 제주시 | 151 | true | true | true | true | true |
+| `SGG_41171` | 안양시 만안구 | 152 | true | true | true | true | true |
+
+The readiness review and the open result are aligned: the same two candidates
+recommended by the review were the only candidates exposed.
+
+## Post-Open Result
+
+Open result:
+
+- enabled SGG count after open: 52
+- `npm run build`: PASS
+- build note: existing `metadataBase` warning only
+- home URL checks: PASS
+  - `/?universe=SGG_50110`: 200
+  - `/?universe=SGG_41171`: 200
+- `/ranking` URL checks: PASS
+  - `/ranking?universe=SGG_50110`: 200
+  - `/ranking?universe=SGG_41171`: 200
+- `/api/rankings`: PASS
+  - `/api/rankings?universe_code=SGG_50110&limit=20`: 200, count 20, same-universe rows
+  - `/api/rankings?universe_code=SGG_41171&limit=20`: 200, count 20, same-universe rows
+- `/api/map`: PASS
+  - `/api/map?universe_code=SGG_50110&limit=20`: 200
+  - `/api/map?universe_code=SGG_41171&limit=20`: 200
+- map requested and rendered universe matched the requested SGG
+- map `fallback=false`
+- map `source=dynamic`
+- same-universe delivery retained
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+- `npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `failed_command=NONE`
+- `failed_universe_or_step=NONE`
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS, `enabled=52`, `confirmed=52`
+- home, ranking, manual API checks: PASS
+- `smoke:regional`: PASS
+- `smoke:browser`: PASS
+- build: PASS
+
+## Current Status After Batch-17 Open
+
+Batch-17 is open as of commit `5ab0cbd`.
+
+No DB, SQL, source-of-truth, API route, gate script, package, script, component,
+or docs change was part of the open commit. The open commit changed only
+`src/lib/koaptix/universes.ts`.
+
+This docs reconciliation turn is docs-only. It does not modify registry, code,
+API routes, scripts, SQL, source of truth, package files, components, tests,
+generated artifacts, or env.
+
+Do not treat batch-17 as an open-ended block. Any additional SGG exposure after
+`SGG_50110` and `SGG_41171` requires a separate readiness review and a separate
+explicit open prompt.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, manual checks, API checks, and the SGG
+release gate passed after the registry-only open.
+
+If a later batch-17-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-17 block:
 
 - `SGG_50110`
 - `SGG_41171`
 
-The readiness document itself does not expose these SGGs to service.
+No DB, SQL, source-of-truth, API route, package, script, component, docs, test,
+or generated-artifact rollback should be needed for a batch-17 registry-only
+rollback.
+
+No prohibition was violated during the actual open:
+
+- no SGG beyond `SGG_50110` and `SGG_41171` was opened
+- no batch-4 through batch-16 SGG was reworked
+- no API route was modified
+- no DB, SQL, or source-of-truth object was modified
+- no docs file was modified by the open commit
+- `dev.log`, `tsconfig.tsbuildinfo`, and `next-env.d.ts` were not committed
+
+## Next Recommended Step
+
+Run a separate batch-18 readiness review before any additional SGG exposure.
