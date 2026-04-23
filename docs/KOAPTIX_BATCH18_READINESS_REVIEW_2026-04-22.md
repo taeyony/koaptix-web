@@ -4,6 +4,8 @@
 
 This document records the batch-18 SGG readiness scan only.
 
+This document was later updated by a docs-only readiness refresh after a region_dim-seeded read-only discovery pass found a concrete refreshed READY set. The original HOLD outcome is preserved below as historical context.
+
 This step does not perform an actual open, does not modify `src/lib/koaptix/universes.ts`, and does not modify API, SQL, source-of-truth, components, scripts, package, env, test/gate, or generated artifacts.
 
 The service exposure source of truth remains the registry in `src/lib/koaptix/universes.ts`. The data source chain remains:
@@ -27,6 +29,15 @@ koaptix_rank_snapshot
   - `SGG_41171` / 안양시 만안구 / order 152
 
 Batch-18 is the next pending SGG staged-exposure batch.
+
+Docs-only readiness refresh baseline:
+
+- Branch checked: `checkpoint/2026-04-13-nationwide-baseline-candidate`
+- HEAD checked: `6ee935d`
+- Latest relevant commit: `6ee935d docs(koaptix): add region-dim sgg discovery audit`
+- Region-dim discovery audit: `docs/KOAPTIX_REGION_DIM_SGG_DISCOVERY_2026-04-22.md`
+- Discovery-path plan: `docs/KOAPTIX_STALLED_SGG_DISCOVERY_PATH_PLAN_2026-04-22.md`
+- Batch-18 actual open after refresh: not performed
 
 ## Current Registry Status
 
@@ -113,9 +124,19 @@ Candidates without direct latest board/snapshot/dynamic evidence remain `INSUFFI
 | `SGG_41170` | unknown from current registry | prior sampled weak-evidence list | no latest board rows, latest snapshot date, or dynamic sample evidence found in reviewed docs | INSUFFICIENT_EVIDENCE |
 | `SGG_41190` | unknown from current registry | prior sampled weak-evidence list | no latest board rows, latest snapshot date, or dynamic sample evidence found in reviewed docs | INSUFFICIENT_EVIDENCE |
 
-## Recommended Batch-18 Open Set
+## Original Batch-18 Readiness Outcome
 
-Recommended batch-18 open set:
+The original batch-18 readiness scan ended in HOLD.
+
+Reason:
+
+- The remaining previously held high-evidence candidates, `SGG_50110` and `SGG_41171`, were already enabled/opened in batch-17.
+- The remaining watchlist candidates found in repo-local docs did not have documented latest board rows, snapshot-date evidence, or dynamic-path/sample evidence.
+- The original scan did not force two candidates just to fill a batch.
+
+## Original Recommended Batch-18 Open Set
+
+Original recommended batch-18 open set:
 
 - `NONE`
 
@@ -124,6 +145,48 @@ Reason:
 - The remaining previously held high-evidence candidates, `SGG_50110` and `SGG_41171`, are now already enabled/opened in batch-17.
 - The remaining watchlist candidates found in repo-local docs do not have documented latest board rows, snapshot-date evidence, or dynamic-path/sample evidence.
 - This scan does not force two candidates just to fill a batch.
+
+## Recovery Path Summary
+
+After the original HOLD:
+
+- Batch-18 evidence refresh remained HOLD.
+- Batch-18 readonly audit remained HOLD for the known stalled target set.
+- The stalled wide sweep remained HOLD because a broad `SGG_%` read against `v_koaptix_latest_universe_rank_board_u` timed out.
+- The stalled paginated discovery remained HOLD because active SGG-heavy `LIKE 'SGG_XX%'` prefixes still timed out.
+- The stalled discovery-path plan identified an existing lighter source: enumerate active sigungu codes from `region_dim`, exclude enabled registry SGGs, then run bounded exact per-code source-of-truth reads.
+- The region_dim-seeded read-only discovery found a refreshed READY set without retrying the heavy board sweep.
+
+## Refreshed Candidate Review
+
+READY after the region_dim discovery refresh requires:
+
+1. not currently registry enabled
+2. not previously opened
+3. latest board row evidence exists
+4. snapshot-date evidence exists
+5. dynamic-path/sample evidence exists
+6. no contradiction from prior HOLD reasoning
+
+| Candidate | Label | Evidence source | Evidence summary | Status |
+| --- | --- | --- | --- | --- |
+| `SGG_26110` | 부산광역시 중구 | `docs/KOAPTIX_REGION_DIM_SGG_DISCOVERY_2026-04-22.md` | latest board yes; snapshot `2026-04-22`; dynamic sample yes; sample `complex_id=108267`, rank 1, `금호`; absent from enabled registry; no repo-local prior open mention | READY |
+| `SGG_26140` | 부산광역시 서구 | `docs/KOAPTIX_REGION_DIM_SGG_DISCOVERY_2026-04-22.md` | latest board yes; snapshot `2026-04-22`; dynamic sample yes; sample `complex_id=110352`, rank 1, `힐스테이트이진베이시티아파트`; absent from enabled registry; no repo-local prior open mention | READY |
+
+## Final Batch-18 Open Recommendation
+
+Final refreshed batch-18 READY open set:
+
+- `SGG_26110` / 부산광역시 중구
+- `SGG_26140` / 부산광역시 서구
+
+Recommendation rationale:
+
+- Both candidates are absent from the current enabled registry.
+- Neither candidate is documented as previously opened.
+- Both have latest board row evidence, snapshot-date evidence, and dynamic sample evidence from bounded exact per-code read-only checks.
+- The recommendation remains capped at two SGG candidates.
+- The next actual-open turn should expose only this refreshed READY set.
 
 ## HOLD / Watchlist
 
@@ -139,17 +202,21 @@ Keep the following as `INSUFFICIENT_EVIDENCE` until repo-local evidence includes
 - `SGG_41170`
 - `SGG_41190`
 
-No candidate is promoted to READY in this batch-18 scan.
+No candidate was promoted to READY in the original batch-18 scan. The later region_dim-seeded readiness refresh supersedes that original HOLD for the next actual-open decision with `SGG_26110` and `SGG_26140`.
 
 ## Current Status
 
-- Batch-18 readiness scan: complete
+- Batch-18 original readiness scan: complete with HOLD
+- Batch-18 docs-only readiness refresh: complete with refreshed READY set
 - Actual open performed in this step: no
 - Registry/code/API/SQL/source-of-truth/components/scripts/package/env/test/gate/generated changes: none
 - Rollback required: no
 
 ## Next Recommended Step
 
-Do not run a batch-18 actual open from this document because the recommended open set is `NONE`.
+Run a separate batch-18 actual-open prompt only for the refreshed READY set:
 
-The next useful step is a separate evidence refresh or audit pass to identify additional SGGs with documented latest board rows, snapshot-date evidence, and dynamic-path/sample evidence before any further actual open.
+- `SGG_26110`
+- `SGG_26140`
+
+This readiness refresh did not perform the actual open. Do not include the original HOLD/watchlist candidates in the next actual-open step unless a separate future read-only audit produces fresh READY evidence for them.
