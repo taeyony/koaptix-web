@@ -2,9 +2,10 @@
 
 ## Purpose
 
-This document records the batch-16 SGG readiness scan only.
+This document records the batch-16 SGG readiness scan and the later post-open
+verification result from commit `adfab9f`.
 
-Batch-16 actual open was not performed. This review does not modify registry
+The readiness review itself did not open batch-16 and did not modify registry
 exposure, `src/lib/koaptix/universes.ts`, DB, SQL, source of truth, API routes,
 gate scripts, package files, components, tests, generated artifacts, env, or
 runtime code.
@@ -184,9 +185,9 @@ Insufficient direct evidence in the sampled documents:
 
 Batch-16 readiness scan is complete.
 
-Batch-16 actual open was not performed. No registry, code, API route, script,
-SQL, source-of-truth, package, component, test, generated artifact, or env file
-was modified.
+Batch-16 actual open was not performed during the readiness scan. No registry,
+code, API route, script, SQL, source-of-truth, package, component, test,
+generated artifact, or env file was modified by the readiness scan.
 
 ## Expected Rollback Scope
 
@@ -198,12 +199,108 @@ rollback scope should be registry-only and exactly:
 - `SGG_26290`
 - `SGG_48123`
 
-## Next Recommended Step
+## Actual Open Status
 
-Run a separate explicit batch-16 actual open turn only if the user approves
-opening exactly:
+Batch-16 was opened later by:
+
+- `adfab9f feat(koaptix): open batch-16 ready sgg exposure`
+
+That commit changed exactly one runtime file:
+
+- `src/lib/koaptix/universes.ts`
+
+The open exposed exactly:
 
 - `SGG_26290`
 - `SGG_48123`
 
-Do not treat this readiness review as service exposure.
+Registry entries opened:
+
+| code | label | order | enabled | homeEnabled | searchEnabled | rankingEnabled | mapEnabled |
+| --- | --- | ---: | --- | --- | --- | --- | --- |
+| `SGG_26290` | 남구 | 149 | true | true | true | true | true |
+| `SGG_48123` | 창원시 성산구 | 150 | true | true | true | true | true |
+
+The readiness review and the open result are aligned: the same two candidates
+recommended by the review were the only candidates exposed.
+
+## Post-Open Result
+
+Open result:
+
+- enabled SGG count after open: 50
+- `npm run build`: PASS
+- build note: existing `metadataBase` warning only
+- home URL checks: PASS
+  - `/?universe=SGG_26290`: 200
+  - `/?universe=SGG_48123`: 200
+- `/ranking` URL checks: PASS
+  - `/ranking?universe=SGG_26290`: 200
+  - `/ranking?universe=SGG_48123`: 200
+- `/api/rankings`: PASS
+  - `/api/rankings?universe_code=SGG_26290&limit=20`: 200, count 20, same-universe rows
+  - `/api/rankings?universe_code=SGG_48123&limit=20`: 200, count 20, same-universe rows
+- `/api/map`: PASS
+  - `/api/map?universe_code=SGG_26290&limit=20`: 200
+  - `/api/map?universe_code=SGG_48123&limit=20`: 200
+- map requested and rendered universe matched the requested SGG
+- map `fallback=false`
+- map `source=dynamic`
+- same-universe delivery retained
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+- `npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `failed_command=NONE`
+- `failed_universe_or_step=NONE`
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS, `enabled=50`, `confirmed=50`
+- home, ranking, manual API checks: PASS
+- `smoke:regional`: PASS
+- `smoke:browser`: PASS
+- build: PASS
+
+## Current Status After Batch-16 Open
+
+Batch-16 is open as of commit `adfab9f`.
+
+No DB, SQL, source-of-truth, API route, gate script, package, script, component,
+or docs change was part of the open commit. The open commit changed only
+`src/lib/koaptix/universes.ts`.
+
+This docs reconciliation turn is docs-only. It does not modify registry, code,
+API routes, scripts, SQL, source of truth, package files, components, tests,
+generated artifacts, or env.
+
+Do not treat batch-16 as an open-ended block. Any additional SGG exposure after
+`SGG_26290` and `SGG_48123` requires a separate readiness review and a separate
+explicit open prompt.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, manual checks, API checks, and the SGG
+release gate passed after the registry-only open.
+
+If a later batch-16-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-16 block:
+
+- `SGG_26290`
+- `SGG_48123`
+
+No DB, SQL, source-of-truth, API route, package, script, component, docs, test,
+or generated-artifact rollback should be needed for a batch-16 registry-only
+rollback.
+
+No prohibition was violated during the actual open:
+
+- no SGG beyond `SGG_26290` and `SGG_48123` was opened
+- no batch-4 through batch-15 SGG was reworked
+- no API route was modified
+- no DB, SQL, or source-of-truth object was modified
+- no docs file was modified by the open commit
+- `dev.log`, `tsconfig.tsbuildinfo`, and `next-env.d.ts` were not committed
+
+## Next Recommended Step
+
+Run a separate batch-17 readiness review before any additional SGG exposure.
