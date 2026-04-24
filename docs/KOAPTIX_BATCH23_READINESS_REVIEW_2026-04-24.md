@@ -194,3 +194,113 @@ exposure, including `/api/rankings`, `/api/search`, `/api/map`, `audit:sgg`,
 
 Do not perform docs reconciliation until after the batch-23 actual-open commit
 exists and passes its required gate.
+
+## Actual Open Status
+
+Batch-23 actual open was completed in a separate registry-only implementation
+commit:
+
+- Commit: `069973b`
+- Commit message: `feat(koaptix): open batch-23 ready sgg exposure`
+
+Registry entries opened:
+
+| code | label | order | enabled | homeEnabled | searchEnabled | rankingEnabled | mapEnabled |
+| --- | --- | ---: | --- | --- | --- | --- | --- |
+| `SGG_26500` | 수영구 | 163 | true | true | true | true | true |
+| `SGG_26530` | 사상구 | 164 | true | true | true | true | true |
+
+The readiness review and the open result are aligned: the same two candidates
+recommended by the review were the only candidates exposed.
+
+`SGG_26710` remains unopened. It is not part of the batch-23 actual open and
+must not be listed as an opened entry.
+
+## Post-Open Result
+
+Open result:
+
+- enabled SGG count after open: 64
+- last enabled SGG order after open: 164
+- `npm run build`: PASS
+- `npm run audit:sgg`: PASS
+- `audit:sgg` `blockingFailed=[]`
+- `audit:sgg` `advisoryMiss=[]`
+- `npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `smoke:regional`: PASS through gate, including both new SGGs
+- `smoke:browser`: PASS through gate, including both new SGGs
+- console and visible errors: none blocking
+
+Target delivery confirmation:
+
+- `SGG_26500`: rankings/search/map/direct readiness PASS
+- `SGG_26500` sample: 삼익비치
+- `SGG_26500` map `isFallback=false`
+- `SGG_26500` map `fallbackMode=none`
+- `SGG_26500` map `source=dynamic`
+- `SGG_26530`: rankings/search/map/direct readiness PASS
+- `SGG_26530` sample: 사상중흥에스-클래스그랜드센트럴
+- `SGG_26530` map `isFallback=false`
+- `SGG_26530` map `fallbackMode=none`
+- `SGG_26530` map `source=dynamic`
+- `/api/rankings`: PASS for both targets, 200 with same-universe rows
+- `/api/search`: PASS for both targets, 200 with same-universe local results
+- `/api/map`: PASS for both targets, 200 with same-universe dynamic map response
+- same-universe delivery retained
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+- `SGG_26710` remains unopened
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS, `enabled=64`, `confirmed=64`
+- `smoke:regional`: PASS
+- `smoke:browser`: PASS
+- build: PASS
+
+## Current Status After Batch-23 Open
+
+Batch-23 readiness is complete.
+Batch-23 actual open is complete as of commit `069973b`.
+Batch-23 docs reconciliation is complete after this docs-only commit.
+
+No DB, SQL, source-of-truth, API route, gate script, package, script,
+component, or docs change was part of the open commit. The open commit changed
+only `src/lib/koaptix/universes.ts`.
+
+This docs reconciliation turn is docs-only. It does not modify registry, code,
+API routes, scripts, SQL, source of truth, package files, components, tests,
+generated artifacts, or env.
+
+Do not treat batch-23 as an open-ended block. Any additional SGG exposure after
+`SGG_26500` and `SGG_26530` requires a separate readiness review and a separate
+explicit open prompt.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, audit, smoke, and the SGG release gate
+passed after the registry-only open.
+
+If a later batch-23-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-23 block:
+
+- `SGG_26500`
+- `SGG_26530`
+
+No DB, SQL, source-of-truth, API route, package, script, component, docs, test,
+or generated-artifact rollback should be needed for a batch-23 registry-only
+rollback.
+
+No prohibition was violated during the actual open:
+
+- no SGG beyond `SGG_26500` and `SGG_26530` was opened
+- `SGG_26710` was not opened
+- no batch-4 through batch-22 SGG was reworked
+- no API route was modified
+- no DB, SQL, or source-of-truth object was modified
+- no docs file was modified by the open commit
+
+## Next Recommended Step After Reconciliation
+
+No immediate runtime step is required from this reconciliation turn. Batch-23
+post-open verification is now recorded in this readiness document.
