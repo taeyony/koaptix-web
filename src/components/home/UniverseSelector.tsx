@@ -191,6 +191,7 @@ export default function UniverseSelector({
 }: UniverseSelectorProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const selectGuardRef = useRef<{ code: string; at: number } | null>(null);
 
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -347,6 +348,18 @@ export default function UniverseSelector({
 
   const handleSelect = useCallback(
     (nextCode: string) => {
+      const now = Date.now();
+      const lastSelect = selectGuardRef.current;
+
+      if (
+        lastSelect &&
+        lastSelect.code === nextCode &&
+        now - lastSelect.at < 120
+      ) {
+        return;
+      }
+
+      selectGuardRef.current = { code: nextCode, at: now };
       onChange(nextCode);
       pushRecentCode(nextCode);
       setIsOpen(false);
@@ -354,6 +367,35 @@ export default function UniverseSelector({
     },
     [onChange, pushRecentCode],
   );
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const onOptionPointerUp = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const option = target.closest<HTMLElement>(
+        '[data-testid="universe-option"][data-universe-code]',
+      );
+      if (!option || !root.contains(option)) return;
+      if (option.getAttribute("aria-disabled") === "true") return;
+      if (option instanceof HTMLButtonElement && option.disabled) return;
+
+      const nextCode = option.getAttribute("data-universe-code");
+      if (!nextCode) return;
+
+      handleSelect(nextCode);
+    };
+
+    root.addEventListener("pointerup", onOptionPointerUp, true);
+    return () => {
+      root.removeEventListener("pointerup", onOptionPointerUp, true);
+    };
+  }, [handleSelect]);
 
   const renderChip = useCallback(
     (
