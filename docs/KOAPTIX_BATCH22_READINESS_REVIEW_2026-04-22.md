@@ -160,3 +160,103 @@ Run a separate batch-22 actual-open prompt only for the READY candidates above:
 - `SGG_26470`
 
 This readiness scan did not perform the actual open. Do not include any additional batch-22 candidate in the next actual-open step unless a separate future read-only audit produces fresh READY evidence.
+
+## Actual Open Status
+
+Batch-22 actual open was completed in a separate registry-only implementation commit:
+
+- Commit: `2b91165`
+- Commit message: `feat(koaptix): open batch-22 ready sgg exposure`
+
+Registry entries opened:
+
+| code | label | order | enabled | homeEnabled | searchEnabled | rankingEnabled | mapEnabled |
+| --- | --- | ---: | --- | --- | --- | --- | --- |
+| `SGG_26440` | 강서구 | 161 | true | true | true | true | true |
+| `SGG_26470` | 연제구 | 162 | true | true | true | true | true |
+
+The readiness review and the open result are aligned: the same two candidates
+recommended by the review were the only candidates exposed.
+
+## Post-Open Result
+
+Open result:
+
+- enabled SGG count after open: 62
+- last enabled SGG order after open: 162
+- `npm run build`: PASS
+- `npm run audit:sgg`: PASS
+- `npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `smoke:regional`: PASS through gate, including both new SGGs
+- `smoke:browser`: PASS through gate, including both new SGGs
+- console and visible errors: none blocking
+
+Target delivery confirmation:
+
+- `SGG_26440`: rankings/search/map/direct readiness PASS
+- `SGG_26440` sample: 더힐시그니처
+- `SGG_26470`: rankings/search/map/direct readiness PASS
+- `SGG_26470` sample: 더샵파크시티
+- `/api/rankings`: PASS for both targets, 200 with same-universe rows
+- `/api/search`: PASS for both targets, 200 with same-universe local results
+- `/api/map`: PASS for both targets, 200 with same-universe dynamic map response
+- map `isFallback=false`
+- map `fallbackMode=none`
+- map `source=dynamic`
+- same-universe delivery retained
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS, `enabled=62`, `confirmed=62`
+- `smoke:regional`: PASS
+- `smoke:browser`: PASS
+- build: PASS
+
+## Current Status After Batch-22 Open
+
+Batch-22 readiness is complete.
+Batch-22 actual open is complete as of commit `2b91165`.
+Batch-22 docs reconciliation is complete after this docs-only commit.
+
+No DB, SQL, source-of-truth, API route, gate script, package, script,
+component, or docs change was part of the open commit. The open commit changed
+only `src/lib/koaptix/universes.ts`.
+
+This docs reconciliation turn is docs-only. It does not modify registry, code,
+API routes, scripts, SQL, source of truth, package files, components, tests,
+generated artifacts, or env.
+
+Do not treat batch-22 as an open-ended block. Any additional SGG exposure after
+`SGG_26440` and `SGG_26470` requires a separate readiness review and a separate
+explicit open prompt.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, audit, smoke, and the SGG release gate
+passed after the registry-only open.
+
+If a later batch-22-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-22 block:
+
+- `SGG_26440`
+- `SGG_26470`
+
+No DB, SQL, source-of-truth, API route, package, script, component, docs, test,
+or generated-artifact rollback should be needed for a batch-22 registry-only
+rollback.
+
+No prohibition was violated during the actual open:
+
+- no SGG beyond `SGG_26440` and `SGG_26470` was opened
+- no batch-4 through batch-21 SGG was reworked
+- no API route was modified
+- no DB, SQL, or source-of-truth object was modified
+- no docs file was modified by the open commit
+- `dev.log`, `tsconfig.tsbuildinfo`, and `next-env.d.ts` were not committed
+
+## Next Recommended Step After Reconciliation
+
+No immediate runtime step is required from this reconciliation turn. Batch-22
+post-open verification is now recorded in this readiness document.
