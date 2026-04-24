@@ -202,3 +202,116 @@ exposure, including `/api/rankings`, `/api/search`, `/api/map`, `audit:sgg`,
 
 Do not perform docs reconciliation until after the batch-24 actual-open commit
 exists and passes its required gate.
+
+## Actual Open Status
+
+Batch-24 actual open was completed in a separate registry-only implementation
+commit:
+
+- Commit: `6669228`
+- Commit message: `feat(koaptix): open batch-24 ready sgg exposure`
+
+Registry entries opened:
+
+| code | label | order | enabled | homeEnabled | searchEnabled | rankingEnabled | mapEnabled |
+| --- | --- | ---: | --- | --- | --- | --- | --- |
+| `SGG_26710` | 기장군 | 165 | true | true | true | true | true |
+| `SGG_27110` | 중구 | 166 | true | true | true | true | true |
+
+The readiness review and the open result are aligned: the same two candidates
+recommended by the review were the only candidates exposed.
+
+`SGG_27140` and `SGG_27170` remain unopened. They are not part of the batch-24
+actual open and must not be listed as opened entries.
+
+## Post-Open Result
+
+Open result:
+
+- enabled SGG count after open: 66
+- last enabled SGG order after open: 166
+- `npm run build`: PASS
+- `npm run audit:sgg`: PASS
+- `audit:sgg` `blockingFailed=[]`
+- first standalone `audit:sgg` run had advisory-only latest-board misses on
+  pre-existing SGGs
+- `npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `smoke:regional`: PASS through gate, including both new SGGs
+- `smoke:browser`: PASS through gate, including both new SGGs
+- console and visible errors: none blocking
+
+Target delivery confirmation:
+
+- `SGG_26710`: rankings/search/map/direct readiness PASS
+- `SGG_26710` sample: 일광자이푸르지오2단지
+- `SGG_26710` map `isFallback=false`
+- `SGG_26710` map `fallbackMode=none`
+- `SGG_26710` map `source=dynamic`
+- `SGG_27110`: rankings/search/map/direct readiness PASS
+- `SGG_27110` sample: 남산자이하늘채
+- `SGG_27110` map `isFallback=false`
+- `SGG_27110` map `fallbackMode=none`
+- `SGG_27110` map `source=dynamic`
+- `/api/rankings`: PASS for both targets, 200 with same-universe rows
+- `/api/search`: PASS for both targets, 200 with same-universe local results
+- `/api/map`: PASS for both targets, 200 with same-universe dynamic map response
+- same-universe delivery retained
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+- `SGG_27140` remains unopened
+- `SGG_27170` remains unopened
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS after allowed rerun, `enabled=66`, `confirmed=66`
+- `smoke:regional`: PASS
+- `smoke:browser`: PASS
+- build: PASS
+
+## Current Status After Batch-24 Open
+
+Batch-24 readiness is complete.
+Batch-24 actual open is complete as of commit `6669228`.
+Batch-24 docs reconciliation is complete after this docs-only commit.
+
+No DB, SQL, source-of-truth, API route, gate script, package, script,
+component, or docs change was part of the open commit. The open commit changed
+only `src/lib/koaptix/universes.ts`.
+
+This docs reconciliation turn is docs-only. It does not modify registry, code,
+API routes, scripts, SQL, source of truth, package files, components, tests,
+generated artifacts, or env.
+
+Do not treat batch-24 as an open-ended block. Any additional SGG exposure after
+`SGG_26710` and `SGG_27110` requires a separate readiness review and a separate
+explicit open prompt.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, audit, smoke, and the SGG release gate
+passed after the registry-only open.
+
+If a later batch-24-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-24 block:
+
+- `SGG_26710`
+- `SGG_27110`
+
+No DB, SQL, source-of-truth, API route, package, script, component, docs, test,
+or generated-artifact rollback should be needed for a batch-24 registry-only
+rollback.
+
+No prohibition was violated during the actual open:
+
+- no SGG beyond `SGG_26710` and `SGG_27110` was opened
+- `SGG_27140` was not opened
+- `SGG_27170` was not opened
+- no batch-4 through batch-23 SGG was reworked
+- no API route was modified
+- no DB, SQL, or source-of-truth object was modified
+- no docs file was modified by the open commit
+
+## Next Recommended Step After Reconciliation
+
+No immediate runtime step is required from this reconciliation turn. Batch-24
+post-open verification is now recorded in this readiness document.
