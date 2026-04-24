@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 
 const baseUrl = (process.env.KOAPTIX_SMOKE_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const DELIVERY_READINESS_ATTEMPTS = 3;
+const DELIVERY_READINESS_RETRY_DELAY_MS = 300;
 const MAP_READINESS_ATTEMPTS = 3;
 const MAP_READINESS_RETRY_DELAY_MS = 300;
 const MAP_READINESS_LIMIT = 20;
@@ -122,6 +124,25 @@ async function fetchJson(path) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchJsonWithRetries(path, isAcceptable) {
+  let lastResponse = null;
+
+  for (let index = 0; index < DELIVERY_READINESS_ATTEMPTS; index += 1) {
+    if (index > 0) {
+      await sleep(DELIVERY_READINESS_RETRY_DELAY_MS);
+    }
+
+    const response = await fetchJson(path);
+    lastResponse = response;
+
+    if (isAcceptable(response)) {
+      return response;
+    }
+  }
+
+  return lastResponse;
 }
 
 async function fetchText(path) {
@@ -254,7 +275,15 @@ async function auditOne(supabase, item, exposed) {
   const dynamicData = dynamic.result.data ?? null;
 
   const rankings = exposed
-    ? await fetchJson(`/api/rankings?universe_code=${encodeURIComponent(item.code)}&limit=20`)
+    ? await fetchJsonWithRetries(
+        `/api/rankings?universe_code=${encodeURIComponent(item.code)}&limit=20`,
+        (response) =>
+          Boolean(
+            response?.ok &&
+              response?.json?.universeCode === item.code &&
+              Number(response?.json?.count ?? 0) > 0,
+          ),
+      )
     : null;
   const mapReadiness = exposed ? await readMapReadiness(item.code) : null;
   const sampleName =
@@ -264,8 +293,14 @@ async function auditOne(supabase, item, exposed) {
     "";
   const search =
     exposed && sampleName
-      ? await fetchJson(
+      ? await fetchJsonWithRetries(
           `/api/search?universe_code=${encodeURIComponent(item.code)}&q=${encodeURIComponent(sampleName)}&limit=12`,
+          (response) =>
+            Boolean(
+              response?.ok &&
+                response?.json?.universeCode === item.code &&
+                Number(response?.json?.localItems?.length ?? 0) > 0,
+            ),
         )
       : null;
   const rankingPage = exposed
