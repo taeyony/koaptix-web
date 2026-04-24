@@ -357,7 +357,9 @@ function isAppReady(diag, scope) {
     return (
       diag.hasKoaptix500 === true &&
       diag.activeButtonCount > 0 &&
-      diag.rankingCardCount > 0
+      diag.rankingBoardCount > 0 &&
+      diag.currentUniverseLabelCount > 0 &&
+      diag.marketChartCardCount > 0
     );
   }
 
