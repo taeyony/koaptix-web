@@ -151,3 +151,118 @@ The next step must be a separate batch-28 actual-open task. Only the READY candi
 - `SGG_28177`
 
 The actual-open task must update only `src/lib/koaptix/universes.ts`, then run build, audit, gate, regional smoke, and browser smoke validation. Docs reconciliation must wait until after the actual-open commit exists and passes validation.
+
+## Actual Open Status
+
+Batch-28 actual open was completed in a separate registry-only implementation
+commit:
+
+- Commit: `2663b7c`
+- Commit message: `feat(koaptix): open batch-28 ready sgg exposure`
+
+Registry entries opened:
+
+| code | label | order | enabled | homeEnabled | searchEnabled | rankingEnabled | mapEnabled |
+| --- | --- | ---: | --- | --- | --- | --- | --- |
+| `SGG_28140` | 동구 | 173 | true | true | true | true | true |
+| `SGG_28177` | 미추홀구 | 174 | true | true | true | true | true |
+
+The readiness review and the open result are aligned: the same two candidates
+recommended by the review were the only candidates exposed.
+
+`SGG_28115`, `SGG_28116`, `SGG_28265`, `SGG_28200`, `SGG_28237`, and
+`SGG_28245` remain unopened. They are not part of the batch-28 actual open and
+must not be listed as opened entries.
+
+## Post-Open Result
+
+Open result:
+
+- enabled SGG count after open: 74
+- last enabled SGG order after open: 174
+- `npm run build`: PASS
+- `npm run audit:sgg`: PASS
+- `audit:sgg` `blockingFailed=[]`
+- `audit:sgg` `advisoryMiss=[]`
+- `npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `smoke:regional`: PASS through gate, including both new SGGs
+- `smoke:browser`: PASS through gate, including both new SGGs
+- console and visible errors: none blocking
+
+Target delivery confirmation:
+
+- `SGG_28140`: rankings/search/map/direct readiness PASS
+- `SGG_28140` sample: preserved from the readiness section above
+- `SGG_28177`: rankings/search/map/direct readiness PASS
+- `SGG_28177` sample: preserved from the readiness section above
+- `/api/rankings`: PASS for both targets, 200 with same-universe rows
+- `/api/search`: PASS for both targets, 200 with same-universe local results
+- `/api/map`: PASS for both targets, 200 with same-universe dynamic map response
+- same-universe delivery retained
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+- `SGG_28115` remains unopened
+- `SGG_28116` remains unopened
+- `SGG_28265` remains unopened
+- `SGG_28200` remains unopened
+- `SGG_28237` remains unopened
+- `SGG_28245` remains unopened
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS, `enabled=74`, `confirmed=74`
+- `smoke:regional`: PASS
+- `smoke:browser`: PASS
+- build: PASS
+
+## Current Status After Batch-28 Open
+
+Batch-28 readiness is complete.
+Batch-28 actual open is complete as of commit `2663b7c`.
+Batch-28 docs reconciliation is complete after this docs-only commit.
+
+No DB, SQL, source-of-truth, API route, gate script, package, script,
+component, or docs change was part of the open commit. The open commit changed
+only `src/lib/koaptix/universes.ts`.
+
+This docs reconciliation turn is docs-only. It does not modify registry, code,
+API routes, scripts, SQL, source of truth, package files, components, tests,
+generated artifacts, or env.
+
+Do not treat batch-28 as an open-ended block. Any additional SGG exposure after
+`SGG_28140` and `SGG_28177` requires a separate readiness review and a separate
+explicit open prompt.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, audit, smoke, and the SGG release gate
+passed after the registry-only open.
+
+If a later batch-28-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-28 block:
+
+- `SGG_28140`
+- `SGG_28177`
+
+No DB, SQL, source-of-truth, API route, package, script, component, docs, test,
+or generated-artifact rollback should be needed for a batch-28 registry-only
+rollback.
+
+No prohibition was violated during the actual open:
+
+- no SGG beyond `SGG_28140` and `SGG_28177` was opened
+- `SGG_28115` was not opened
+- `SGG_28116` was not opened
+- `SGG_28265` was not opened
+- `SGG_28200` was not opened
+- `SGG_28237` was not opened
+- `SGG_28245` was not opened
+- no batch-4 through batch-27 SGG was reworked
+- no API route was modified
+- no DB, SQL, or source-of-truth object was modified
+- no docs file was modified by the open commit
+
+## Next Recommended Step After Reconciliation
+
+No immediate runtime step is required from this reconciliation turn. Batch-28
+post-open verification is now recorded in this readiness document.
