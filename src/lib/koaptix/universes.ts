@@ -1159,6 +1159,30 @@ const SGG_UNIVERSE_REGISTRY: UniverseRegistryItem[] = [
     mapEnabled: true,
     order: 176,
   },
+
+  // Batch 30 - 2026-04-25 staged exposure from confirmed SGG candidates
+  {
+    code: "SGG_28245",
+    label: "계양구",
+    scope: "SIGUNGU",
+    enabled: true,
+    homeEnabled: true,
+    searchEnabled: true,
+    rankingEnabled: true,
+    mapEnabled: true,
+    order: 177,
+  },
+  {
+    code: "SGG_28710",
+    label: "강화군",
+    scope: "SIGUNGU",
+    enabled: true,
+    homeEnabled: true,
+    searchEnabled: true,
+    rankingEnabled: true,
+    mapEnabled: true,
+    order: 178,
+  },
 ];
 
 /**
