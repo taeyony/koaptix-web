@@ -139,3 +139,130 @@ READY - batch-31 has two candidates ready for actual open:
 - The actual-open step must assign orders `179` and `180` and enable `enabled`, `homeEnabled`, `searchEnabled`, `rankingEnabled`, and `mapEnabled` for both selected SGGs.
 - Build, audit, gate, smoke:regional, and smoke:browser validation must pass after the actual registry open.
 - Docs reconciliation must not occur until after the actual-open commit exists and passes validation.
+
+## Actual Open Status
+
+Batch-31 actual open was completed in a separate registry-only implementation
+commit:
+
+- Commit: `906d76a`
+- Commit message: `feat(koaptix): open batch-31 ready sgg exposure`
+
+Registry entries opened:
+
+| code | label | order | enabled | homeEnabled | searchEnabled | rankingEnabled | mapEnabled |
+| --- | --- | ---: | --- | --- | --- | --- | --- |
+| `SGG_29110` | 동구 | 179 | true | true | true | true | true |
+| `SGG_29140` | 서구 | 180 | true | true | true | true | true |
+
+The readiness review and the open result are aligned: the same two candidates
+recommended by the review were the only candidates exposed.
+
+`SGG_28115`, `SGG_28116`, `SGG_28265`, `SGG_28720`, `SGG_29155`,
+`SGG_30110`, and `SGG_30140` remain unopened. They are not part of the
+batch-31 actual open and must not be listed as opened entries.
+
+## Post-Open Result
+
+Open result:
+
+- enabled SGG count after open: 80
+- last enabled SGG order after open: 180
+- `npm run build`: PASS
+- `npm run audit:sgg`: PASS with local server on `127.0.0.1:3004`
+- `npm run gate:sgg`: PASS
+- final gate marker: `[SGG_RELEASE_GATE_PASS]`
+- `smoke:regional`: PASS through gate, including both new SGGs
+- `smoke:browser`: PASS through gate, including both new SGGs
+- console and visible errors: none blocking
+
+Target delivery confirmation:
+
+- `SGG_29110`: rankings/search/map/direct readiness PASS
+- `SGG_29110` sample: `그랜드센트럴`
+- `SGG_29110` map: `isFallback=false`, `fallbackMode=none`, `source=dynamic`
+- `SGG_29140`: rankings/search/map/direct readiness PASS
+- `SGG_29140` sample: `더샵염주센트럴파크`
+- `SGG_29140` map: `isFallback=false`, `fallbackMode=none`, `source=dynamic`
+- `/api/rankings`: PASS for both targets, 200 with same-universe rows
+- `/api/search`: PASS for both targets, 200 with same-universe local results
+- `/api/map`: PASS for both targets, 200 with same-universe dynamic map response
+- same-universe delivery retained
+- KOREA_ALL fallback was not used for the new SGG delivery checks
+- `SGG_28115` remains unopened
+- `SGG_28116` remains unopened
+- `SGG_28265` remains unopened
+- `SGG_28720` remains unopened
+- `SGG_29155` remains unopened
+- `SGG_30110` remains unopened
+- `SGG_30140` remains unopened
+
+Gate breakdown from the post-open run:
+
+- `audit:sgg`: PASS with local server on `127.0.0.1:3004`
+- `smoke:regional`: PASS
+- `smoke:browser`: PASS
+- build: PASS
+
+## Current Status After Batch-31 Open
+
+Batch-31 readiness is complete.
+Batch-31 actual open is complete as of commit `906d76a`.
+Batch-31 docs reconciliation is complete after this docs-only commit.
+
+Final registry state at this pause point:
+
+- enabled SGG count: 80
+- last enabled SGG order: 180
+
+Enabled-80 operational checkpoint is the next planned task.
+Batch-32 readiness scan is not started and is intentionally paused.
+
+No DB, SQL, source-of-truth, API route, gate script, package, script,
+component, or docs change was part of the open commit. The open commit changed
+only `src/lib/koaptix/universes.ts`.
+
+This docs reconciliation turn is docs-only. It does not modify registry, code,
+API routes, scripts, SQL, source of truth, package files, components, tests,
+generated artifacts, or env.
+
+Do not treat batch-31 as an open-ended block. Any additional SGG exposure after
+`SGG_29110` and `SGG_29140` requires a separate instruction after the
+enabled-80 operational checkpoint.
+
+## Post-Open Rollback Scope
+
+Rollback is not needed because build, audit, smoke, and the SGG release gate
+passed after the registry-only open.
+
+If a later batch-31-specific regression is proven, rollback scope should be
+registry-only and exactly the batch-31 block:
+
+- `SGG_29110`
+- `SGG_29140`
+
+No DB, SQL, source-of-truth, API route, package, script, component, docs, test,
+or generated-artifact rollback should be needed for a batch-31 registry-only
+rollback.
+
+No prohibition was violated during the actual open:
+
+- no SGG beyond `SGG_29110` and `SGG_29140` was opened
+- `SGG_28115` was not opened
+- `SGG_28116` was not opened
+- `SGG_28265` was not opened
+- `SGG_28720` was not opened
+- `SGG_29155` was not opened
+- `SGG_30110` was not opened
+- `SGG_30140` was not opened
+- no batch-4 through batch-30 SGG was reworked
+- no API route was modified
+- no DB, SQL, or source-of-truth object was modified
+- no docs file was modified by the open commit
+- no batch-32 readiness scan was prepared or started
+
+## Next Recommended Step After Reconciliation
+
+No immediate runtime expansion step is required from this reconciliation turn.
+Batch-31 post-open verification is now recorded in this readiness document.
+The next planned task is the enabled-80 operational checkpoint.
