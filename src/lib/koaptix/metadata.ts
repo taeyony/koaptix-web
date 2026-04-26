@@ -27,9 +27,9 @@ function formatMarketCapKrw(value: number): string {
 }
 
 function formatWeeklyRankDelta(delta: number): string {
-  if (delta > 0) return `순위 상승 ▲ +${delta}`;
-  if (delta < 0) return `순위 하락 ▼ ${delta}`;
-  return "순위 보합 — 0";
+  if (delta > 0) return `순위 상승 +${delta}`;
+  if (delta < 0) return `순위 하락 ${delta}`;
+  return "순위 보합 0";
 }
 
 function formatMomentumW(value: number): string {
@@ -39,9 +39,9 @@ function formatMomentumW(value: number): string {
 }
 
 function getDefaultMetadata(): Metadata {
-  const title = "KOAPTIX | 서울 아파트 랭킹 보드";
+  const title = "KOAPTIX | 전국 아파트 자본 흐름 랭킹 터미널";
   const description =
-    "서울 아파트 단지의 최근 7일 기준 랭킹 변화와 시가총액 흐름을 KOAPTIX 보드에서 확인한다.";
+    "KOAPTIX는 단지별 추정 시가총액과 주간 변화를 기준으로 전국·지역·시군구 아파트 흐름을 보여주는 랭킹 터미널입니다.";
 
   return {
     metadataBase: METADATA_BASE,

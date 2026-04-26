@@ -311,7 +311,7 @@ export function CommandPalette({
         data-testid="command-palette-open"
         className="fixed bottom-6 right-6 z-[980] rounded-full border border-slate-700 bg-slate-950/95 px-4 py-2 text-xs font-medium text-slate-200 shadow-2xl backdrop-blur transition hover:border-cyan-400/30 hover:text-cyan-300"
       >
-        ⌘ COMMAND
+        단지·지역 검색
       </button>
 
       {isOpen && (
@@ -350,7 +350,7 @@ export function CommandPalette({
                   onClick={() => setIsOpen(false)}
                   className="rounded-xl border border-slate-700 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-400 transition hover:border-slate-500 hover:text-white"
                 >
-                  [ESC] TO CLOSE
+                  닫기
                 </button>
               </div>
             </div>
@@ -384,7 +384,7 @@ export function CommandPalette({
                     </>
                   ) : (
                     <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
-                      두 글자 이상 입력해 검색을 시작해라.
+                      두 글자 이상 입력하면 단지와 지역을 검색할 수 있습니다.
                     </div>
                   )}
                 </div>
@@ -416,7 +416,7 @@ export function CommandPalette({
                 </div>
               ) : (
                 <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
-                  검색 결과가 없다. 단지명, 구, 동 이름을 바꿔서 다시 입력해라.
+                  검색 결과가 없습니다. 단지명, 구, 동 이름을 바꿔 다시 입력해보세요.
                 </div>
               )}
             </div>

@@ -1,6 +1,7 @@
 /**
  * Home = lightweight tactical board.
- * 보드/맵/검색은 universe-aware delivery path를 쓰고, chart는 index chain 기반 universe-aware renderer를 사용한다.
+ * Board/map/search stay on the universe-aware delivery path, while the chart
+ * uses the KOAPTIX index chain for the selected service universe.
  */
 
 import { Suspense } from "react";
@@ -127,7 +128,8 @@ export default async function Home({
 
   const boardSeedTimeoutMs = 7200;
 
-  // 🚨 2-A) 지차장 지시: 지역 페이지에서 KOREA 캐시를 주워오지 않도록 교체
+  // Keep chart fallback scoped to the requested universe so a stale national
+  // payload does not appear as the selected region.
   const chartFallback = buildSafeChartFallback(
     universeCode,
     lastGoodIndexChartPayloadByUniverse,
@@ -181,7 +183,7 @@ export default async function Home({
     withTimeoutFallback(
       getIndexChartPayload(universeCode, 24)
         .then((payload) => {
-          // 🚨 2-B) 지차장 지시: 지역 페이지 캐시에 KOREA 데이터가 섞이지 않도록 저장 로직 교체
+          // Cache only exact-scope payloads for the same requested universe.
           if (
             payload.rows.length > 0 &&
             payload.requestedUniverseCode === universeCode &&
@@ -266,7 +268,7 @@ export default async function Home({
       {
         label: "MARKET CAP",
         value: rawKpi?.total_market_cap_krw_string || "468.8조원",
-        subValue: "코앱틱스 500 단지",
+        subValue: "KOAPTIX 500 합계",
       },
       {
         label: "LISTED UNITS",
@@ -293,13 +295,40 @@ export default async function Home({
                   <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">
                     KOAPTIX LIVE BOARD
                   </p>
-                  <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-white sm:text-xl lg:text-2xl">
-                    KOAPTIX 500
+                  <h1 className="mt-1 max-w-3xl text-lg font-semibold tracking-tight text-white sm:text-xl lg:text-2xl">
+                    전국 아파트를 시가총액 관점으로 보는 랭킹 터미널
                   </h1>
-                  <div className="mt-1 space-y-0.5">
-                    <p className="text-xs text-slate-300 sm:text-sm">
-                      대한민국 아파트 자본 흐름을 가장 빠르게 읽어내는 인사이트 허브.
+                  <div className="mt-2 max-w-3xl space-y-1">
+                    <p className="text-xs leading-5 text-slate-300 sm:text-sm">
+                      KOAPTIX는 단지별 추정 시가총액과 주간 변화를 기준으로,
+                      전국·지역·시군구 아파트 흐름을 한눈에 보여줍니다.
                     </p>
+                    <p className="text-[11px] leading-5 text-slate-500 sm:text-xs">
+                      KOAPTIX 500은 대표 랭킹 보드이고, 지수는 시장 전체 온도를 보는
+                      숫자입니다. 지역을 선택하거나 단지명을 검색해 우리 동네의 위치를
+                      확인해보세요.
+                    </p>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 text-[11px] text-slate-300 sm:grid-cols-3">
+                    <div className="rounded-xl border border-slate-700/60 bg-slate-900/45 px-3 py-2">
+                      <span className="block font-semibold text-cyan-300">
+                        KOAPTIX 500
+                      </span>
+                      한국 아파트 자본 흐름을 대표하는 메인 랭킹 보드
+                    </div>
+                    <div className="rounded-xl border border-slate-700/60 bg-slate-900/45 px-3 py-2">
+                      <span className="block font-semibold text-emerald-300">
+                        KOAPTIX 지수
+                      </span>
+                      시장 전체 온도를 보는 브랜드 숫자
+                    </div>
+                    <div className="rounded-xl border border-slate-700/60 bg-slate-900/45 px-3 py-2">
+                      <span className="block font-semibold text-slate-100">
+                        TOP1000 / 검색
+                      </span>
+                      더 넓은 순위와 단지 탐색으로 이어지는 경로
+                    </div>
                   </div>
 
                   <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -309,11 +338,11 @@ export default async function Home({
                       href={rankingHref}
                       className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300 transition-all hover:border-cyan-400/50 hover:bg-cyan-500/20 hover:text-cyan-200"
                     >
-                      TOP1000 OPERATIONS ROOM
+                      TOP1000 보드에서 더 보기
                     </Link>
 
                     <span className="cursor-pointer rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.18em] text-slate-300 transition-all hover:bg-slate-700 hover:text-white">
-                      Elastic Sacrifice Protocol
+                      실거래 기반 대표가격과 세대수 구조를 활용한 추정 지표
                     </span>
                   </div>
                 </div>
@@ -329,6 +358,9 @@ export default async function Home({
                       </p>
                       <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-100">
                         {kpi.value}
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-slate-500">
+                        {kpi.subValue}
                       </p>
                     </div>
                   ))}
@@ -350,7 +382,7 @@ export default async function Home({
               </div>
 
               <div className="static h-[320px] min-h-0 min-w-0 overflow-hidden lg:sticky lg:top-4 lg:h-[400px]">
-                {/* 🚨 2-C) 지차장 지시: 유니버스가 바뀔 때 확실히 리렌더링되도록 고유 Key 추가 */}
+                {/* Force chart remount when selected/rendered universe scope changes. */}
                 <MarketChartCard
                   key={`chart-${indexChartPayload.requestedUniverseCode}-${indexChartPayload.renderedUniverseCode}`}
                   payload={indexChartPayload}

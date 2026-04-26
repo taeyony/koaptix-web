@@ -172,10 +172,10 @@ function getChartScopeKind(
 }
 
 function getChartScopeLabel(scope: ChartScopeKind): string {
-  if (scope === "selected-universe") return "Selected universe index";
-  if (scope === "national-fallback") return "National fallback";
-  if (scope === "alternate-universe") return "Alternate chart scope";
-  return "Chart pending";
+  if (scope === "selected-universe") return "선택 지역 지수";
+  if (scope === "national-fallback") return "전국 지수 대체 표시";
+  if (scope === "alternate-universe") return "다른 지역 지수";
+  return "지수 준비 중";
 }
 
 function EmptyState({
@@ -368,6 +368,11 @@ export default function MarketChartCard({
             {title}
           </h2>
 
+          <p className="mt-1 max-w-xl text-[11px] leading-5 text-slate-500">
+            KOAPTIX 지수는 시장 전체 온도를 보는 숫자입니다. 개별 단지 순위는
+            오른쪽 KOAPTIX 500 보드에서 확인하세요.
+          </p>
+
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {universeLabel ? (
               <span className="rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-300">
@@ -403,7 +408,7 @@ export default function MarketChartCard({
               data-universe-code={requestedCode}
             >
               <span className="block uppercase tracking-[0.16em] text-slate-500">
-                Requested
+                선택 요청
               </span>
               <span className="mt-1 block truncate font-semibold text-slate-300">
                 {requestedCodeLabel || requestedCode || "-"}
@@ -416,7 +421,7 @@ export default function MarketChartCard({
               data-universe-code={renderedCode}
             >
               <span className="block uppercase tracking-[0.16em] text-slate-500">
-                Chart scope
+                표시 범위
               </span>
               <span className="mt-1 block truncate font-semibold text-slate-300">
                 {universeLabel || codeLabel || renderedCode || "-"}

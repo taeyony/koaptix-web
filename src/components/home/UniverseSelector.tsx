@@ -119,9 +119,9 @@ function normalizeQuery(value: string) {
 }
 
 function getUniverseKindLabel(code?: string | null) {
-  if (isMacroUniverseCode(code)) return "Macro";
-  if (isSggUniverseCode(code)) return "SGG";
-  return "Universe";
+  if (isMacroUniverseCode(code)) return "광역";
+  if (isSggUniverseCode(code)) return "시군구";
+  return "지역";
 }
 
 function buildSearchText(option: UniverseOption) {
@@ -446,8 +446,8 @@ export default function UniverseSelector({
     currentOption?.code ?? value ?? null,
   );
   const finderScopeLabel = query.trim()
-    ? "All enabled universes"
-    : `${currentRegionLabel} SGG`;
+    ? "전체 지역 검색"
+    : `${currentRegionLabel} 시군구`;
 
   return (
     <div ref={rootRef} className="relative flex flex-col gap-3">
@@ -481,7 +481,7 @@ export default function UniverseSelector({
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
-              Current Universe
+              현재 선택 지역
             </p>
             <p
               className="truncate text-sm font-semibold text-slate-100"
@@ -519,7 +519,7 @@ export default function UniverseSelector({
             data-universe-code={parentMacroOption.code}
             className="rounded-full border border-slate-700 px-2 py-0.5 transition-all hover:border-cyan-500/40 hover:text-cyan-300"
           >
-            Back to macro
+            광역으로 보기
           </button>
         )}
         <span className="rounded-full border border-slate-700 px-2 py-0.5">
@@ -532,7 +532,7 @@ export default function UniverseSelector({
           {finderScopeLabel}
         </span>
         <span className="rounded-full border border-slate-700 px-2 py-0.5">
-          {sortedOptions.length} enabled
+          {sortedOptions.length}개 지역
         </span>
       </div>
 
@@ -555,13 +555,13 @@ export default function UniverseSelector({
               <span data-testid="universe-finder-active-scope">
                 {finderScopeLabel}
               </span>
-              <span>Search covers {sortedOptions.length} enabled universes</span>
+              <span>{sortedOptions.length}개 지역에서 검색</span>
             </div>
 
             {!query && allRecentOptions.length > 0 && (
               <div className="mb-4">
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Recent universe
+                  최근 본 지역
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {allRecentOptions.map((option) =>
@@ -584,7 +584,7 @@ export default function UniverseSelector({
 
             {!query && contextualSggOptions.length === 0 && (
               <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-4 text-sm text-slate-400">
-                {currentRegionLabel}은 아직 시군구 staged exposure 전이다.
+                {currentRegionLabel}은 아직 시군구 보드가 열리지 않았습니다.
               </div>
             )}
 

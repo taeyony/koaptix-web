@@ -169,7 +169,7 @@ export function RankingBoardClient({
   initialUniverseCode = DEFAULT_UNIVERSE_CODE,
   boardError,
 
-  title = "KOAPTIX 500 Rankings",
+  title = "KOAPTIX 500",
   apiBasePath = "/api/rankings",
   universeOptions = RANKING_UNIVERSE_OPTIONS,
   boardLimit = 20,
@@ -639,6 +639,10 @@ export function RankingBoardClient({
               {title}
             </h2>
 
+            <p className="mt-1 max-w-[280px] text-[11px] leading-5 text-slate-500">
+              선택한 지역의 단지를 추정 시가총액과 순위 변화로 비교하는 전술 보드입니다.
+            </p>
+
             {isBoardLoading && (
               <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
                 Syncing...
@@ -701,7 +705,7 @@ export function RankingBoardClient({
             <div className="w-full lg:max-w-[200px]">
               <input
                 type="text"
-                placeholder="현재 보드 내 검색..."
+                placeholder="단지명·지역명 검색"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-lg border border-slate-700/50 bg-slate-800/30 px-3 py-2 text-sm text-slate-200 outline-none transition-all focus:border-cyan-500/50 focus:bg-slate-800/60"
