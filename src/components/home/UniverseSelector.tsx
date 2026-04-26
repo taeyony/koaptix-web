@@ -523,7 +523,7 @@ export default function UniverseSelector({
           </button>
         )}
         <span className="rounded-full border border-slate-700 px-2 py-0.5">
-          {contextualSggOptions.length} SGG in scope
+          시군구 범위 {contextualSggOptions.length}개
         </span>
         <span
           data-testid="universe-finder-scope"
