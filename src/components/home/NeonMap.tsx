@@ -489,6 +489,13 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
+    let timedOut = false;
+
+    const mapFetchTimeoutMs = 7000;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, mapFetchTimeoutMs);
 
     const loadMapItems = async () => {
       setMapItemsError(null);
@@ -503,10 +510,14 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         setMapItems(result.items);
         setMapDelivery(result.delivery);
       } catch (error) {
-        if (controller.signal.aborted || cancelled) return;
+        // Unmount abort: return silently, board-seed fallback already rendered.
+        if (!timedOut && (controller.signal.aborted || cancelled)) return;
 
-        const message =
-          error instanceof Error ? error.message : "맵 데이터 로딩 실패";
+        const message = timedOut
+          ? "Map request timed out"
+          : error instanceof Error
+            ? error.message
+            : "맵 데이터 로딩 실패";
 
         console.warn("[NeonMap] map fetch warn", {
           currentUniverseCode,
@@ -514,16 +525,21 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
           message,
         });
 
-        setMapItemsError(message);
         setMapItems(fallbackMapItemsRef.current);
         setMapDelivery(
           buildMapDeliveryState(currentUniverseCode, {
-            fallbackMode: "client-board-fallback",
+            fallbackMode: timedOut ? "client-timeout-fallback" : "client-board-fallback",
             cacheState: "client",
             source: "home-board-seed",
             itemCount: fallbackMapItemsRef.current.length,
           }),
         );
+
+        if (!timedOut) {
+          setMapItemsError(message);
+        }
+      } finally {
+        clearTimeout(timeoutId);
       }
     };
 
@@ -531,6 +547,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
       controller.abort();
     };
   }, [currentUniverseCode, mapSourceLimit]);

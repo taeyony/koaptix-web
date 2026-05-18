@@ -28,6 +28,9 @@ const HOME_MAX_LIMIT = 20;
 
 const BOARD_CACHE_FRESH_TTL_MS = 60_000;
 const BOARD_CACHE_STALE_TTL_MS = 600_000;
+const BOARD_SUCCESS_CACHE_CONTROL =
+  "public, max-age=15, s-maxage=60, stale-while-revalidate=600";
+const BOARD_ERROR_CACHE_CONTROL = "no-store";
 
 const LATEST_BOARD_TIMEOUT_MS_REGIONAL = 1_100;
 const DYNAMIC_BOARD_TIMEOUT_MS_KOREA = 7_000;
@@ -582,7 +585,6 @@ async function fetchBoardPayload(
 }
 
 export async function GET(request: NextRequest) {
-  const supabase = createServerSupabase();
   const searchParams = request.nextUrl.searchParams;
 
   const rawUniverseCode =
@@ -599,7 +601,7 @@ export async function GET(request: NextRequest) {
   if (freshCached) {
     return NextResponse.json(freshCached, {
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": BOARD_SUCCESS_CACHE_CONTROL,
         "X-Koaptix-Cache": "fresh",
       },
     });
@@ -608,6 +610,7 @@ export async function GET(request: NextRequest) {
   const reusedInflight = boardInflight.has(cacheKey);
 
   try {
+    const supabase = createServerSupabase();
     let inflight = boardInflight.get(cacheKey);
 
     if (!inflight) {
@@ -627,7 +630,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(payload, {
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": BOARD_SUCCESS_CACHE_CONTROL,
         "X-Koaptix-Cache": reusedInflight ? "inflight" : "live",
       },
     });
@@ -645,7 +648,7 @@ export async function GET(request: NextRequest) {
     if (staleCached) {
       return NextResponse.json(staleCached, {
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control": BOARD_SUCCESS_CACHE_CONTROL,
           "X-Koaptix-Cache": "stale",
         },
       });
@@ -662,7 +665,7 @@ export async function GET(request: NextRequest) {
       {
         status: isTimeoutError(error) ? 504 : 500,
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control": BOARD_ERROR_CACHE_CONTROL,
           "X-Koaptix-Cache": "miss",
         },
       },

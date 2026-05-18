@@ -13,6 +13,9 @@ export const revalidate = 0;
 const SEARCH_CACHE_TTL_MS = 30_000;
 const SEARCH_STALE_CACHE_TTL_MS = 600_000;
 const SEARCH_REGIONAL_RETRY_LIMIT = 40;
+const SEARCH_SUCCESS_CACHE_CONTROL =
+  "public, max-age=10, s-maxage=30, stale-while-revalidate=300";
+const SEARCH_ERROR_CACHE_CONTROL = "no-store";
 
 type SearchCachePayload = {
   items: RankingItem[];
@@ -197,10 +200,10 @@ function filterItemsByQuery(items: RankingItem[], q: string) {
 
   return items.filter((item) => {
     return (
-      item.name.toLowerCase().includes(lowerQ) ||
-      item.sigunguName?.toLowerCase().includes(lowerQ) ||
-      item.legalDongName?.toLowerCase().includes(lowerQ) ||
-      item.locationLabel?.toLowerCase().includes(lowerQ)
+      String(item.name ?? "").toLowerCase().includes(lowerQ) ||
+      String(item.sigunguName ?? "").toLowerCase().includes(lowerQ) ||
+      String(item.legalDongName ?? "").toLowerCase().includes(lowerQ) ||
+      String(item.locationLabel ?? "").toLowerCase().includes(lowerQ)
     );
   });
 }
@@ -342,7 +345,7 @@ export async function GET(request: NextRequest) {
         globalItems: [],
       },
       {
-        headers: { "Cache-Control": "no-store" },
+        headers: { "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL },
       },
     );
   }
@@ -366,7 +369,7 @@ export async function GET(request: NextRequest) {
         globalItems,
       },
       {
-        headers: { "Cache-Control": "no-store" },
+        headers: { "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL },
       },
     );
   } catch (error) {
@@ -391,7 +394,7 @@ export async function GET(request: NextRequest) {
         message,
       },
       {
-        headers: { "Cache-Control": "no-store" },
+        headers: { "Cache-Control": SEARCH_ERROR_CACHE_CONTROL },
       },
     );
   }

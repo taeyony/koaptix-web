@@ -27,16 +27,16 @@ export function RankingCard({
   const weeklyMeta = item as RankingItem & RankingItemWeeklyMeta;
 
   const hasWeeklyDelta = typeof item.rankDelta7d === "number";
-  const isUp = hasWeeklyDelta && item.rankDelta7d > 0;
-  const isDown = hasWeeklyDelta && item.rankDelta7d < 0;
+  const isUp = typeof item.rankDelta7d === "number" && item.rankDelta7d > 0;
+  const isDown = typeof item.rankDelta7d === "number" && item.rankDelta7d < 0;
   const isNew = weeklyMeta.rankMovement === "NEW" && !hasWeeklyDelta;
 
   const momentumText = isNew
     ? "NEW"
     : isUp
-      ? `▲ ${item.rankDelta7d}`
+      ? `▲ ${item.rankDelta7d ?? 0}`
       : isDown
-        ? `▼ ${Math.abs(item.rankDelta7d)}`
+        ? `▼ ${Math.abs(item.rankDelta7d ?? 0)}`
         : "—";
 
   const momentumColor = isNew

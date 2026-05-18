@@ -5,6 +5,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "smoke:delivery": "node scripts/smoke-koaptix-delivery.mjs",
     "smoke:regional": "node scripts/smoke-regional-identity.mjs",
     "smoke:browser": "node scripts/smoke-browser-regional-identity.mjs",
     "audit:sgg": "node scripts/audit-sgg-readiness.mjs",

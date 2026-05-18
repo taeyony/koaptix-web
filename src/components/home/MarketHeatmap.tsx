@@ -35,7 +35,8 @@ function formatMarketCapKrw(value: number): string {
   return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
 }
 
-function formatSignedDelta(value: number): string {
+function formatSignedDelta(value: number | null): string {
+  if (value === null) return "— 0";
   const abs = Math.abs(value);
   const display = Number.isInteger(abs) ? abs.toString() : abs.toFixed(1);
 
@@ -115,7 +116,7 @@ function buildDistrictBuckets(items: RankingItem[]): DistrictBucket[] {
       totalDelta: number;
       itemCount: number;
       leadItemName: string;
-      leadItemDelta: number;
+      leadItemDelta: number | null;
     }
   >();
 
@@ -131,10 +132,10 @@ function buildDistrictBuckets(items: RankingItem[]): DistrictBucket[] {
     };
 
     current.totalMarketCap += item.marketCapKrw;
-    current.totalDelta += item.rankDelta7d;
+    current.totalDelta += (item.rankDelta7d ?? 0);
     current.itemCount += 1;
 
-    if (Math.abs(item.rankDelta7d) > Math.abs(current.leadItemDelta)) {
+    if (Math.abs(item.rankDelta7d ?? 0) > Math.abs(current.leadItemDelta ?? 0)) {
       current.leadItemName = item.name;
       current.leadItemDelta = item.rankDelta7d;
     }

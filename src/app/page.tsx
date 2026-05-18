@@ -51,9 +51,13 @@ function withTimeoutFallback<T>(
   promise: Promise<T>,
   ms: number,
   fallback: T,
+  onTimeout?: () => void,
 ): Promise<T> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(fallback), ms);
+    const timer = setTimeout(() => {
+      onTimeout?.();
+      resolve(fallback);
+    }, ms);
 
     promise
       .then((value) => {
@@ -126,7 +130,7 @@ export default async function Home({
   const boardPrimaryLimit =
     universeCode === DEFAULT_UNIVERSE_CODE ? 8 : 18;
 
-  const boardSeedTimeoutMs = 7200;
+  const boardSeedTimeoutMs = 4000;
 
   // Keep chart fallback scoped to the requested universe so a stale national
   // payload does not appear as the selected region.
@@ -161,6 +165,11 @@ export default async function Home({
             items: [] as any[],
             boardError: null as string | null,
           },
+          () =>
+            console.warn(
+              "[HOME] board seed timeout; falling back to empty seed for client hydration",
+              { universeCode, boardSeedTimeoutMs },
+            ),
         );
 
   const [boardSeed, rawKpi, indexChartPayload] = await Promise.all([

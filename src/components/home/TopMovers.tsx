@@ -3,8 +3,8 @@
 import type { RankingItem } from "../../lib/koaptix/types";
 
 export function TopMovers({ items }: { items: RankingItem[] }) {
-  const updrafts = items.filter(i => i.rankDelta7d > 0).sort((a, b) => b.rankDelta7d - a.rankDelta7d).slice(0, 3);
-  const drags = items.filter(i => i.rankDelta7d < 0).sort((a, b) => a.rankDelta7d - b.rankDelta7d).slice(0, 3);
+  const updrafts = items.filter(i => (i.rankDelta7d ?? 0) > 0).sort((a, b) => (b.rankDelta7d ?? 0) - (a.rankDelta7d ?? 0)).slice(0, 3);
+  const drags = items.filter(i => (i.rankDelta7d ?? 0) < 0).sort((a, b) => (a.rankDelta7d ?? 0) - (b.rankDelta7d ?? 0)).slice(0, 3);
 
   const hasUpdrafts = updrafts.length > 0;
   const hasDrags = drags.length > 0;
@@ -66,7 +66,7 @@ export function TopMovers({ items }: { items: RankingItem[] }) {
               {drags.map(item => (
                 <div key={item.complexId} className="flex items-center justify-between text-[11px] sm:text-xs">
                   <span className="truncate text-slate-300">{item.name}</span>
-                  <span className="font-bold text-blue-400">▼{Math.abs(item.rankDelta7d)}</span>
+                  <span className="font-bold text-blue-400">▼{Math.abs(item.rankDelta7d ?? 0)}</span>
                 </div>
               ))}
             </div>

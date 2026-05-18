@@ -23,6 +23,9 @@ const MAP_MAX_LIMIT = 120;
 
 const MAP_CACHE_FRESH_TTL_MS = 90_000;
 const MAP_CACHE_STALE_TTL_MS = 900_000;
+const MAP_SUCCESS_CACHE_CONTROL =
+  "public, max-age=15, s-maxage=90, stale-while-revalidate=900";
+const MAP_ERROR_CACHE_CONTROL = "no-store";
 
 const LATEST_MAP_TIMEOUT_MS_REGIONAL = 1_100;
 const DYNAMIC_MAP_TIMEOUT_MS_KOREA = 8_500;
@@ -822,7 +825,6 @@ async function fetchMapPayload(
 }
 
 export async function GET(request: NextRequest) {
-  const supabase = createServerSupabase();
   const searchParams = request.nextUrl.searchParams;
 
   const rawUniverseCode =
@@ -843,7 +845,7 @@ export async function GET(request: NextRequest) {
   if (freshCached) {
     return NextResponse.json(freshCached, {
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
         "X-Koaptix-Map-Cache": "fresh",
       },
     });
@@ -852,6 +854,7 @@ export async function GET(request: NextRequest) {
   const reusedInflight = mapInflight.has(cacheKey);
 
   try {
+    const supabase = createServerSupabase();
     let inflight = mapInflight.get(cacheKey);
 
     if (!inflight) {
@@ -871,7 +874,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(payload, {
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
         "X-Koaptix-Map-Cache": reusedInflight ? "inflight" : "live",
       },
     });
@@ -889,7 +892,7 @@ export async function GET(request: NextRequest) {
     if (staleCached) {
       return NextResponse.json(withStaleMapIdentity(staleCached, universeCode), {
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
           "X-Koaptix-Map-Cache": "stale",
         },
       });
@@ -912,7 +915,7 @@ export async function GET(request: NextRequest) {
       {
         status: isTimeoutError(error) ? 504 : 500,
         headers: {
-          "Cache-Control": "no-store",
+          "Cache-Control": MAP_ERROR_CACHE_CONTROL,
           "X-Koaptix-Map-Cache": "miss",
         },
       },

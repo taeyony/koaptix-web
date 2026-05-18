@@ -113,17 +113,17 @@ export type RankingItem = {
 
   cityName?: string;
   locationLabel: string;
-  searchText: string;
+  searchText?: string;
 
-  historySnapshotDate: string | null;
-  rankDelta7d: number;
+  historySnapshotDate?: string | null;
+  rankDelta7d: number | null;
   rank_delta_w?: number | null;
 
-  marketCapDelta7d: number;
-  marketCapDeltaPct7d: number;
-  deltaWindow: "7d";
+  marketCapDelta7d?: number | null;
+  marketCapDeltaPct7d?: number | null;
+  deltaWindow?: "7d";
 
-  rankDelta1d: number;
+  rankDelta1d?: number | null;
 
   rankMovement?: string | null;
   rank_movement?: string | null;
@@ -134,7 +134,7 @@ export type RankingItem = {
   tierBadges?: TierBadgeData[];
   tierStats?: TierStats;
 
-  highMarketCap52w: number | null;
+  highMarketCap52w?: number | null;
   recoveryRate52w: number | null;
   recovery_52w?: number | null;
 

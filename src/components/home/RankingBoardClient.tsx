@@ -399,6 +399,13 @@ export function RankingBoardClient({
 
     const controller = new AbortController();
     let cancelled = false;
+    let timedOut = false;
+
+    const boardFetchTimeoutMs = 7000;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, boardFetchTimeoutMs);
 
     const loadBoard = async () => {
       setIsBoardLoading(true);
@@ -414,21 +421,33 @@ export function RankingBoardClient({
         setBoardItems(nextItems);
         setStaleBoardUniverseCode(null);
       } catch (error) {
-        if (controller.signal.aborted || cancelled || isAbortError(error)) {
+        // Unmount abort: return silently without touching state.
+        if (!timedOut && (controller.signal.aborted || cancelled || isAbortError(error))) {
           return;
         }
 
-        const message =
-          error instanceof Error ? error.message : "보드 로딩 실패";
+        const message = timedOut
+          ? "Ranking request timed out"
+          : error instanceof Error
+            ? error.message
+            : "보드 로딩 실패";
 
         setBoardItems((prev) => (prev.length > 0 ? prev : []));
         setLiveBoardError(message);
 
-        console.warn("[RankingBoardClient] board fetch warn", {
-          boardUniverseCode,
-          message,
-        });
+        if (timedOut) {
+          console.warn("[RankingBoardClient] board fetch timeout", {
+            boardUniverseCode,
+            boardFetchTimeoutMs,
+          });
+        } else {
+          console.warn("[RankingBoardClient] board fetch warn", {
+            boardUniverseCode,
+            message,
+          });
+        }
       } finally {
+        clearTimeout(timeoutId);
         if (!cancelled) {
           setIsBoardLoading(false);
         }
@@ -439,6 +458,7 @@ export function RankingBoardClient({
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
       controller.abort();
     };
   }, [

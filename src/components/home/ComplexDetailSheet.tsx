@@ -387,8 +387,8 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <Metric label="현재 순위" value={`#${formatPlainNumber(rank)}`} />
               <Metric label="시가총액" value={formatMarketCapKrw(marketCap)} />
-              <Metric label="주간 순위 변동" value={formatRankDelta(rankDelta7d)} tone={rankDeltaTone(rankDelta7d)} />
-              <Metric label="Momentum (W)" value={formatPercent(marketCapDeltaPct7d)} tone={momentumTone(marketCapDeltaPct7d)} />
+              <Metric label="주간 순위 변동" value={formatRankDelta(rankDelta7d ?? 0)} tone={rankDeltaTone(rankDelta7d ?? 0)} />
+              <Metric label="Momentum (W)" value={formatPercent(marketCapDeltaPct7d ?? 0)} tone={momentumTone(marketCapDeltaPct7d ?? 0)} />
             </div>
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">
@@ -453,7 +453,7 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
                 </div>
               ) : (
                 <>
-                  <DetailRow label="최근 7일 시총 변동" value={`${formatSignedNumber(marketCapDelta7d)}원`} />
+                  <DetailRow label="최근 7일 시총 변동" value={`${formatSignedNumber(marketCapDelta7d ?? 0)}원`} />
                   <DetailRow label="비교 기준 스냅샷" value={historySnapshotDate ?? "-"} />
                  {/* 🚨 상세 API(detail)가 없으면 메인 데이터(item)에서 강제로 끌어옵니다!! */}
                   <DetailRow label="세대수" value={formatCount(detail?.householdCount ?? item?.households)} />

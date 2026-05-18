@@ -170,51 +170,72 @@ export function CommandPalette({
       return;
     }
 
-    const controller = new AbortController();
-    let cancelled = false;
+  const controller = new AbortController();
+  let cancelled = false;
+  let timedOut = false;
 
-    const timer = window.setTimeout(async () => {
-      setIsSearching(true);
-      setSearchError(null);
+  const searchFetchTimeoutMs = 7000;
+  let fetchTimeoutId: number | undefined;
 
-      try {
-        const next = await readSearchResult(
-          SEARCH_API(q, urlUniverseCode, 12),
-          controller.signal,
-        );
+  const timer = window.setTimeout(async () => {
+    setIsSearching(true);
+    setSearchError(null);
 
-        if (cancelled) return;
+    fetchTimeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, searchFetchTimeoutMs);
 
-        cacheRef.current[cacheKey] = next;
-        setLocalItems(next.localItems);
-        setGlobalItems(next.globalItems);
-      } catch (error) {
-        if (controller.signal.aborted || cancelled) return;
+    try {
+      const next = await readSearchResult(
+        SEARCH_API(q, urlUniverseCode, 12),
+        controller.signal,
+      );
 
-        const message =
-          error instanceof Error ? error.message : "검색 실패";
+      if (cancelled) return;
 
+      cacheRef.current[cacheKey] = next;
+      setLocalItems(next.localItems);
+      setGlobalItems(next.globalItems);
+    } catch (error) {
+      if (!timedOut && (controller.signal.aborted || cancelled)) return;
+
+      const message = timedOut
+        ? "검색 시간 초과"
+        : error instanceof Error
+          ? error.message
+          : "검색 실패";
+
+      if (timedOut) {
+        console.warn("[CommandPalette] search fetch timed out", {
+          urlUniverseCode,
+          q,
+        });
+      } else {
         console.error("[CommandPalette] search failed", {
           urlUniverseCode,
           q,
           message,
         });
-
-        setSearchError(message);
-        setLocalItems([]);
-        setGlobalItems([]);
-      } finally {
-        if (!cancelled) {
-          setIsSearching(false);
-        }
       }
-    }, 180);
 
-    return () => {
-      cancelled = true;
-      controller.abort();
-      window.clearTimeout(timer);
-    };
+      setSearchError(message);
+      setLocalItems([]);
+      setGlobalItems([]);
+    } finally {
+      if (fetchTimeoutId !== undefined) window.clearTimeout(fetchTimeoutId);
+      if (!cancelled) {
+        setIsSearching(false);
+      }
+    }
+  }, 180);
+
+  return () => {
+    cancelled = true;
+    controller.abort();
+    window.clearTimeout(timer);
+    if (fetchTimeoutId !== undefined) window.clearTimeout(fetchTimeoutId);
+  };
   }, [isOpen, query, urlUniverseCode]);
 
   const visibleLocalItems = useMemo(() => {
