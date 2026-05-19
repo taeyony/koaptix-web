@@ -725,7 +725,7 @@ export function RankingBoardClient({
             <div className="w-full lg:max-w-[200px]">
               <input
                 type="text"
-                placeholder="단지명·지역명 검색"
+                placeholder="보드 내 단지·지역 필터"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-lg border border-slate-700/50 bg-slate-800/30 px-3 py-2 text-sm text-slate-200 outline-none transition-all focus:border-cyan-500/50 focus:bg-slate-800/60"
@@ -844,8 +844,19 @@ export function RankingBoardClient({
               </div>
             ) : (
               <div className="flex h-32 flex-col items-center justify-center gap-2 text-slate-500">
-                <span className="text-2xl opacity-50">📡</span>
-                <p className="text-sm">{emptyMessage}</p>
+                <span className="text-2xl opacity-50">
+                  {searchQuery.trim() && boardItems.length > 0 ? "🔍" : "📡"}
+                </span>
+                <p className="text-sm">
+                  {searchQuery.trim() && boardItems.length > 0
+                    ? "현재 보드에 일치하는 단지가 없습니다."
+                    : emptyMessage}
+                </p>
+                {searchQuery.trim() && boardItems.length > 0 && (
+                  <p className="text-xs text-slate-600">
+                    더 넓은 검색은 화면 우하단 단지·지역 검색을 이용하세요.
+                  </p>
+                )}
               </div>
             )}
           </div>
