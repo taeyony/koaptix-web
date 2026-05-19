@@ -25,6 +25,10 @@ const BASE_URL = (process.env.KOAPTIX_SMOKE_BASE_URL ?? "http://127.0.0.1:3000")
 
 const TIMEOUT_MS = Number(process.env.KOAPTIX_SMOKE_TIMEOUT_MS ?? 8000);
 
+// When set, sends the Vercel preview protection bypass header on every request.
+// The secret value is never printed.
+const VERCEL_BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET ?? "";
+
 // ── ANSI colour helpers ───────────────────────────────────────────────────────
 
 const RESET  = "\x1b[0m";
@@ -53,10 +57,15 @@ async function fetchWithTimeout(url, timeoutMs = TIMEOUT_MS) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const t0 = Date.now();
 
+  const headers = { Accept: "application/json, text/html, */*" };
+  if (VERCEL_BYPASS_SECRET) {
+    headers["x-vercel-protection-bypass"] = VERCEL_BYPASS_SECRET;
+  }
+
   try {
     const res = await fetch(url, {
       method: "GET",
-      headers: { Accept: "application/json, text/html, */*" },
+      headers,
       signal: controller.signal,
     });
 
@@ -323,6 +332,7 @@ async function main() {
   console.log(`${BOLD}${CYAN}KOAPTIX Delivery Smoke Gate${RESET}`);
   console.log(dim(`Base URL : ${BASE_URL}`));
   console.log(dim(`Timeout  : ${TIMEOUT_MS}ms per request`));
+  console.log(dim(`Bypass   : ${VERCEL_BYPASS_SECRET ? "x-vercel-protection-bypass header SET" : "not set"}`));
   console.log(dim(`Date     : ${new Date().toISOString()}`));
   console.log("");
 
