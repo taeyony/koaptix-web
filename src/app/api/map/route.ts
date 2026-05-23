@@ -288,6 +288,10 @@ function getUniverseScopeLabel(universeCode: string) {
   return UNIVERSE_SCOPE_LABELS[universeCode] ?? "";
 }
 
+function isSggUniverseRequest(universeCode: string) {
+  return /^SGG_\d{5}$/.test(universeCode);
+}
+
 function resolveScopePrefix(row: ComplexRegionMapRow) {
   if (row.sgg_cd != null && String(row.sgg_cd).trim() !== "") {
     return String(row.sgg_cd).slice(0, 2);
@@ -388,6 +392,18 @@ function buildDistrictIdentity(
     typeof row.sigungu_name === "string" ? row.sigungu_name.trim() : "";
 
   if (!district) {
+    if (isSggUniverseRequest(universeCode)) {
+      const displayName = getUniverseLabel(universeCode);
+
+      if (displayName && displayName !== universeCode) {
+        return {
+          groupKey: displayName,
+          displayName,
+          query: displayName,
+        };
+      }
+    }
+
     return {
       groupKey: "",
       displayName: "",
