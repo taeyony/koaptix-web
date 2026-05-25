@@ -1218,6 +1218,17 @@ const SGG_UNIVERSE_REGISTRY: UniverseRegistryItem[] = [
     mapEnabled: true,
     order: 181,
   },
+  {
+    code: "SGG_51150",
+    label: "강릉시",
+    scope: "SIGUNGU",
+    enabled: true,
+    homeEnabled: true,
+    searchEnabled: true,
+    rankingEnabled: true,
+    mapEnabled: true,
+    order: 182,
+  },
 ];
 
 /**
