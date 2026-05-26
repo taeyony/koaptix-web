@@ -1229,6 +1229,17 @@ const SGG_UNIVERSE_REGISTRY: UniverseRegistryItem[] = [
     mapEnabled: true,
     order: 182,
   },
+  {
+    code: "SGG_51820",
+    label: "강원 고성군",
+    scope: "SIGUNGU",
+    enabled: true,
+    homeEnabled: true,
+    searchEnabled: true,
+    rankingEnabled: true,
+    mapEnabled: true,
+    order: 183,
+  },
 ];
 
 /**
