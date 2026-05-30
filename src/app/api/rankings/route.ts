@@ -41,6 +41,14 @@ const LATEST_BOARD_COOLDOWN_MS = 180_000;
 type CachedBoardPayload = {
   ok: true;
   universeCode: string;
+  requestedUniverseCode: string;
+  renderedUniverseCode: string;
+  requestedLimit: number;
+  renderedLimit: number;
+  resultCount: number;
+  source: "live_dynamic" | "live_latest" | "empty_degraded";
+  cacheState: "bypassed";
+  fallbackMode: "none" | "same_universe_empty_degraded";
   count: number;
   items: RankingItem[];
 };
@@ -279,6 +287,51 @@ function readAnyUniverseBoardCache(
   return candidates[0][1].payload;
 }
 
+function withBoardDeliveryState(
+  payload: CachedBoardPayload,
+  options: {
+    cacheState: "fresh" | "stale_exact" | "stale_any_limit";
+    fallbackMode:
+      | "none"
+      | "exact_same_universe_stale"
+      | "same_universe_stale_any_limit";
+    source?: "stale_cache" | "stale_cache_any_limit";
+  },
+) {
+  return {
+    ...payload,
+    requestedUniverseCode: payload.universeCode,
+    renderedUniverseCode: payload.universeCode,
+    resultCount: payload.items.length,
+    cacheState: options.cacheState,
+    fallbackMode: options.fallbackMode,
+    source: options.source ?? payload.source,
+  };
+}
+
+function buildEmptyDegradedBoardPayload(
+  universeCode: string,
+  requestedLimit: number,
+  message?: string,
+) {
+  return {
+    ok: true,
+    universeCode,
+    requestedUniverseCode: universeCode,
+    renderedUniverseCode: universeCode,
+    requestedLimit,
+    renderedLimit: 0,
+    resultCount: 0,
+    source: "empty_degraded",
+    cacheState: "miss",
+    fallbackMode: "same_universe_empty_degraded",
+    count: 0,
+    items: [],
+    degraded: true,
+    message,
+  };
+}
+
 function writeBoardCache(cacheKey: string, payload: CachedBoardPayload) {
   const now = Date.now();
 
@@ -410,6 +463,14 @@ async function fetchBoardPayloadFromDynamic(
     return {
       ok: true,
       universeCode,
+      requestedUniverseCode: universeCode,
+      renderedUniverseCode: universeCode,
+      requestedLimit,
+      renderedLimit: 0,
+      resultCount: 0,
+      source: "empty_degraded",
+      cacheState: "bypassed",
+      fallbackMode: "same_universe_empty_degraded",
       count: 0,
       items: [],
     };
@@ -472,6 +533,14 @@ async function fetchBoardPayloadFromDynamic(
   return {
     ok: true,
     universeCode,
+    requestedUniverseCode: universeCode,
+    renderedUniverseCode: universeCode,
+    requestedLimit,
+    renderedLimit: effectiveLimit,
+    resultCount: items.length,
+    source: "live_dynamic",
+    cacheState: "bypassed",
+    fallbackMode: "none",
     count: items.length,
     items,
   };
@@ -530,6 +599,14 @@ async function fetchBoardPayloadFromLatestBoard(
       return {
         ok: true,
         universeCode,
+        requestedUniverseCode: universeCode,
+        renderedUniverseCode: universeCode,
+        requestedLimit,
+        renderedLimit: attemptLimit,
+        resultCount: items.length,
+        source: "live_latest",
+        cacheState: "bypassed",
+        fallbackMode: "none",
         count: items.length,
         items,
       };
@@ -599,12 +676,18 @@ export async function GET(request: NextRequest) {
 
   const freshCached = readFreshBoardCache(cacheKey);
   if (freshCached) {
-    return NextResponse.json(freshCached, {
-      headers: {
-        "Cache-Control": BOARD_SUCCESS_CACHE_CONTROL,
-        "X-Koaptix-Cache": "fresh",
+    return NextResponse.json(
+      withBoardDeliveryState(freshCached, {
+        cacheState: "fresh",
+        fallbackMode: "none",
+      }),
+      {
+        headers: {
+          "Cache-Control": BOARD_SUCCESS_CACHE_CONTROL,
+          "X-Koaptix-Cache": "fresh",
+        },
       },
-    });
+    );
   }
 
   const reusedInflight = boardInflight.has(cacheKey);
@@ -628,12 +711,19 @@ export async function GET(request: NextRequest) {
 
     const payload = await inflight;
 
-    return NextResponse.json(payload, {
-      headers: {
-        "Cache-Control": BOARD_SUCCESS_CACHE_CONTROL,
-        "X-Koaptix-Cache": reusedInflight ? "inflight" : "live",
+    return NextResponse.json(
+      {
+        ...payload,
+        cacheState: "bypassed",
+        resultCount: payload.items.length,
       },
-    });
+      {
+        headers: {
+          "Cache-Control": BOARD_SUCCESS_CACHE_CONTROL,
+          "X-Koaptix-Cache": reusedInflight ? "inflight" : "live",
+        },
+      },
+    );
   } catch (error) {
     console.error("[API /api/rankings] failed:", {
       universeCode,
@@ -642,26 +732,49 @@ export async function GET(request: NextRequest) {
       isTimeout: isTimeoutError(error),
     });
 
-    const staleCached =
-      readStaleBoardCache(cacheKey) ?? readAnyUniverseBoardCache(universeCode);
+    const exactStaleCached = readStaleBoardCache(cacheKey);
+    const anyLimitStaleCached =
+      exactStaleCached ? null : readAnyUniverseBoardCache(universeCode);
+    const staleCached = exactStaleCached ?? anyLimitStaleCached;
 
     if (staleCached) {
-      return NextResponse.json(staleCached, {
-        headers: {
-          "Cache-Control": BOARD_SUCCESS_CACHE_CONTROL,
-          "X-Koaptix-Cache": "stale",
+      if (staleCached.universeCode !== universeCode) {
+        return NextResponse.json(
+          buildEmptyDegradedBoardPayload(
+            universeCode,
+            limit,
+            "Stale cache identity mismatch",
+          ),
+          {
+            headers: {
+              "Cache-Control": BOARD_ERROR_CACHE_CONTROL,
+              "X-Koaptix-Cache": "miss",
+            },
+          },
+        );
+      }
+
+      return NextResponse.json(
+        withBoardDeliveryState(staleCached, {
+          cacheState: exactStaleCached ? "stale_exact" : "stale_any_limit",
+          fallbackMode: exactStaleCached
+            ? "exact_same_universe_stale"
+            : "same_universe_stale_any_limit",
+          source: exactStaleCached ? "stale_cache" : "stale_cache_any_limit",
+        }),
+        {
+          headers: {
+            "Cache-Control": BOARD_SUCCESS_CACHE_CONTROL,
+            "X-Koaptix-Cache": exactStaleCached
+              ? "stale-exact"
+              : "stale-any-limit",
+          },
         },
-      });
+      );
     }
 
     return NextResponse.json(
-      {
-        ok: false,
-        universeCode,
-        count: 0,
-        items: [],
-        message: getErrorMessage(error),
-      },
+      buildEmptyDegradedBoardPayload(universeCode, limit, getErrorMessage(error)),
       {
         status: isTimeoutError(error) ? 504 : 500,
         headers: {

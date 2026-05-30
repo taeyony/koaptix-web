@@ -120,10 +120,23 @@ type CachedMapPayload = {
   universeCode: string;
   requestedUniverseCode: string;
   renderedUniverseCode: string;
+  requestedLimit: number;
+  renderedLimit: number;
+  resultCount: number;
   mapScopeLabel: string;
   isFallback: boolean;
-  fallbackMode: "none" | "stale-cache";
-  source: "dynamic" | "stale-cache";
+  fallbackMode:
+    | "none"
+    | "exact_same_universe_stale"
+    | "same_universe_stale_any_limit"
+    | "same_universe_empty_degraded";
+  source:
+    | "live_dynamic"
+    | "live_latest"
+    | "stale_cache"
+    | "stale_cache_any_limit"
+    | "empty_degraded";
+  cacheState: "bypassed" | "fresh" | "stale_exact" | "stale_any_limit" | "miss";
   count: number;
   items: MapDistrictItem[];
 };
@@ -486,6 +499,54 @@ function readAnyUniverseMapCache(
   return candidates[0][1].payload;
 }
 
+function buildEmptyMapPayload(
+  universeCode: string,
+  requestedLimit: number,
+  message?: string,
+): CachedMapPayload & { degraded?: true; message?: string } {
+  return {
+    ok: true,
+    universeCode,
+    requestedUniverseCode: universeCode,
+    renderedUniverseCode: universeCode,
+    requestedLimit,
+    renderedLimit: 0,
+    resultCount: 0,
+    mapScopeLabel: getUniverseLabel(universeCode),
+    isFallback: false,
+    fallbackMode: "same_universe_empty_degraded",
+    source: "empty_degraded",
+    cacheState: "miss",
+    count: 0,
+    items: [],
+    degraded: true,
+    message,
+  };
+}
+
+function withMapDeliveryState(
+  payload: CachedMapPayload,
+  options: {
+    cacheState: "fresh" | "stale_exact" | "stale_any_limit";
+    fallbackMode:
+      | "none"
+      | "exact_same_universe_stale"
+      | "same_universe_stale_any_limit";
+    source?: "stale_cache" | "stale_cache_any_limit";
+  },
+) {
+  return {
+    ...payload,
+    requestedUniverseCode: payload.universeCode,
+    renderedUniverseCode: payload.universeCode,
+    resultCount: payload.items.length,
+    isFallback: options.fallbackMode !== "none",
+    fallbackMode: options.fallbackMode,
+    source: options.source ?? payload.source,
+    cacheState: options.cacheState,
+  };
+}
+
 function writeMapCache(cacheKey: string, payload: CachedMapPayload) {
   const now = Date.now();
 
@@ -535,6 +596,11 @@ async function rowsToMapPayload(
   supabase: ReturnType<typeof createServerSupabase>,
   rows: any[],
   universeCode: string,
+  options: {
+    requestedLimit: number;
+    renderedLimit: number;
+    source: "live_dynamic" | "live_latest";
+  },
 ): Promise<CachedMapPayload> {
   const complexIds = extractComplexIds(rows);
   const scopeMetaMap =
@@ -655,10 +721,14 @@ async function rowsToMapPayload(
     universeCode,
     requestedUniverseCode: universeCode,
     renderedUniverseCode: universeCode,
+    requestedLimit: options.requestedLimit,
+    renderedLimit: options.renderedLimit,
+    resultCount: items.length,
     mapScopeLabel: getUniverseLabel(universeCode),
     isFallback: false,
     fallbackMode: "none",
-    source: "dynamic",
+    source: options.source,
+    cacheState: "bypassed",
     count: items.length,
     items,
   };
@@ -667,15 +737,24 @@ async function rowsToMapPayload(
 function withStaleMapIdentity(
   payload: CachedMapPayload,
   requestedUniverseCode: string,
+  fallbackMode: "exact_same_universe_stale" | "same_universe_stale_any_limit",
 ): CachedMapPayload {
   return {
     ...payload,
     requestedUniverseCode,
     renderedUniverseCode: payload.universeCode,
     mapScopeLabel: getUniverseLabel(payload.universeCode),
-    isFallback: payload.universeCode !== requestedUniverseCode,
-    fallbackMode: "stale-cache",
-    source: "stale-cache",
+    isFallback: true,
+    fallbackMode,
+    source:
+      fallbackMode === "exact_same_universe_stale"
+        ? "stale_cache"
+        : "stale_cache_any_limit",
+    cacheState:
+      fallbackMode === "exact_same_universe_stale"
+        ? "stale_exact"
+        : "stale_any_limit",
+    resultCount: payload.items.length,
   };
 }
 
@@ -704,10 +783,14 @@ async function fetchMapPayloadFromDynamic(
       universeCode,
       requestedUniverseCode: universeCode,
       renderedUniverseCode: universeCode,
+      requestedLimit,
+      renderedLimit: 0,
+      resultCount: 0,
       mapScopeLabel: getUniverseLabel(universeCode),
       isFallback: false,
-      fallbackMode: "none",
-      source: "dynamic",
+      fallbackMode: "same_universe_empty_degraded",
+      source: "empty_degraded",
+      cacheState: "bypassed",
       count: 0,
       items: [],
     };
@@ -747,7 +830,11 @@ async function fetchMapPayloadFromDynamic(
     rank_delta_w: null,
   }));
 
-  return rowsToMapPayload(supabase, normalizedRows, universeCode);
+  return rowsToMapPayload(supabase, normalizedRows, universeCode, {
+    requestedLimit,
+    renderedLimit: effectiveLimit,
+    source: "live_dynamic",
+  });
 }
 
 async function fetchMapPayloadFromLatestBoard(
@@ -788,7 +875,11 @@ async function fetchMapPayloadFromLatestBoard(
 
       latestMapCooldownUntil.delete(universeCode);
 
-      return rowsToMapPayload(supabase, data ?? [], universeCode);
+      return rowsToMapPayload(supabase, data ?? [], universeCode, {
+        requestedLimit,
+        renderedLimit: attemptLimit,
+        source: "live_latest",
+      });
     } catch (error) {
       lastError = error;
       markLatestMapCooldown(universeCode);
@@ -859,12 +950,18 @@ export async function GET(request: NextRequest) {
 
   const freshCached = readFreshMapCache(cacheKey);
   if (freshCached) {
-    return NextResponse.json(freshCached, {
-      headers: {
-        "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
-        "X-Koaptix-Map-Cache": "fresh",
+    return NextResponse.json(
+      withMapDeliveryState(freshCached, {
+        cacheState: "fresh",
+        fallbackMode: "none",
+      }),
+      {
+        headers: {
+          "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
+          "X-Koaptix-Map-Cache": "fresh",
+        },
       },
-    });
+    );
   }
 
   const reusedInflight = mapInflight.has(cacheKey);
@@ -888,12 +985,19 @@ export async function GET(request: NextRequest) {
 
     const payload = await inflight;
 
-    return NextResponse.json(payload, {
-      headers: {
-        "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
-        "X-Koaptix-Map-Cache": reusedInflight ? "inflight" : "live",
+    return NextResponse.json(
+      {
+        ...payload,
+        cacheState: "bypassed",
+        resultCount: payload.items.length,
       },
-    });
+      {
+        headers: {
+          "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
+          "X-Koaptix-Map-Cache": reusedInflight ? "inflight" : "live",
+        },
+      },
+    );
   } catch (error) {
     console.error("[API /api/map] failed:", {
       universeCode,
@@ -902,32 +1006,49 @@ export async function GET(request: NextRequest) {
       isTimeout: isTimeoutError(error),
     });
 
-    const staleCached =
-      readStaleMapCache(cacheKey) ?? readAnyUniverseMapCache(universeCode);
+    const exactStaleCached = readStaleMapCache(cacheKey);
+    const anyLimitStaleCached =
+      exactStaleCached ? null : readAnyUniverseMapCache(universeCode);
+    const staleCached = exactStaleCached ?? anyLimitStaleCached;
 
     if (staleCached) {
-      return NextResponse.json(withStaleMapIdentity(staleCached, universeCode), {
-        headers: {
-          "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
-          "X-Koaptix-Map-Cache": "stale",
+      if (staleCached.universeCode !== universeCode) {
+        return NextResponse.json(
+          buildEmptyMapPayload(
+            universeCode,
+            limit,
+            "Stale cache identity mismatch",
+          ),
+          {
+            headers: {
+              "Cache-Control": MAP_ERROR_CACHE_CONTROL,
+              "X-Koaptix-Map-Cache": "miss",
+            },
+          },
+        );
+      }
+
+      return NextResponse.json(
+        withStaleMapIdentity(
+          staleCached,
+          universeCode,
+          exactStaleCached
+            ? "exact_same_universe_stale"
+            : "same_universe_stale_any_limit",
+        ),
+        {
+          headers: {
+            "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
+            "X-Koaptix-Map-Cache": exactStaleCached
+              ? "stale-exact"
+              : "stale-any-limit",
+          },
         },
-      });
+      );
     }
 
     return NextResponse.json(
-      {
-        ok: false,
-        universeCode,
-        requestedUniverseCode: universeCode,
-        renderedUniverseCode: universeCode,
-        mapScopeLabel: getUniverseLabel(universeCode),
-        isFallback: false,
-        fallbackMode: "miss",
-        source: "miss",
-        count: 0,
-        items: [],
-        message: getErrorMessage(error),
-      },
+      buildEmptyMapPayload(universeCode, limit, getErrorMessage(error)),
       {
         status: isTimeoutError(error) ? 504 : 500,
         headers: {

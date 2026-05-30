@@ -139,6 +139,9 @@ export default async function Home({
     lastGoodIndexChartPayloadByUniverse,
   );
 
+  // KOREA_ALL intentionally skips a DB-backed SSR board seed. The home board
+  // stays lightweight and lets /api/rankings deliver the tactical payload on
+  // the client path with its own timeout/cache contract.
   const boardSeedPromise =
     universeCode === DEFAULT_UNIVERSE_CODE
       ? Promise.resolve({

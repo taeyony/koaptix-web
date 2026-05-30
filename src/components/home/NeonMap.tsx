@@ -50,6 +50,7 @@ type MapApiResponse = {
   isFallback?: boolean;
   fallbackMode?: string;
   source?: string;
+  cacheState?: string;
   count?: number;
   items?: DistrictAggregate[];
   message?: string;
@@ -320,15 +321,20 @@ async function readMapItems(input: string, signal: AbortSignal) {
 
   const items = json.items ?? [];
   const renderedUniverseCode = json.renderedUniverseCode ?? json.universeCode ?? "";
+  const requestedUniverseCode = json.requestedUniverseCode ?? json.universeCode ?? "";
+
+  if (requestedUniverseCode && renderedUniverseCode !== requestedUniverseCode) {
+    throw new Error("Map response universe identity mismatch");
+  }
 
   return {
     items,
     delivery: {
-      requestedUniverseCode: json.requestedUniverseCode ?? json.universeCode ?? "",
+      requestedUniverseCode,
       renderedUniverseCode,
       mapScopeLabel: json.mapScopeLabel ?? getUniverseLabel(renderedUniverseCode),
       fallbackMode: json.fallbackMode ?? "none",
-      cacheState,
+      cacheState: json.cacheState ?? cacheState,
       source: json.source ?? "api",
       itemCount: Number(json.count ?? items.length),
     } satisfies MapDeliveryState,

@@ -21,6 +21,16 @@ type SearchCachePayload = {
   items: RankingItem[];
 };
 
+type SearchSourceResult = {
+  items: RankingItem[];
+  source: "live_dynamic" | "stale_cache" | "stale_cache_any_limit";
+  cacheState: "bypassed" | "fresh" | "stale_exact" | "stale_any_limit";
+  fallbackMode:
+    | "none"
+    | "exact_same_universe_stale"
+    | "same_universe_stale_any_limit";
+};
+
 const searchSourceCache = new Map<
   string,
   {
@@ -230,13 +240,18 @@ async function fetchSourceItems(
 
 async function loadSourceItems(
   universeCode: string,
-) {
+): Promise<SearchSourceResult> {
   const sourceLimit = getSearchSourceLimit();
   const cacheKey = makeCacheKey(universeCode, sourceLimit);
 
   const freshCached = readFreshSearchSourceCache(cacheKey);
   if (freshCached) {
-    return freshCached.items;
+    return {
+      items: freshCached.items,
+      source: "live_dynamic",
+      cacheState: "fresh",
+      fallbackMode: "none",
+    };
   }
 
   let inflight = searchSourceInflight.get(cacheKey);
@@ -254,35 +269,60 @@ async function loadSourceItems(
   }
 
   try {
-    return await inflight;
+    return {
+      items: await inflight,
+      source: "live_dynamic",
+      cacheState: "bypassed",
+      fallbackMode: "none",
+    };
   } catch (primaryError) {
     const retryLimit = Math.min(sourceLimit, SEARCH_REGIONAL_RETRY_LIMIT);
     const retryCacheKey = makeCacheKey(universeCode, retryLimit);
     const freshRetryCached = readFreshSearchSourceCache(retryCacheKey);
 
     if (freshRetryCached) {
-      return freshRetryCached.items;
+      return {
+        items: freshRetryCached.items,
+        source: "live_dynamic",
+        cacheState: "fresh",
+        fallbackMode: "none",
+      };
     }
 
     try {
       const retryItems = await fetchSourceItems(universeCode, retryLimit);
       writeSearchSourceCache(retryCacheKey, { items: retryItems });
-      return retryItems;
+      return {
+        items: retryItems,
+        source: "live_dynamic",
+        cacheState: "bypassed",
+        fallbackMode: "none",
+      };
     } catch (retryError) {
-      const staleCached =
+      const exactStaleCached =
         readStaleSearchSourceCache(cacheKey) ??
-        readStaleSearchSourceCache(retryCacheKey) ??
-        readAnyUniverseSearchSourceCache(universeCode);
+        readStaleSearchSourceCache(retryCacheKey);
+      const anyLimitStaleCached =
+        exactStaleCached ? null : readAnyUniverseSearchSourceCache(universeCode);
+      const staleCached = exactStaleCached ?? anyLimitStaleCached;
 
       if (staleCached) {
         console.info("[API /api/search] serving stale local search source", {
           universeCode,
           sourceLimit,
           retryLimit,
+          cacheState: exactStaleCached ? "stale_exact" : "stale_any_limit",
           primaryMessage: getErrorMessage(primaryError),
           retryMessage: getErrorMessage(retryError),
         });
-        return staleCached.items;
+        return {
+          items: staleCached.items,
+          source: exactStaleCached ? "stale_cache" : "stale_cache_any_limit",
+          cacheState: exactStaleCached ? "stale_exact" : "stale_any_limit",
+          fallbackMode: exactStaleCached
+            ? "exact_same_universe_stale"
+            : "same_universe_stale_any_limit",
+        };
       }
 
       throw retryError;
@@ -306,8 +346,8 @@ async function loadGlobalAuxiliaryItems(
   }
 
   try {
-    const globalSourceItems = await loadSourceItems(DEFAULT_UNIVERSE_CODE);
-    const matchedGlobalItems = filterItemsByQuery(globalSourceItems, q);
+    const globalSource = await loadSourceItems(DEFAULT_UNIVERSE_CODE);
+    const matchedGlobalItems = filterItemsByQuery(globalSource.items, q);
     return excludeAlreadyShownItems(matchedGlobalItems, localItems).slice(
       0,
       globalLimit,
@@ -341,6 +381,13 @@ export async function GET(request: NextRequest) {
       {
         ok: true,
         universeCode: requestedUniverseCode,
+        requestedUniverseCode,
+        renderedUniverseCode: requestedUniverseCode,
+        requestedLimit: limit,
+        resultCount: 0,
+        source: "empty_degraded",
+        cacheState: "bypassed",
+        fallbackMode: "same_universe_empty_degraded",
         localItems: [],
         globalItems: [],
       },
@@ -351,8 +398,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const localSourceItems = await loadSourceItems(requestedUniverseCode);
-    const localItems = filterItemsByQuery(localSourceItems, q).slice(0, limit);
+    const localSource = await loadSourceItems(requestedUniverseCode);
+    const localItems = filterItemsByQuery(localSource.items, q).slice(0, limit);
     const globalItems = await loadGlobalAuxiliaryItems(
       q,
       requestedUniverseCode,
@@ -364,6 +411,13 @@ export async function GET(request: NextRequest) {
       {
         ok: true,
         universeCode: requestedUniverseCode,
+        requestedUniverseCode,
+        renderedUniverseCode: requestedUniverseCode,
+        requestedLimit: limit,
+        resultCount: localItems.length,
+        source: localSource.source,
+        cacheState: localSource.cacheState,
+        fallbackMode: localSource.fallbackMode,
         resultOrder: ["localItems", "globalItems"],
         localItems,
         globalItems,
@@ -388,6 +442,13 @@ export async function GET(request: NextRequest) {
       {
         ok: true,
         universeCode: requestedUniverseCode,
+        requestedUniverseCode,
+        renderedUniverseCode: requestedUniverseCode,
+        requestedLimit: limit,
+        resultCount: 0,
+        source: "empty_degraded",
+        cacheState: "miss",
+        fallbackMode: "same_universe_empty_degraded",
         localItems: [],
         globalItems: [],
         degraded: true,
