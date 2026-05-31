@@ -11,7 +11,7 @@
     "audit:sgg": "node scripts/audit-sgg-readiness.mjs",
     "diagnose:sgg-direct": "node scripts/diagnose-sgg-direct-read.mjs",
     "gate:sgg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sgg-release-gate.ps1",
-    "lint": "next lint"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@supabase/supabase-js": "latest",
@@ -27,6 +27,8 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "autoprefixer": "^10.4.27",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.6",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
     "typescript": "latest"
