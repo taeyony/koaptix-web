@@ -30,6 +30,7 @@ const FULL_MAX_LIMIT = 1000;
 type RankingApiResponse = {
   ok: boolean;
   universeCode: string;
+  latestBoardDate: string | null;
   filters: {
     q: string;
     tier: TierFilterKey;
@@ -45,6 +46,8 @@ type TierFilterKey = "ALL" | "S" | "A" | "B" | "C" | "D";
 type RankingBoardRow = DbLatestRankBoardWeeklyRow & {
   id?: number | string | null;
   name?: string | null;
+  snapshot_date?: string | null;
+  snapshotDate?: string | null;
   sigungu_full_name?: string | null;
   location_search_label?: string | null;
   total_household_count?: NullableNumberLike;
@@ -87,6 +90,26 @@ function parseTier(value: string | null): TierFilterKey {
 
 function normalizeQuery(value: string | null) {
   return (value ?? "").trim().toLowerCase();
+}
+
+function normalizeBoardDate(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  const normalized = value.trim();
+  if (!normalized) return null;
+
+  const dateMatch = normalized.match(/^\d{4}-\d{2}-\d{2}/);
+  return dateMatch ? dateMatch[0] : null;
+}
+
+function deriveLatestBoardDate(rows: RankingBoardRow[]): string | null {
+  const dates = new Set(
+    rows
+      .map((row) => normalizeBoardDate(row.snapshot_date ?? row.snapshotDate))
+      .filter((date): date is string => date !== null),
+  );
+
+  return dates.size === 1 ? Array.from(dates)[0] : null;
 }
 
 function getRankValue(item: RankingItem): number | null {
@@ -244,8 +267,9 @@ export async function GET(request: NextRequest) {
   const complexId = searchParams.get("complexId")?.trim() || null;
 
   try {
-    const rows = await getLatestRankBoard(universeCode, limit);
-    const items = (rows as RankingBoardRow[])
+    const rows = (await getLatestRankBoard(universeCode, limit)) as RankingBoardRow[];
+    const latestBoardDate = deriveLatestBoardDate(rows);
+    const items = rows
       .map((row) => toRankingItem(row, universeCode))
       .filter((item) => matchesTier(item, tier))
       .filter((item) => matchesQuery(item, q));
@@ -253,6 +277,7 @@ export async function GET(request: NextRequest) {
     const payload: RankingApiResponse = {
       ok: true,
       universeCode,
+      latestBoardDate,
       filters: {
         q,
         tier,
@@ -273,6 +298,7 @@ export async function GET(request: NextRequest) {
       {
         ok: false,
         universeCode,
+        latestBoardDate: null,
         filters: {
           q,
           tier,
