@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata = {
+  metadataBase: new URL('https://www.koaptix.com'),
   title: "KOAPTIX | 아파트 시가총액 지수",
   description: "당신의 아파트 모멘텀은 안전합니까? 서울 주요 단지의 실시간 시가총액 흐름과 하락 압력을 즉시 스캔하십시오.",
   openGraph: {
