@@ -113,7 +113,7 @@ function getDesiredMapSourceLimit(topN: number, universeCode: string) {
   if (universeCode === DEFAULT_UNIVERSE_CODE) {
     if (topN <= 20) return 32;
     if (topN <= 40) return 52;
-    return 72;
+    return 52;
   }
 
   if (topN <= 20) return 28;
@@ -349,6 +349,23 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function getBubbleSizeRange(universeCode: string, frameWidth: number) {
+  const safeFrameWidth =
+    Number.isFinite(frameWidth) && frameWidth > 0 ? frameWidth : 900;
+
+  if (universeCode === DEFAULT_UNIVERSE_CODE) {
+    return {
+      min: Math.round(clamp(safeFrameWidth * 0.045, 42, 56)),
+      max: Math.round(clamp(safeFrameWidth * 0.105, 82, 112)),
+    };
+  }
+
+  return {
+    min: Math.round(clamp(safeFrameWidth * 0.052, 48, 68)),
+    max: Math.round(clamp(safeFrameWidth * 0.135, 96, 138)),
+  };
+}
+
 function buildMapDeliveryState(
   universeCode: string,
   overrides: Partial<MapDeliveryState> = {},
@@ -428,6 +445,29 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     center: DEFAULT_KOREA_CENTER,
     level: 13,
   });
+  const mapFrameRef = useRef<HTMLDivElement | null>(null);
+  const [mapFrameWidth, setMapFrameWidth] = useState(900);
+
+  useEffect(() => {
+    const node = mapFrameRef.current;
+    if (!node) return;
+
+    const updateFrameWidth = () => {
+      const width = node.getBoundingClientRect().width;
+      if (Number.isFinite(width) && width > 0) {
+        setMapFrameWidth(Math.round(width));
+      }
+    };
+
+    updateFrameWidth();
+
+    const resizeObserver = new ResizeObserver(updateFrameWidth);
+    resizeObserver.observe(node);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   // 🚨 지차장 지시 A: 고유 좌표 키 생성을 위한 헬퍼 추가
   // Universe-scoped coord cache: never reuse geocoded coordinates across
@@ -729,15 +769,22 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       (a, b) => b.totalMarketCap - a.totalMarketCap,
     );
 
-    const values = sortedDesc.map((item) => item.totalMarketCap);
+    const values = sortedDesc.map((item) =>
+      Math.log1p(Math.max(item.totalMarketCap, 0)),
+    );
     const min = Math.min(...values);
     const max = Math.max(...values);
+    const bubbleRange = getBubbleSizeRange(currentUniverseCode, mapFrameWidth);
 
     return sortedDesc.map((item, index) => {
+      const displayValue = Math.log1p(Math.max(item.totalMarketCap, 0));
       const normalized =
-        max === min ? 1 : (item.totalMarketCap - min) / (max - min);
+        max === min ? 1 : (displayValue - min) / (max - min);
 
-      const size = 70 + Math.pow(normalized, 0.58) * 86;
+      const size =
+        bubbleRange.min +
+        Math.pow(normalized, currentUniverseCode === DEFAULT_UNIVERSE_CODE ? 0.86 : 0.64) *
+          (bubbleRange.max - bubbleRange.min);
 
       return {
         ...item,
@@ -745,7 +792,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         bubbleSize: Math.round(size),
       };
     });
-  }, [filteredMapData]);
+  }, [filteredMapData, currentUniverseCode, mapFrameWidth]);
 
   const renderOrderMapData = useMemo(() => {
     return [...visualizedMapData].sort(
@@ -840,7 +887,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   if (loading) {
     return (
       <div
-        className="h-[650px] w-full animate-pulse rounded-2xl border border-slate-800 bg-slate-900/50"
+        className="h-full min-h-[360px] w-full animate-pulse rounded-2xl border border-slate-800 bg-slate-900/50"
         data-testid="neon-map"
         data-universe-code={currentUniverseCode}
         data-requested-universe-code={currentUniverseCode}
@@ -854,7 +901,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)]"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)]"
       data-testid="neon-map"
       data-universe-code={currentUniverseCode}
       data-requested-universe-code={mapDelivery.requestedUniverseCode}
@@ -865,7 +912,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       data-map-source={mapDelivery.source}
       data-map-item-count={mapDelivery.itemCount}
     >
-      <div className="flex flex-col gap-4 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+      <div className="shrink-0 flex flex-col gap-4 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <div>
             <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
@@ -1093,7 +1140,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         </div>
       </div>
 
-      <div className="relative h-[650px] w-full bg-[#0b1118]">
+      <div ref={mapFrameRef} className="relative min-h-0 flex-1 bg-[#0b1118]">
         <div
           className="absolute inset-0 z-0 [&>div]:h-full [&>div]:w-full opacity-80"
           style={{

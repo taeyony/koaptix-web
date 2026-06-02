@@ -19,6 +19,7 @@ const HOME_BOARD_TACTICAL_LIMIT = 20;
 
 const MAP_DEFAULT_LIMIT_KOREA = 32;
 const MAP_DEFAULT_LIMIT_REGIONAL = 44;
+const MAP_MAX_LIMIT_KOREA = 52;
 const MAP_MAX_LIMIT = 120;
 
 const MAP_CACHE_FRESH_TTL_MS = 90_000;
@@ -245,6 +246,12 @@ function getDefaultMapLimit(universeCode: string) {
     : MAP_DEFAULT_LIMIT_REGIONAL;
 }
 
+function getMaxMapLimit(universeCode: string) {
+  return universeCode === DEFAULT_UNIVERSE_CODE
+    ? MAP_MAX_LIMIT_KOREA
+    : MAP_MAX_LIMIT;
+}
+
 function getEffectiveRequestedLimit(
   requestedLimit: number,
   universeCode: string,
@@ -254,8 +261,7 @@ function getEffectiveRequestedLimit(
   }
 
   if (requestedLimit <= 32) return 32;
-  if (requestedLimit <= 52) return 52;
-  return 88;
+  return MAP_MAX_LIMIT_KOREA;
 }
 
 function getRetryLimits(requestedLimit: number) {
@@ -944,6 +950,8 @@ export async function GET(request: NextRequest) {
   const limit = parseLimit(
     searchParams.get("limit"),
     getDefaultMapLimit(universeCode),
+    20,
+    getMaxMapLimit(universeCode),
   );
 
   const cacheKey = makeCacheKey(universeCode, limit);
