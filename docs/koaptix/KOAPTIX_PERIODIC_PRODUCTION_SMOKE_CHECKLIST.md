@@ -85,17 +85,24 @@ Marker:
 
 - SGG_11710 identity must be preserved.
 - KOREA_ALL substitution for SGG_11710 must be false.
-- Public latest should remain `2026-05-29 / 177 rows` until a later explicitly approved full source-closure and public exposure lane proves otherwise.
+- Current accepted full-board production smoke baseline is `latestBoardDate=2026-06-01 / count=177 / items length=177 / distinct complexes=177`.
+- Previous smoke expectation `2026-05-29 / 177 rows` is superseded for current production smoke by manual source-of-truth evidence accepted on 2026-06-02.
+- `2026-05-31` exists in the source-chain history as a 177-row snapshot, but it is not the currently selected latest public baseline.
 - Row count should be `177` when the full board route is available.
-- Latest board date should be `2026-05-29` when exposed.
-- `2026-05-31` partial public exposure must be false.
+- Latest board date should be `2026-06-01` when exposed.
+- Item rows must be SGG_11710 only when row universe codes are exposed.
+- `2026-05-31` must not appear as the current latest public baseline.
 - Latest date unavailable is a warning if identity and row count are safe.
-- Any `2026-05-31` partial public exposure is a FAIL.
+- Any baseline change in the future must be verified against the full source-of-truth chain:
+  `koaptix_rank_snapshot -> v_koaptix_universe_rank_history_dynamic -> v_koaptix_latest_universe_rank_board_u`.
+- Row count, membership, or absence of a forbidden date alone is not enough to change the baseline.
+- No DB write, helper execution, code patch, deploy, or production data mutation is needed for this accepted baseline update.
 
 Markers:
 - sgg_11710_guard
-- sgg_11710_public_latest_2026_05_29_177
+- sgg_11710_public_latest_2026_06_01_177
 - sgg_11710_partial_2026_05_31_fail
+- P-PRODSMOKE.8F_BASELINE_ACCEPTED
 
 ## Timeout and Method Policy
 
@@ -159,8 +166,8 @@ Marker:
 - Do not use POST, PUT, PATCH, or DELETE.
 - Do not bypass the source of truth.
 - Do not use membership alone to decide board readiness.
-- Do not expose SGG_11710 `2026-05-31` partial public board.
-- Do not overwrite the current SGG_11710 `2026-05-29 / 177` public board.
+- Do not promote a new SGG_11710 public baseline without source-chain verification and CTO acceptance.
+- Current accepted SGG_11710 public smoke baseline is `2026-06-01 / 177 rows / 177 distinct complexes`.
 - Do not run `append_daily_rank_history` without explicit scope.
 - Do not run `sync_rank_snapshot_from_history` without explicit scope.
 - Do not write `koaptix_rank_snapshot`.
@@ -182,7 +189,7 @@ Marker:
 
 ## One-Line Handoff
 
-Periodic production smoke is GET-only, identity/fallback/metadata/SGG_11710 focused, and must never mutate data or promote `2026-05-31` partial SGG_11710 data.
+Periodic production smoke is GET-only, identity/fallback/metadata/SGG_11710 focused, and the current accepted SGG_11710 full-board baseline is `2026-06-01 / 177 rows / 177 distinct complexes`.
 
 Marker:
 - one_line_handoff
