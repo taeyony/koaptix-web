@@ -804,11 +804,11 @@ export function RankingBoardClient({
         </div>
 
         <div
-          className={useInternalScroll ? "min-h-0 flex-1 overflow-hidden" : "min-h-0"}
+          className={useInternalScroll ? "min-h-0 flex-1 overflow-hidden rounded-b-2xl" : "min-h-0"}
         >
           <div
-            className={`min-h-0 p-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-700 hover:scrollbar-thumb-slate-500 sm:p-3 ${useInternalScroll
-              ? "h-full overflow-y-auto overscroll-contain"
+            className={`min-h-0 p-2 sm:p-3 ${useInternalScroll
+              ? "ranking-board-scroll h-full overflow-y-auto overscroll-contain pr-1 sm:pr-2"
               : "h-auto overflow-visible"
               }`}
           >
@@ -818,7 +818,7 @@ export function RankingBoardClient({
                 <p className="text-sm">보드 데이터를 불러오는 중입니다.</p>
               </div>
             ) : filteredItems.length > 0 ? (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 pb-2">
                 {filteredItems.map((item) => (
                   <RankingCard
                     key={item.complexId}

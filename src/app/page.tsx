@@ -18,6 +18,7 @@ import { NeonMap } from "../components/home/NeonMap";
 import MarketChartCard from "../components/home/MarketChartCard";
 import { RankingBoardClient } from "../components/home/RankingBoardClient";
 import { HapiPhilosophyTrigger } from "../components/home/HapiPhilosophyTrigger";
+import { ThemeToggle } from "../components/home/ThemeToggle";
 
 import {
   getLatestRankBoard,
@@ -362,23 +363,27 @@ export default async function Home({
                   </div>
                 </div>
 
-                <div className="grid w-full grid-cols-2 gap-2 sm:gap-3 lg:max-w-[320px]">
-                  {home.kpis.map((kpi) => (
-                    <div
-                      key={kpi.label}
-                      className="rounded-lg border border-slate-700/50 bg-slate-800/20 px-3 py-2"
-                    >
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                        {kpi.label}
-                      </p>
-                      <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-100">
-                        {kpi.value}
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-slate-500">
-                        {kpi.subValue}
-                      </p>
-                    </div>
-                  ))}
+                <div className="flex w-full flex-col gap-2 lg:max-w-[320px] lg:items-end">
+                  <ThemeToggle />
+
+                  <div className="grid w-full grid-cols-2 gap-2 sm:gap-3">
+                    {home.kpis.map((kpi) => (
+                      <div
+                        key={kpi.label}
+                        className="rounded-lg border border-slate-700/50 bg-slate-800/20 px-3 py-2"
+                      >
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                          {kpi.label}
+                        </p>
+                        <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-100">
+                          {kpi.value}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-slate-500">
+                          {kpi.subValue}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -405,12 +410,12 @@ export default async function Home({
               </div>
             </div>
 
-            <div className="col-span-1 min-h-0 lg:col-span-4 lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col lg:gap-6">
+            <div className="col-span-1 min-h-0 lg:col-span-4 lg:sticky lg:top-4 lg:flex lg:h-[calc(100dvh-2rem)] lg:max-h-[calc(100dvh-2rem)] lg:flex-col lg:gap-6">
               <div className="mb-4 hidden shrink-0 lg:mb-0 lg:block">
                 <TopMovers key={`movers-${universeCode}`} items={home.items} />
               </div>
 
-              <div className="h-[600px] min-h-0 lg:h-auto lg:flex-1 lg:overflow-hidden">
+              <div className="h-[600px] min-h-0 lg:h-auto lg:min-h-0 lg:flex-1 lg:overflow-hidden">
                 <Suspense
                   fallback={
                     <div className="h-full w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />
