@@ -1240,6 +1240,17 @@ const SGG_UNIVERSE_REGISTRY: UniverseRegistryItem[] = [
     mapEnabled: true,
     order: 183,
   },
+  {
+    code: "SGG_52113",
+    label: "전주시 덕진구",
+    scope: "SIGUNGU",
+    enabled: true,
+    homeEnabled: true,
+    searchEnabled: true,
+    rankingEnabled: true,
+    mapEnabled: true,
+    order: 184,
+  },
 ];
 
 /**
