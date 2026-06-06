@@ -128,8 +128,9 @@ export default async function Home({
       ? "/ranking"
       : `/ranking?universe=${encodeURIComponent(universeCode)}`;
 
+  const homeBoardClientLimit = 20;
   const boardPrimaryLimit =
-    universeCode === DEFAULT_UNIVERSE_CODE ? 8 : 18;
+    universeCode === DEFAULT_UNIVERSE_CODE ? 8 : homeBoardClientLimit;
 
   const boardSeedTimeoutMs = 4000;
 

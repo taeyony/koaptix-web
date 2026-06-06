@@ -37,9 +37,33 @@ type UniverseCodeValue = ReturnType<typeof resolveServiceUniverseCode>;
 type RankingsApiResponse = {
   ok?: boolean;
   universeCode?: string;
+  requestedUniverseCode?: string;
+  renderedUniverseCode?: string;
+  requestedLimit?: number;
+  renderedLimit?: number;
+  resultCount?: number;
+  source?: string;
+  cacheState?: string;
+  fallbackMode?: string;
   count?: number;
   items?: RankingItem[];
   message?: string;
+};
+
+type RankingBoardDeliveryMeta = {
+  requestedUniverseCode: string;
+  renderedUniverseCode: string;
+  requestedLimit: number | null;
+  renderedLimit: number | null;
+  resultCount: number | null;
+  source: string;
+  cacheState: string;
+  fallbackMode: string;
+};
+
+type RankingBoardPayload = {
+  items: RankingItem[];
+  delivery: RankingBoardDeliveryMeta;
 };
 
 type TierFilterKey = "ALL" | "S" | "A" | "B" | "C" | "D";
@@ -108,6 +132,68 @@ function isAbortError(error: unknown) {
   return false;
 }
 
+function toFiniteNumberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function buildLocalRankingPayload(
+  items: RankingItem[],
+  universeCode: string,
+  requestedLimit: number,
+  delivery?: Partial<RankingBoardDeliveryMeta>,
+): RankingBoardPayload {
+  return {
+    items,
+    delivery: {
+      requestedUniverseCode:
+        delivery?.requestedUniverseCode ?? universeCode,
+      renderedUniverseCode: delivery?.renderedUniverseCode ?? universeCode,
+      requestedLimit:
+        delivery?.requestedLimit ?? requestedLimit,
+      renderedLimit:
+        delivery?.renderedLimit ?? items.length,
+      resultCount: delivery?.resultCount ?? items.length,
+      source: delivery?.source ?? "client_state",
+      cacheState: delivery?.cacheState ?? "client_state",
+      fallbackMode: delivery?.fallbackMode ?? "none",
+    },
+  };
+}
+
+function buildRankingPayload(
+  json: RankingsApiResponse,
+  expectedUniverseCode: string,
+  requestedLimit: number,
+): RankingBoardPayload {
+  const items = json.items ?? [];
+  const requestedUniverseCode =
+    json.requestedUniverseCode ?? expectedUniverseCode;
+  const renderedUniverseCode =
+    json.renderedUniverseCode ?? json.universeCode ?? requestedUniverseCode;
+  const resultCount =
+    toFiniteNumberOrNull(json.resultCount) ??
+    toFiniteNumberOrNull(json.count) ??
+    items.length;
+
+  return {
+    items,
+    delivery: {
+      requestedUniverseCode,
+      renderedUniverseCode,
+      requestedLimit:
+        toFiniteNumberOrNull(json.requestedLimit) ?? requestedLimit,
+      renderedLimit:
+        toFiniteNumberOrNull(json.renderedLimit) ??
+        toFiniteNumberOrNull(json.count) ??
+        items.length,
+      resultCount,
+      source: json.source ?? "unknown",
+      cacheState: json.cacheState ?? "unknown",
+      fallbackMode: json.fallbackMode ?? "unknown",
+    },
+  };
+}
+
 const COMPLEX_DETAIL_API = (id: string) =>
   `/api/complex-detail?complexId=${encodeURIComponent(id)}`;
 
@@ -143,10 +229,13 @@ async function readApiData<T>(
   return (json ?? null) as T | null;
 }
 
-async function readRankingItems(
+async function readRankingPayload(
   input: string,
   signal: AbortSignal,
-): Promise<RankingItem[]> {
+  expectedUniverseCode: string,
+  requestedLimit: number,
+  strictUniverseIdentity: boolean,
+): Promise<RankingBoardPayload> {
   const response = await fetch(input, {
     method: "GET",
     cache: "no-store",
@@ -161,7 +250,22 @@ async function readRankingItems(
     );
   }
 
-  return json.items ?? [];
+  const payload = buildRankingPayload(
+    json,
+    expectedUniverseCode,
+    requestedLimit,
+  );
+
+  if (
+    strictUniverseIdentity &&
+    payload.delivery.renderedUniverseCode !== expectedUniverseCode
+  ) {
+    throw new Error(
+      `Ranking universe mismatch: requested ${expectedUniverseCode}, rendered ${payload.delivery.renderedUniverseCode}`,
+    );
+  }
+
+  return payload;
 }
 
 export function RankingBoardClient({
@@ -196,6 +300,15 @@ export function RankingBoardClient({
   const [boardUniverseCode, setBoardUniverseCode] =
     useState<UniverseCodeValue>(urlUniverseCode);
   const [boardItems, setBoardItems] = useState<RankingItem[]>(items);
+  const [boardDeliveryMeta, setBoardDeliveryMeta] =
+    useState<RankingBoardDeliveryMeta>(
+      () =>
+        buildLocalRankingPayload(items, urlUniverseCode, boardLimit, {
+          source: items.length > 0 ? "server_seed" : "client_pending",
+          cacheState: items.length > 0 ? "server_seed" : "miss",
+          fallbackMode: boardError ? "server_seed_degraded" : "none",
+        }).delivery,
+    );
   const [liveBoardError, setLiveBoardError] = useState<string | null>(
     boardError ?? null,
   );
@@ -225,9 +338,11 @@ export function RankingBoardClient({
   const [isComplexDetailLoading, setIsComplexDetailLoading] = useState(false);
 
   const initializedFromServerRef = useRef(false);
-  const boardCacheRef = useRef<Partial<Record<string, RankingItem[]>>>({});
+  const boardCacheRef = useRef<Partial<Record<string, RankingBoardPayload>>>(
+    {},
+  );
   const inflightBoardRef = useRef<
-    Partial<Record<string, Promise<RankingItem[]>>>
+    Partial<Record<string, Promise<RankingBoardPayload>>>
   >({});
 
   const getBoardCacheKey = useCallback(
@@ -348,14 +463,18 @@ export function RankingBoardClient({
 
       const localController = signal ? null : new AbortController();
       const nextSignal = signal ?? localController!.signal;
+      const strictUniverseIdentity = apiBasePath === "/api/rankings";
 
-      const request = readRankingItems(
+      const request = readRankingPayload(
         RANKINGS_API(apiBasePath, universeCode, boardLimit),
         nextSignal,
+        universeCode,
+        boardLimit,
+        strictUniverseIdentity,
       )
-        .then((nextItems) => {
-          boardCacheRef.current[cacheKey] = nextItems;
-          return nextItems;
+        .then((nextPayload) => {
+          boardCacheRef.current[cacheKey] = nextPayload;
+          return nextPayload;
         })
         .finally(() => {
           delete inflightBoardRef.current[cacheKey];
@@ -377,20 +496,41 @@ export function RankingBoardClient({
       const hasUsableServerSeed = !boardError && items.length > 0;
 
       if (hasUsableServerSeed) {
-        boardCacheRef.current[getBoardCacheKey(boardUniverseCode)] = items;
+        const serverSeedPayload = buildLocalRankingPayload(
+          items,
+          boardUniverseCode,
+          boardLimit,
+          {
+            source: "server_seed",
+            cacheState: "server_seed",
+            fallbackMode: "none",
+          },
+        );
+
+        boardCacheRef.current[getBoardCacheKey(boardUniverseCode)] =
+          serverSeedPayload;
+        setBoardDeliveryMeta(serverSeedPayload.delivery);
         setStaleBoardUniverseCode(null);
         setIsBoardLoading(false);
         return;
       }
 
       delete boardCacheRef.current[getBoardCacheKey(boardUniverseCode)];
+      setBoardDeliveryMeta(
+        buildLocalRankingPayload([], boardUniverseCode, boardLimit, {
+          source: "client_pending",
+          cacheState: "miss",
+          fallbackMode: boardError ? "server_seed_degraded" : "none",
+        }).delivery,
+      );
       setIsBoardLoading(true);
     }
 
-    const cachedItems =
+    const cachedPayload =
       boardCacheRef.current[getBoardCacheKey(boardUniverseCode)];
-    if (cachedItems !== undefined) {
-      setBoardItems(cachedItems);
+    if (cachedPayload !== undefined) {
+      setBoardItems(cachedPayload.items);
+      setBoardDeliveryMeta(cachedPayload.delivery);
       setLiveBoardError(null);
       setStaleBoardUniverseCode(null);
       setIsBoardLoading(false);
@@ -412,13 +552,14 @@ export function RankingBoardClient({
       setLiveBoardError(null);
 
       try {
-        const nextItems = await fetchBoardUniverse(
+        const nextPayload = await fetchBoardUniverse(
           boardUniverseCode,
           controller.signal,
         );
 
         if (cancelled) return;
-        setBoardItems(nextItems);
+        setBoardItems(nextPayload.items);
+        setBoardDeliveryMeta(nextPayload.delivery);
         setStaleBoardUniverseCode(null);
       } catch (error) {
         // Unmount abort: return silently without touching state.
@@ -433,6 +574,14 @@ export function RankingBoardClient({
             : "보드 로딩 실패";
 
         setBoardItems((prev) => (prev.length > 0 ? prev : []));
+        setBoardDeliveryMeta((prev) => ({
+          ...prev,
+          requestedUniverseCode: boardUniverseCode,
+          cacheState: timedOut ? "client_timeout" : "client_error",
+          fallbackMode: timedOut
+            ? "client_timeout_preserve_previous"
+            : "client_error_preserve_previous",
+        }));
         setLiveBoardError(message);
 
         if (timedOut) {
@@ -463,6 +612,7 @@ export function RankingBoardClient({
     };
   }, [
     boardUniverseCode,
+    boardLimit,
     items,
     boardError,
     fetchBoardUniverse,
@@ -477,7 +627,7 @@ export function RankingBoardClient({
         return;
       }
 
-      const cachedNextItems =
+      const cachedNextPayload =
         boardCacheRef.current[getBoardCacheKey(normalizedNext)];
 
       setComparisonItems([]);
@@ -485,12 +635,24 @@ export function RankingBoardClient({
       setSelectedComplexId(null);
       setDistrictQueryLocal("");
 
-      setBoardItems(cachedNextItems ?? boardItems);
+      setBoardItems(cachedNextPayload?.items ?? boardItems);
+      setBoardDeliveryMeta(
+        cachedNextPayload?.delivery ?? {
+          requestedUniverseCode: normalizedNext,
+          renderedUniverseCode: boardDeliveryMeta.renderedUniverseCode,
+          requestedLimit: boardLimit,
+          renderedLimit: boardItems.length,
+          resultCount: boardItems.length,
+          source: boardDeliveryMeta.source,
+          cacheState: "client_stale",
+          fallbackMode: "stale_while_syncing",
+        },
+      );
       setLiveBoardError(null);
       setStaleBoardUniverseCode(
-        cachedNextItems === undefined ? boardUniverseCode : null,
+        cachedNextPayload === undefined ? boardUniverseCode : null,
       );
-      setIsBoardLoading(cachedNextItems === undefined);
+      setIsBoardLoading(cachedNextPayload === undefined);
 
       replaceUrlParams((params) => {
         params.delete("district");
@@ -505,7 +667,14 @@ export function RankingBoardClient({
 
       setBoardUniverseCode(normalizedNext);
     },
-    [boardItems, boardUniverseCode, replaceUrlParams, getBoardCacheKey],
+    [
+      boardDeliveryMeta,
+      boardItems,
+      boardLimit,
+      boardUniverseCode,
+      replaceUrlParams,
+      getBoardCacheKey,
+    ],
   );
 
   const toggleComparisonItem = useCallback((item: RankingItem) => {
@@ -650,7 +819,12 @@ export function RankingBoardClient({
         data-testid="ranking-board"
         data-universe-code={boardUniverseCode}
         data-api-base-path={apiBasePath}
+        data-requested-universe-code={boardDeliveryMeta.requestedUniverseCode}
+        data-rendered-universe-code={boardDeliveryMeta.renderedUniverseCode}
         data-board-delivery-state={boardDeliveryState}
+        data-board-source={boardDeliveryMeta.source}
+        data-board-cache-state={boardDeliveryMeta.cacheState}
+        data-board-fallback-mode={boardDeliveryMeta.fallbackMode}
         data-board-stale-universe-code={staleBoardUniverseCode ?? ""}
       >
         <div className="shrink-0 flex flex-col gap-3 border-b border-slate-800/80 p-4 lg:p-5">
@@ -744,6 +918,9 @@ export function RankingBoardClient({
               className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
               data-testid="ranking-board-degraded-state"
               data-board-delivery-state={boardDeliveryState}
+              data-requested-universe-code={boardDeliveryMeta.requestedUniverseCode}
+              data-rendered-universe-code={boardDeliveryMeta.renderedUniverseCode}
+              data-board-fallback-mode={boardDeliveryMeta.fallbackMode}
               data-board-stale-universe-code={staleBoardUniverseCode ?? ""}
             >
               Syncing {getUniverseLabel(boardUniverseCode)}. Keeping the last
