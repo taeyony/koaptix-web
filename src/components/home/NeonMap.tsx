@@ -84,6 +84,81 @@ const SEOUL_DISTRICT_COORDS: Record<string, Coord> = {
 };
 
 const DEFAULT_KOREA_CENTER: Coord = { lat: 36.35, lng: 127.85 };
+const REGIONAL_MAP_FETCH_TIMEOUT_MS = 7000;
+const KOREA_ALL_MAP_FETCH_TIMEOUT_MS = 10000;
+
+const KOREA_ALL_SCOPE_COORDS: {
+  tokens: string[];
+  center: Coord;
+  spreadLat: number;
+  spreadLng: number;
+}[] = [
+  { tokens: ["서울"], center: { lat: 37.5665, lng: 126.978 }, spreadLat: 0.12, spreadLng: 0.16 },
+  { tokens: ["부산"], center: { lat: 35.1796, lng: 129.0756 }, spreadLat: 0.12, spreadLng: 0.16 },
+  { tokens: ["대구"], center: { lat: 35.8714, lng: 128.6014 }, spreadLat: 0.12, spreadLng: 0.16 },
+  { tokens: ["인천"], center: { lat: 37.4563, lng: 126.7052 }, spreadLat: 0.12, spreadLng: 0.16 },
+  { tokens: ["광주"], center: { lat: 35.1595, lng: 126.8526 }, spreadLat: 0.12, spreadLng: 0.16 },
+  { tokens: ["대전"], center: { lat: 36.3504, lng: 127.3845 }, spreadLat: 0.12, spreadLng: 0.16 },
+  { tokens: ["울산"], center: { lat: 35.5384, lng: 129.3114 }, spreadLat: 0.12, spreadLng: 0.16 },
+  { tokens: ["세종"], center: { lat: 36.4801, lng: 127.289 }, spreadLat: 0.08, spreadLng: 0.1 },
+  { tokens: ["경기"], center: { lat: 37.2751, lng: 127.0095 }, spreadLat: 0.28, spreadLng: 0.34 },
+  { tokens: ["강원"], center: { lat: 37.8854, lng: 127.7298 }, spreadLat: 0.28, spreadLng: 0.36 },
+  { tokens: ["충북", "충청북"], center: { lat: 36.6357, lng: 127.4914 }, spreadLat: 0.22, spreadLng: 0.28 },
+  { tokens: ["충남", "충청남"], center: { lat: 36.6588, lng: 126.6728 }, spreadLat: 0.22, spreadLng: 0.3 },
+  { tokens: ["전북", "전라북"], center: { lat: 35.8204, lng: 127.1088 }, spreadLat: 0.22, spreadLng: 0.28 },
+  { tokens: ["전남", "전라남"], center: { lat: 34.8161, lng: 126.463 }, spreadLat: 0.24, spreadLng: 0.32 },
+  { tokens: ["경북", "경상북"], center: { lat: 36.576, lng: 128.5056 }, spreadLat: 0.28, spreadLng: 0.36 },
+  { tokens: ["경남", "경상남"], center: { lat: 35.2383, lng: 128.6924 }, spreadLat: 0.24, spreadLng: 0.32 },
+  { tokens: ["제주"], center: { lat: 33.4996, lng: 126.5312 }, spreadLat: 0.1, spreadLng: 0.14 },
+];
+
+function stableStringHash(value: string) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+
+  return hash;
+}
+
+function spreadAroundScopeCenter(
+  center: Coord,
+  label: string,
+  spreadLat: number,
+  spreadLng: number,
+): Coord {
+  const hash = stableStringHash(label);
+  const angle = ((hash % 360) * Math.PI) / 180;
+  const ring = 0.35 + (((hash >>> 8) % 65) / 100);
+
+  return {
+    lat: Number((center.lat + Math.sin(angle) * spreadLat * ring).toFixed(6)),
+    lng: Number((center.lng + Math.cos(angle) * spreadLng * ring).toFixed(6)),
+  };
+}
+
+function getNationalFallbackCoords(
+  universeCode: string,
+  districtName: string,
+): Coord | null {
+  if (universeCode !== DEFAULT_UNIVERSE_CODE) return null;
+
+  const normalizedName = districtName.replace(/\s+/g, "");
+  const scope = KOREA_ALL_SCOPE_COORDS.find(({ tokens }) =>
+    tokens.some((token) => normalizedName.includes(token)),
+  );
+
+  if (!scope) return null;
+
+  return spreadAroundScopeCenter(
+    scope.center,
+    normalizedName,
+    scope.spreadLat,
+    scope.spreadLng,
+  );
+}
+
 function getFixedDistrictCoords(
   universeCode: string,
   districtName: string,
@@ -355,8 +430,8 @@ function getBubbleSizeRange(universeCode: string, frameWidth: number) {
 
   if (universeCode === DEFAULT_UNIVERSE_CODE) {
     return {
-      min: Math.round(clamp(safeFrameWidth * 0.045, 42, 56)),
-      max: Math.round(clamp(safeFrameWidth * 0.105, 82, 112)),
+      min: Math.round(clamp(safeFrameWidth * 0.04, 38, 52)),
+      max: Math.round(clamp(safeFrameWidth * 0.088, 72, 96)),
     };
   }
 
@@ -537,7 +612,10 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     let cancelled = false;
     let timedOut = false;
 
-    const mapFetchTimeoutMs = 7000;
+    const mapFetchTimeoutMs =
+      currentUniverseCode === DEFAULT_UNIVERSE_CODE
+        ? KOREA_ALL_MAP_FETCH_TIMEOUT_MS
+        : REGIONAL_MAP_FETCH_TIMEOUT_MS;
     const timeoutId = setTimeout(() => {
       timedOut = true;
       controller.abort();
@@ -613,6 +691,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       .filter((group) => {
         if (!group.query) return false;
         if (getFixedDistrictCoords(currentUniverseCode, group.name)) return false;
+        if (getNationalFallbackCoords(currentUniverseCode, group.name)) return false;
 
         const coordKey = getCoordCacheKey(currentUniverseCode, group);
         if (resolvedCoordsRef.current[coordKey]) return false;
@@ -678,6 +757,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         const coords =
           getFixedDistrictCoords(currentUniverseCode, group.name) ??
           resolvedCoords[coordKey] ??
+          getNationalFallbackCoords(currentUniverseCode, group.name) ??
           null;
 
         if (!coords) return null;

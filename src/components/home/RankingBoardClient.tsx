@@ -197,6 +197,20 @@ function buildRankingPayload(
 const COMPLEX_DETAIL_API = (id: string) =>
   `/api/complex-detail?complexId=${encodeURIComponent(id)}`;
 
+const KOREA_ALL_HOME_BOARD_LIMIT = 12;
+
+function getHomeBoardRequestLimit(
+  apiBasePath: string,
+  universeCode: string,
+  requestedLimit: number,
+) {
+  if (apiBasePath === "/api/rankings" && universeCode === DEFAULT_UNIVERSE_CODE) {
+    return Math.min(requestedLimit, KOREA_ALL_HOME_BOARD_LIMIT);
+  }
+
+  return requestedLimit;
+}
+
 const RANKINGS_API = (
   apiBasePath: string,
   universeCode: string,
@@ -296,6 +310,11 @@ export function RankingBoardClient({
 
   const syncRankingUrlState =
     apiBasePath === "/api/ranking" || enableTierFilters;
+  const initialBoardRequestLimit = getHomeBoardRequestLimit(
+    apiBasePath,
+    urlUniverseCode,
+    boardLimit,
+  );
 
   const [boardUniverseCode, setBoardUniverseCode] =
     useState<UniverseCodeValue>(urlUniverseCode);
@@ -303,7 +322,7 @@ export function RankingBoardClient({
   const [boardDeliveryMeta, setBoardDeliveryMeta] =
     useState<RankingBoardDeliveryMeta>(
       () =>
-        buildLocalRankingPayload(items, urlUniverseCode, boardLimit, {
+        buildLocalRankingPayload(items, urlUniverseCode, initialBoardRequestLimit, {
           source: items.length > 0 ? "server_seed" : "client_pending",
           cacheState: items.length > 0 ? "server_seed" : "miss",
           fallbackMode: boardError ? "server_seed_degraded" : "none",
@@ -346,8 +365,15 @@ export function RankingBoardClient({
   >({});
 
   const getBoardCacheKey = useCallback(
-    (universeCode: UniverseCodeValue) =>
-      `${apiBasePath}::${boardLimit}::${universeCode}`,
+    (universeCode: UniverseCodeValue) => {
+      const requestLimit = getHomeBoardRequestLimit(
+        apiBasePath,
+        universeCode,
+        boardLimit,
+      );
+
+      return `${apiBasePath}::${requestLimit}::${universeCode}`;
+    },
     [apiBasePath, boardLimit],
   );
 
@@ -464,12 +490,17 @@ export function RankingBoardClient({
       const localController = signal ? null : new AbortController();
       const nextSignal = signal ?? localController!.signal;
       const strictUniverseIdentity = apiBasePath === "/api/rankings";
-
-      const request = readRankingPayload(
-        RANKINGS_API(apiBasePath, universeCode, boardLimit),
-        nextSignal,
+      const requestLimit = getHomeBoardRequestLimit(
+        apiBasePath,
         universeCode,
         boardLimit,
+      );
+
+      const request = readRankingPayload(
+        RANKINGS_API(apiBasePath, universeCode, requestLimit),
+        nextSignal,
+        universeCode,
+        requestLimit,
         strictUniverseIdentity,
       )
         .then((nextPayload) => {
@@ -494,12 +525,17 @@ export function RankingBoardClient({
       setLiveBoardError(boardError ?? null);
 
       const hasUsableServerSeed = !boardError && items.length > 0;
+      const boardRequestLimit = getHomeBoardRequestLimit(
+        apiBasePath,
+        boardUniverseCode,
+        boardLimit,
+      );
 
       if (hasUsableServerSeed) {
         const serverSeedPayload = buildLocalRankingPayload(
           items,
           boardUniverseCode,
-          boardLimit,
+          boardRequestLimit,
           {
             source: "server_seed",
             cacheState: "server_seed",
@@ -517,7 +553,7 @@ export function RankingBoardClient({
 
       delete boardCacheRef.current[getBoardCacheKey(boardUniverseCode)];
       setBoardDeliveryMeta(
-        buildLocalRankingPayload([], boardUniverseCode, boardLimit, {
+        buildLocalRankingPayload([], boardUniverseCode, boardRequestLimit, {
           source: "client_pending",
           cacheState: "miss",
           fallbackMode: boardError ? "server_seed_degraded" : "none",
@@ -613,6 +649,7 @@ export function RankingBoardClient({
   }, [
     boardUniverseCode,
     boardLimit,
+    apiBasePath,
     items,
     boardError,
     fetchBoardUniverse,
@@ -640,7 +677,11 @@ export function RankingBoardClient({
         cachedNextPayload?.delivery ?? {
           requestedUniverseCode: normalizedNext,
           renderedUniverseCode: boardDeliveryMeta.renderedUniverseCode,
-          requestedLimit: boardLimit,
+          requestedLimit: getHomeBoardRequestLimit(
+            apiBasePath,
+            normalizedNext,
+            boardLimit,
+          ),
           renderedLimit: boardItems.length,
           resultCount: boardItems.length,
           source: boardDeliveryMeta.source,
@@ -671,6 +712,7 @@ export function RankingBoardClient({
       boardDeliveryMeta,
       boardItems,
       boardLimit,
+      apiBasePath,
       boardUniverseCode,
       replaceUrlParams,
       getBoardCacheKey,
