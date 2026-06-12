@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import {
   DEFAULT_UNIVERSE_CODE,
+  getMapUniverseRegistry,
   getUniverseLabel,
   resolveServiceUniverseCode,
 } from "../../../lib/koaptix/universes";
@@ -53,6 +54,12 @@ const UNIVERSE_SCOPE_LABELS: Record<string, string> = {
   GYEONGNAM_ALL: "경상남도",
   JEJU_ALL: "제주특별자치도",
 };
+
+const PUBLIC_MACRO_MAP_UNIVERSE_SET: ReadonlySet<string> = new Set(
+  getMapUniverseRegistry()
+    .filter((universe) => universe.scope === "MACRO")
+    .map((universe) => universe.code),
+);
 
 const SGG_PREFIX_SCOPE_LABELS: Record<string, string> = {
   "11": "서울특별시",
@@ -309,6 +316,24 @@ function getUniverseScopeLabel(universeCode: string) {
 
 function isSggUniverseRequest(universeCode: string) {
   return /^SGG_\d{5}$/.test(universeCode);
+}
+
+function getUniverseFallbackIdentity(universeCode: string) {
+  if (!PUBLIC_MACRO_MAP_UNIVERSE_SET.has(universeCode)) return null;
+  if (isSggUniverseRequest(universeCode)) return null;
+
+  const displayName = getUniverseLabel(universeCode);
+  if (!displayName || displayName === universeCode) return null;
+
+  const scopeLabel = getUniverseScopeLabel(universeCode);
+  const query =
+    scopeLabel || displayName.replace(/\s*전체$/, "").trim() || displayName;
+
+  return {
+    groupKey: `universe:${universeCode}`,
+    displayName,
+    query,
+  };
 }
 
 function resolveScopePrefix(row: ComplexRegionMapRow) {
@@ -705,6 +730,71 @@ async function rowsToMapPayload(
     });
   }
 
+  const fallbackIdentity =
+    grouped.size === 0 && rows.length > 0
+      ? getUniverseFallbackIdentity(universeCode)
+      : null;
+
+  if (fallbackIdentity) {
+    let totalMarketCap = 0;
+    let totalDelta = 0;
+    let count = 0;
+    let boardCount = 0;
+    let primaryComplexId: string | null = null;
+    let primaryComplexName: string | null = null;
+    let primaryRank: number | null = null;
+    let peakComplexMarketCap = 0;
+    let peakComplexName: string | null = null;
+
+    for (const row of rows) {
+      const rankAll = toNullableNumber(row.rank_all);
+      const marketCap = toNumber(row.market_cap_krw);
+      const delta = toNullableNumber(row.rank_delta_w) ?? 0;
+      const complexId =
+        row.complex_id === null || row.complex_id === undefined
+          ? null
+          : String(row.complex_id);
+      const complexName =
+        typeof row.apt_name_ko === "string" ? row.apt_name_ko : null;
+
+      totalMarketCap += marketCap;
+      totalDelta += delta;
+      count += 1;
+
+      if (rankAll !== null && rankAll <= HOME_BOARD_TACTICAL_LIMIT) {
+        boardCount += 1;
+      }
+
+      if (marketCap > peakComplexMarketCap) {
+        peakComplexMarketCap = marketCap;
+        peakComplexName = complexName;
+      }
+
+      if (
+        rankAll !== null &&
+        (primaryRank === null || rankAll < primaryRank)
+      ) {
+        primaryRank = rankAll;
+        primaryComplexId = complexId;
+        primaryComplexName = complexName;
+      }
+    }
+
+    grouped.set(fallbackIdentity.groupKey, {
+      name: fallbackIdentity.displayName,
+      query: fallbackIdentity.query,
+      totalMarketCap,
+      totalDelta,
+      count,
+      boardCount,
+      primaryComplexId,
+      primaryComplexName,
+      primaryRank,
+      peakComplexMarketCap,
+      peakComplexName,
+    });
+  }
+
   const items: MapDistrictItem[] = Array.from(grouped.values())
     .map((group) => ({
       name: group.name,
@@ -731,7 +821,7 @@ async function rowsToMapPayload(
     renderedLimit: options.renderedLimit,
     resultCount: items.length,
     mapScopeLabel: getUniverseLabel(universeCode),
-    isFallback: false,
+    isFallback: Boolean(fallbackIdentity),
     fallbackMode: "none",
     source: options.source,
     cacheState: "bypassed",
