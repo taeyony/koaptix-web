@@ -132,7 +132,7 @@ export default async function Home({
   const boardPrimaryLimit =
     universeCode === DEFAULT_UNIVERSE_CODE ? 8 : homeBoardClientLimit;
 
-  const boardSeedTimeoutMs = 4000;
+  const boardSeedTimeoutMs = 2500;
 
   // Keep chart fallback scoped to the requested universe so a stale national
   // payload does not appear as the selected region.

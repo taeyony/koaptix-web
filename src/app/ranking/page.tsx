@@ -11,10 +11,6 @@ import {
   resolveServiceUniverseCode,
   getUniverseLabel,
 } from "../../lib/koaptix/universes";
-import {
-  getLatestRankBoard,
-  toNullableNumber,
-} from "../../lib/koaptix/queries";
 import type { RankingItem } from "../../lib/koaptix/types";
 
 import { RankingBoardClient } from "../../components/home/RankingBoardClient";
@@ -77,66 +73,9 @@ export default async function RankingPage({
       ? "/"
       : `/?universe=${encodeURIComponent(universeCode)}`;
 
-  const rawItems = await getLatestRankBoard(universeCode, 1000).catch(
-    (error) => {
-      console.warn("[RANKING] getLatestRankBoard failed:", error);
-      return [];
-    },
-  );
-
-  const currentYear = new Date().getFullYear();
-
-  const items: RankingItem[] = rawItems.map((row: any) => {
-    const buildYear = toNullableNumber(row.build_year ?? row.approval_year);
-    const ageYears = buildYear ? currentYear - buildYear : null;
-    const households = toNullableNumber(
-      row.household_count ?? row.total_household_count ?? row.households,
-    );
-    const recovery = toNullableNumber(
-      row.recovery_52w ?? row.recovery_rate_52w,
-    );
-
-    return {
-      complexId: String(row.complex_id ?? row.id),
-      name: row.apt_name_ko ?? row.name ?? "",
-      apt_name_ko: row.apt_name_ko ?? row.name ?? "",
-      rank: row.rank_all ?? row.rank ?? 0,
-      rank_all: row.rank_all ?? row.rank ?? 0,
-      sigunguName: row.sigungu_name ?? "",
-      sigungu_name: row.sigungu_name ?? "",
-      legalDongName: row.legal_dong_name ?? "",
-      legal_dong_name: row.legal_dong_name ?? "",
-      marketCapKrw: row.market_cap_krw ?? 0,
-      market_cap_krw: row.market_cap_krw ?? 0,
-      marketCapTrillionKrw: row.market_cap_trillion_krw ?? 0,
-      market_cap_trillion_krw: row.market_cap_trillion_krw ?? 0,
-      rankDelta7d: toNullableNumber(row.rank_delta_w ?? row.rank_delta_7d),
-      rank_delta_w: toNullableNumber(row.rank_delta_w ?? row.rank_delta_7d),
-      rankMovement: row.rank_movement ?? null,
-      rank_movement: row.rank_movement ?? null,
-      previousRankAll: toNullableNumber(row.previous_rank_all),
-      previous_rank_all: toNullableNumber(row.previous_rank_all),
-      recoveryRate52w: recovery,
-      recovery_52w: recovery,
-      locationLabel: [
-        row.sigungu_full_name ?? row.sigungu_name ?? "",
-        row.legal_dong_name ?? "",
-        row.apt_name_ko ?? "",
-      ]
-        .filter(Boolean)
-        .join(" "),
-      households,
-      household_count: households,
-      buildYear,
-      build_year: buildYear,
-      ageYears,
-      age_years: ageYears,
-      universeCode: row.universe_code ?? universeCode,
-      universe_code: row.universe_code ?? universeCode,
-      universeName: row.universe_name ?? null,
-      universe_name: row.universe_name ?? null,
-    } as unknown as RankingItem;
-  });
+  // Keep the ranking HTML shell lightweight; the client board keeps the TOP1000
+  // contract by fetching the full payload through /api/ranking after hydration.
+  const items: RankingItem[] = [];
 
   return (
     <main

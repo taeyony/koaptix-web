@@ -679,12 +679,14 @@ async function fetchLatestRankBoardFallbackFromDynamic(
   });
 }
 
+const HOME_TACTICAL_RANK_BOARD_LIMIT = 20;
+
 /**
  * Home initial SSR seed path.
  */
 export async function getLatestRankBoard(
   universeCode: KnownUniverseCode | string = DEFAULT_UNIVERSE_CODE,
-  limit: number = 500,
+  limit: number = HOME_TACTICAL_RANK_BOARD_LIMIT,
 ): Promise<DbLatestRankBoardWeeklyRow[]> {
   const supabase = createServerSupabase();
 
