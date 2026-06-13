@@ -1251,6 +1251,17 @@ const SGG_UNIVERSE_REGISTRY: UniverseRegistryItem[] = [
     mapEnabled: true,
     order: 184,
   },
+  {
+    code: "SGG_52111",
+    label: "?꾩＜???꾩궛援?",
+    scope: "SIGUNGU",
+    enabled: true,
+    homeEnabled: true,
+    searchEnabled: true,
+    rankingEnabled: true,
+    mapEnabled: true,
+    order: 185,
+  },
 ];
 
 /**
