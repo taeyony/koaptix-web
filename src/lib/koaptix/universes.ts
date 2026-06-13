@@ -1253,7 +1253,7 @@ const SGG_UNIVERSE_REGISTRY: UniverseRegistryItem[] = [
   },
   {
     code: "SGG_52111",
-    label: "?꾩＜???꾩궛援?",
+    label: "전주시 완산구",
     scope: "SIGUNGU",
     enabled: true,
     homeEnabled: true,

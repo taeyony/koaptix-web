@@ -5,7 +5,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { RankingItem } from "../../lib/koaptix/types";
 import {
   DEFAULT_UNIVERSE_CODE,
+  getSearchUniverseRegistry,
   normalizeUniverseCode,
+  type KnownUniverseCode,
 } from "../../lib/koaptix/universes";
 
 interface CommandPaletteProps {
@@ -21,10 +23,27 @@ type SearchApiResponse = {
   message?: string;
 };
 
+type RegionSearchResult = {
+  code: KnownUniverseCode;
+  label: string;
+};
+
 const SEARCH_API = (query: string, universeCode: string, limit = 12) =>
   `/api/search?q=${encodeURIComponent(query)}&universe_code=${encodeURIComponent(
     universeCode,
   )}&limit=${limit}`;
+
+const MAX_REGION_SEARCH_RESULTS = 4;
+
+function normalizeRegionSearchText(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function getRegionSearchTerms(label: string, code: string) {
+  return Array.from(new Set([label, label.replace(/\s+/g, ""), code])).map(
+    normalizeRegionSearchText,
+  );
+}
 
 async function readSearchResult(
   input: string,
@@ -113,6 +132,24 @@ export function CommandPalette({
       })
       .slice(0, 8);
   }, [items, query]);
+
+  const regionSearchResults = useMemo<RegionSearchResult[]>(() => {
+    const normalizedQuery = normalizeRegionSearchText(query);
+    if (normalizedQuery.length < 2) return [];
+
+    return getSearchUniverseRegistry()
+      .filter((universe) => universe.scope === "SIGUNGU")
+      .filter((universe) =>
+        getRegionSearchTerms(universe.label, universe.code).some((term) =>
+          term.includes(normalizedQuery),
+        ),
+      )
+      .slice(0, MAX_REGION_SEARCH_RESULTS)
+      .map((universe) => ({
+        code: universe.code,
+        label: universe.label,
+      }));
+  }, [query]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -284,6 +321,22 @@ export function CommandPalette({
     setIsOpen(false);
   }, [rankingSearchHref, router]);
 
+  const handleSelectRegionResult = useCallback(
+    (result: RegionSearchResult) => {
+      const params = new URLSearchParams();
+      params.set("universe", result.code);
+
+      const q = query.trim();
+      if (q) {
+        params.set("q", q);
+      }
+
+      router.push(`/ranking?${params.toString()}`);
+      setIsOpen(false);
+    },
+    [query, router],
+  );
+
   const renderResultCard = (item: RankingItem) => (
     <button
       key={`${item.universeCode ?? "KOREA_ALL"}::${item.complexId}`}
@@ -320,6 +373,36 @@ export function CommandPalette({
             ? `${item.marketCapTrillionKrw.toFixed(2)}조원`
             : `${Math.round((item.marketCapKrw ?? 0) / 100000000).toLocaleString()}억원`}
         </p>
+      </div>
+    </button>
+  );
+
+  const renderRegionResultCard = (result: RegionSearchResult) => (
+    <button
+      key={`region::${result.code}`}
+      type="button"
+      onClick={() => handleSelectRegionResult(result)}
+      data-testid="command-region-result-card"
+      data-universe-code={result.code}
+      className="group flex w-full items-center justify-between rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-4 text-left transition hover:border-emerald-400/40 hover:bg-emerald-500/15"
+    >
+      <div className="min-w-0 pr-4">
+        <div className="flex items-center gap-2">
+          <span className="rounded-full border border-emerald-400/30 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+            REGION
+          </span>
+          <span className="truncate text-[26px] font-semibold leading-none text-white">
+            {result.label}
+          </span>
+        </div>
+
+        <p className="mt-2 truncate text-sm text-emerald-100/70">
+          {result.code} · TOP1000 지역 보드로 이동
+        </p>
+      </div>
+
+      <div className="shrink-0 text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-300/80">
+        OPEN
       </div>
     </button>
   );
@@ -383,6 +466,18 @@ export function CommandPalette({
                 </div>
               )}
 
+              {query.trim().length >= 2 && regionSearchResults.length > 0 && (
+                <div className="mb-4">
+                  <div className="mb-3 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-emerald-300/80">
+                    <span>지역 바로가기</span>
+                    <span>{regionSearchResults.length} ITEMS</span>
+                  </div>
+                  <div className="space-y-3">
+                    {regionSearchResults.map(renderRegionResultCard)}
+                  </div>
+                </div>
+              )}
+
               {isSearching ? (
                 <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
                   검색 중...
@@ -435,6 +530,8 @@ export function CommandPalette({
                     </div>
                   )}
                 </div>
+              ) : regionSearchResults.length > 0 ? (
+                null
               ) : (
                 <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
                   검색 결과가 없습니다. 단지명, 구, 동 이름을 바꿔 다시 입력해보세요.
