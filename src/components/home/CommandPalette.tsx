@@ -39,8 +39,25 @@ function normalizeRegionSearchText(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "");
 }
 
+function getAdministrativeShortLabel(label: string) {
+  return label
+    .replace(/특별자치도|특별자치시|특별시|광역시|자치도|자치시/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function getRegionSearchTerms(label: string, code: string) {
-  return Array.from(new Set([label, label.replace(/\s+/g, ""), code])).map(
+  const administrativeShortLabel = getAdministrativeShortLabel(label);
+
+  return Array.from(
+    new Set([
+      label,
+      label.replace(/\s+/g, ""),
+      administrativeShortLabel,
+      administrativeShortLabel.replace(/\s+/g, ""),
+      code,
+    ]),
+  ).map(
     normalizeRegionSearchText,
   );
 }

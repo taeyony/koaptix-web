@@ -1262,6 +1262,17 @@ const SGG_UNIVERSE_REGISTRY: UniverseRegistryItem[] = [
     mapEnabled: true,
     order: 185,
   },
+  {
+    code: "SGG_29155",
+    label: "광주광역시 남구",
+    scope: "SIGUNGU",
+    enabled: true,
+    homeEnabled: true,
+    searchEnabled: true,
+    rankingEnabled: true,
+    mapEnabled: true,
+    order: 186,
+  },
 ];
 
 /**
