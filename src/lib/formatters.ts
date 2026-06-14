@@ -76,6 +76,30 @@ export function formatMarketCapTrillion(value: string | number | null | undefine
   })}조`;
 }
 
+export function formatMarketCapKrw(value: string | number | null | undefined): string {
+  const num = toNumber(value);
+  if (num === null || num <= 0) return "-";
+
+  if (num >= 1_000_000_000_000) {
+    return `${(num / 1_000_000_000_000).toLocaleString("ko-KR", {
+      maximumFractionDigits: 2,
+    })}조`;
+  }
+
+  if (num >= 100_000_000) {
+    return `${Math.round(num / 100_000_000).toLocaleString("ko-KR")}억`;
+  }
+
+  if (num >= 10_000_000) {
+    return `${(num / 100_000_000).toLocaleString("ko-KR", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })}억`;
+  }
+
+  return `${Math.round(num).toLocaleString("ko-KR")}원`;
+}
+
 export function formatRatio(value: string | number | null | undefined): string {
   const num = toNumber(value);
   if (num === null) return "-";

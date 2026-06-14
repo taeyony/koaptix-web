@@ -1,5 +1,6 @@
 "use client";
 
+import { formatMarketCapKrw } from "../../lib/formatters";
 import type { RankingItem } from "../../lib/koaptix/types";
 
 interface RankingCardProps {
@@ -111,7 +112,7 @@ export function RankingCard({
 
         <div className="flex shrink-0 flex-col items-end text-right">
           <span className="text-sm font-semibold tabular-nums text-slate-200 transition-colors group-hover:text-white sm:text-base">
-            {item.marketCapTrillionKrw?.toFixed(2)}조
+            {formatMarketCapKrw(item.marketCapKrw)}
           </span>
           <span className={`mt-0.5 text-[11px] font-bold sm:text-xs ${momentumColor}`}>
             {momentumText}
