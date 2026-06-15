@@ -35,6 +35,16 @@ SCHEMA_VERSION = "1.0"
 DEFAULT_SOURCE_SYSTEM = "molit-apt-trade-detail"
 ENDPOINT_ENV_NAMES = ("KOAPTIX_MOLIT_APT_TRADE_URL", "MOLIT_API_BASE_URL", "KOAPTIX_MOLIT_API_URL")
 KEY_ENV_NAMES = ("KOAPTIX_MOLIT_SERVICE_KEY", "MOLIT_API_SERVICE_KEY")
+HTTP_ERROR_BODY_MAX_BYTES = 64 * 1024
+SENSITIVE_HTTP_HEADER_NAMES = {
+    "authorization",
+    "cookie",
+    "proxy-authorization",
+    "servicekey",
+    "set-cookie",
+    "x-api-key",
+    "x-service-key",
+}
 OPTIONAL_INT_ENV_DEFAULTS = {
     "page_size": ("KOAPTIX_MOLIT_NUM_OF_ROWS", 1000),
     "max_pages": ("KOAPTIX_MOLIT_PAGE_MAX", 5),
@@ -174,6 +184,156 @@ def safe_error_message(exc: BaseException) -> str:
     if os.environ.get(KEY_ENV_NAMES[1]):
         text = text.replace(os.environ[KEY_ENV_NAMES[1]], "[REDACTED]")
     return text[:500]
+
+
+def known_secret_values(extra_secret_values: tuple[str | None, ...] = ()) -> tuple[str, ...]:
+    values: list[str] = []
+    for name in KEY_ENV_NAMES:
+        value = os.environ.get(name)
+        if value:
+            values.append(value)
+    for value in extra_secret_values:
+        if value:
+            values.append(value)
+    return tuple(dict.fromkeys(value for value in values if len(value) >= 4))
+
+
+def contains_secret_bytes(data: bytes, extra_secret_values: tuple[str | None, ...] = ()) -> bool:
+    if not data:
+        return False
+    for value in known_secret_values(extra_secret_values):
+        if value.encode("utf-8", errors="ignore") in data:
+            return True
+    return False
+
+
+def sanitize_header_value(value: str) -> str:
+    text = value
+    for secret in known_secret_values():
+        text = text.replace(secret, "[REDACTED]")
+    return text[:500]
+
+
+def sanitize_http_headers(headers: Any) -> dict[str, str]:
+    sanitized: dict[str, str] = {}
+    if headers is None:
+        return sanitized
+    try:
+        items = headers.items()
+    except AttributeError:
+        return sanitized
+    for key, value in items:
+        header_name = str(key)
+        if header_name.lower() in SENSITIVE_HTTP_HEADER_NAMES:
+            sanitized[header_name] = "[REDACTED]"
+        else:
+            sanitized[header_name] = sanitize_header_value(str(value))
+    return sanitized
+
+
+def read_bounded_error_body(error: urllib.error.HTTPError, max_bytes: int = HTTP_ERROR_BODY_MAX_BYTES) -> dict[str, Any]:
+    try:
+        body = error.read(max_bytes + 1)
+        read_error = None
+    except Exception as exc:  # pragma: no cover - defensive against broken file-like error bodies.
+        body = b""
+        read_error = safe_error_message(exc)
+    truncated = len(body) > max_bytes
+    return {
+        "body_bytes": body[:max_bytes],
+        "body_bytes_read": len(body),
+        "body_truncated": truncated,
+        "body_read_error": read_error,
+    }
+
+
+def write_http_error_diagnostics(
+    args: argparse.Namespace,
+    package_dir: Path,
+    page_no: int,
+    attempt: int,
+    error: urllib.error.HTTPError,
+    body_capture: dict[str, Any],
+    extra_secret_values: tuple[str | None, ...] = (),
+) -> dict[str, Any]:
+    diagnostic_dir = package_dir / "support" / "http_errors"
+    body_path = diagnostic_dir / f"http_error_body_page_{page_no:03d}.bin"
+    body_hash_path = diagnostic_dir / f"http_error_body_page_{page_no:03d}.sha256"
+    metadata_path = diagnostic_dir / f"http_error_metadata_page_{page_no:03d}.json"
+    for path in (body_path, body_hash_path, metadata_path):
+        if path.exists() and not args.overwrite:
+            raise WrapperError(5, f"http error diagnostic already exists: {path.as_posix()}", "write")
+
+    body = body_capture["body_bytes"]
+    secret_exposure_risk = contains_secret_bytes(body, extra_secret_values)
+    body_sha256 = None if secret_exposure_risk else sha256_bytes(body)
+    body_saved = not secret_exposure_risk
+    artifact_hashes: list[dict[str, str]] = []
+
+    if body_saved:
+        diagnostic_dir.mkdir(parents=True, exist_ok=True)
+        body_path.write_bytes(body)
+        write_text(body_hash_path, f"{body_sha256}  {body_path.name}\n")
+        artifact_hashes.extend(
+            [
+                {"relative_path": body_path.relative_to(package_dir).as_posix(), "sha256": sha256_file(body_path)},
+                {"relative_path": body_hash_path.relative_to(package_dir).as_posix(), "sha256": sha256_file(body_hash_path)},
+            ]
+        )
+
+    headers = sanitize_http_headers(error.headers)
+    metadata = {
+        "schema_version": SCHEMA_VERSION,
+        "diagnostic_type": "http_error_body",
+        "occurred_at_utc": utc_now(),
+        "lawd_cd": args.lawd_cd,
+        "deal_ym": deal_ym(args.year, args.month),
+        "page_no": page_no,
+        "attempt": attempt,
+        "request_parameter_hash": request_parameter_hash(args, page_no),
+        "http_status": int(getattr(error, "code", 0) or 0),
+        "http_reason": safe_error_message(getattr(error, "reason", None) or getattr(error, "msg", "") or ""),
+        "safe_error_message": safe_error_message(error),
+        "content_type": headers.get("Content-Type") or headers.get("content-type"),
+        "response_headers_sanitized": headers,
+        "body_max_bytes": HTTP_ERROR_BODY_MAX_BYTES,
+        "body_bytes_read": body_capture["body_bytes_read"],
+        "body_byte_length": len(body),
+        "body_sha256": body_sha256,
+        "body_saved": body_saved,
+        "body_truncated": body_capture["body_truncated"],
+        "body_read_error": body_capture["body_read_error"],
+        "body_relative_path": body_path.relative_to(package_dir).as_posix() if body_saved else None,
+        "body_sha256_relative_path": body_hash_path.relative_to(package_dir).as_posix() if body_saved else None,
+        "body_storage_decision": "saved_bounded_body" if body_saved else "blocked_secret_value_detected",
+        "secret_exposure_risk": secret_exposure_risk,
+        "classified_as_success_raw_response": False,
+        "secret_values_printed": False,
+    }
+    write_json(metadata_path, metadata)
+    metadata["metadata_sha256"] = sha256_file(metadata_path)
+    write_json(metadata_path, metadata)
+    artifact_hashes.append(
+        {"relative_path": metadata_path.relative_to(package_dir).as_posix(), "sha256": sha256_file(metadata_path)}
+    )
+    return {
+        "http_status": metadata["http_status"],
+        "http_reason": metadata["http_reason"],
+        "body_saved": metadata["body_saved"],
+        "body_truncated": metadata["body_truncated"],
+        "body_byte_length": metadata["body_byte_length"],
+        "body_sha256": metadata["body_sha256"],
+        "metadata_relative_path": metadata_path.relative_to(package_dir).as_posix(),
+        "body_relative_path": metadata["body_relative_path"],
+        "secret_exposure_risk": metadata["secret_exposure_risk"],
+        "classified_as_success_raw_response": False,
+        "artifact_hashes": artifact_hashes,
+    }
+
+
+def is_retryable_http_error(error: urllib.error.HTTPError) -> bool:
+    status = int(getattr(error, "code", 0) or 0)
+    return status in (408, 429) or 500 <= status <= 599
 
 
 def build_request_url(endpoint: str, service_key: str, args: argparse.Namespace, page_no: int) -> str:
@@ -471,6 +631,12 @@ def write_dry_run_plan(args: argparse.Namespace, package_dir: Path) -> dict[str,
             "page_no",
             "error_class",
             "safe_error_message",
+            "http_status",
+            "http_reason",
+            "http_error_body_saved",
+            "http_error_body_sha256",
+            "http_error_metadata_path",
+            "secret_exposure_risk",
             "retryable",
             "action_taken",
             "secret_redaction_confirmed",
@@ -601,8 +767,10 @@ def fetch_mode(args: argparse.Namespace, package_dir: Path) -> dict[str, Any]:
     page_results: list[dict[str, Any]] = []
     retry_rows: list[dict[str, Any]] = []
     error_rows: list[dict[str, Any]] = []
+    http_error_diagnostics: list[dict[str, Any]] = []
     for page_no in range(1, args.max_pages + 1):
         last_error: BaseException | None = None
+        last_http_error_diagnostic: dict[str, Any] | None = None
         raw: bytes | None = None
         content_type = ""
         http_status = 0
@@ -618,11 +786,39 @@ def fetch_mode(args: argparse.Namespace, package_dir: Path) -> dict[str, Any]:
                         raise WrapperError(7, f"unexpected content type: {content_type}", "fetch")
                     raw = response.read()
                 break
-            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, WrapperError) as exc:
+            except urllib.error.HTTPError as exc:
                 last_error = exc
-                retryable = isinstance(exc, (urllib.error.URLError, TimeoutError)) or (
-                    isinstance(exc, urllib.error.HTTPError) and exc.code in (408, 429) or isinstance(exc, urllib.error.HTTPError) and 500 <= exc.code <= 599
+                retryable = is_retryable_http_error(exc)
+                action_taken = "retry" if retryable and attempt <= args.retry else "stop"
+                body_capture = read_bounded_error_body(exc)
+                if action_taken == "stop":
+                    last_http_error_diagnostic = write_http_error_diagnostics(
+                        args,
+                        package_dir,
+                        page_no,
+                        attempt,
+                        exc,
+                        body_capture,
+                        (key,),
+                    )
+                    http_error_diagnostics.append(last_http_error_diagnostic)
+                retry_rows.append(
+                    {
+                        "occurred_at_utc": utc_now(),
+                        "lawd_cd": args.lawd_cd,
+                        "deal_ym": deal_ym(args.year, args.month),
+                        "page_no": page_no,
+                        "attempt": attempt,
+                        "reason": safe_error_message(exc),
+                        "action_taken": action_taken,
+                    }
                 )
+                if not retryable or attempt > args.retry:
+                    break
+                time.sleep(max(0, args.sleep_ms) / 1000.0 + random.uniform(0, 0.25))
+            except (urllib.error.URLError, TimeoutError, WrapperError) as exc:
+                last_error = exc
+                retryable = isinstance(exc, (urllib.error.URLError, TimeoutError))
                 retry_rows.append(
                     {
                         "occurred_at_utc": utc_now(),
@@ -647,6 +843,12 @@ def fetch_mode(args: argparse.Namespace, package_dir: Path) -> dict[str, Any]:
                     "page_no": page_no,
                     "error_class": type(last_error).__name__ if last_error else "UnknownFetchError",
                     "safe_error_message": safe_error_message(last_error or RuntimeError("fetch failed")),
+                    "http_status": last_http_error_diagnostic["http_status"] if last_http_error_diagnostic else "",
+                    "http_reason": last_http_error_diagnostic["http_reason"] if last_http_error_diagnostic else "",
+                    "http_error_body_saved": "YES" if last_http_error_diagnostic and last_http_error_diagnostic["body_saved"] else "NO",
+                    "http_error_body_sha256": last_http_error_diagnostic["body_sha256"] if last_http_error_diagnostic else "",
+                    "http_error_metadata_path": last_http_error_diagnostic["metadata_relative_path"] if last_http_error_diagnostic else "",
+                    "secret_exposure_risk": "YES" if last_http_error_diagnostic and last_http_error_diagnostic["secret_exposure_risk"] else "NO",
                     "retryable": "UNKNOWN",
                     "action_taken": "stopped",
                     "secret_redaction_confirmed": "YES",
@@ -679,6 +881,12 @@ def fetch_mode(args: argparse.Namespace, package_dir: Path) -> dict[str, Any]:
             "page_no",
             "error_class",
             "safe_error_message",
+            "http_status",
+            "http_reason",
+            "http_error_body_saved",
+            "http_error_body_sha256",
+            "http_error_metadata_path",
+            "secret_exposure_risk",
             "retryable",
             "action_taken",
             "secret_redaction_confirmed",
@@ -687,6 +895,7 @@ def fetch_mode(args: argparse.Namespace, package_dir: Path) -> dict[str, Any]:
 
     raw_hashes = [row["metadata"]["raw_sha256"] for row in page_results]
     metadata_hashes = [row["metadata"]["metadata_sha256"] for row in page_results]
+    support_artifact_hashes = [artifact for row in http_error_diagnostics for artifact in row["artifact_hashes"]]
     total_items = sum(int(row["metadata"].get("item_count_detected") or 0) for row in page_results)
     status = "FETCHED_COMPLETE" if not error_rows else "INCOMPLETE"
     manifest = {
@@ -698,6 +907,10 @@ def fetch_mode(args: argparse.Namespace, package_dir: Path) -> dict[str, Any]:
         "request_parameter_hashes": [request_parameter_hash(args, i + 1) for i in range(len(page_results))],
         "raw_response_hashes": raw_hashes,
         "metadata_hashes": metadata_hashes,
+        "support_artifact_hashes": support_artifact_hashes,
+        "http_error_diagnostics": [
+            {key: value for key, value in row.items() if key != "artifact_hashes"} for row in http_error_diagnostics
+        ],
         "page_count": len(page_results),
         "total_item_count": total_items,
         "error_count": len(error_rows),
@@ -709,7 +922,9 @@ def fetch_mode(args: argparse.Namespace, package_dir: Path) -> dict[str, Any]:
     manifest_path = package_dir / "manifest" / "lawd_month_manifest.json"
     write_json(manifest_path, manifest)
     manifest["lawd_month_manifest_sha256"] = sha256_file(manifest_path)
-    manifest["lawd_month_package_sha256"] = sha256_bytes(canonical_json_bytes({"raw": raw_hashes, "metadata": metadata_hashes}))
+    manifest["lawd_month_package_sha256"] = sha256_bytes(
+        canonical_json_bytes({"raw": raw_hashes, "metadata": metadata_hashes, "support": support_artifact_hashes})
+    )
     write_json(manifest_path, manifest)
     write_text(
         package_dir / "logs" / "sanitized_run.log",
