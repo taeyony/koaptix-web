@@ -26,6 +26,7 @@ type SearchApiResponse = {
 type RegionSearchResult = {
   code: KnownUniverseCode;
   label: string;
+  displayLabel: string;
 };
 
 const SEARCH_API = (query: string, universeCode: string, limit = 12) =>
@@ -34,6 +35,28 @@ const SEARCH_API = (query: string, universeCode: string, limit = 12) =>
   )}&limit=${limit}`;
 
 const MAX_REGION_SEARCH_RESULTS = 4;
+
+const SGG_CODE_PREFIX_LABELS: Record<string, string> = {
+  "11": "서울특별시",
+  "26": "부산광역시",
+  "27": "대구광역시",
+  "28": "인천광역시",
+  "29": "광주광역시",
+  "30": "대전광역시",
+  "31": "울산광역시",
+  "36": "세종특별자치시",
+  "41": "경기도",
+  "42": "강원도",
+  "43": "충청북도",
+  "44": "충청남도",
+  "45": "전라북도",
+  "46": "전라남도",
+  "47": "경상북도",
+  "48": "경상남도",
+  "50": "제주특별자치도",
+  "51": "강원특별자치도",
+  "52": "전북특별자치도",
+};
 
 function normalizeRegionSearchText(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "");
@@ -60,6 +83,117 @@ function getRegionSearchTerms(label: string, code: string) {
   ).map(
     normalizeRegionSearchText,
   );
+}
+
+function hasAdministrativeContext(label: string) {
+  return (
+    /\s/.test(label.trim()) ||
+    /특별자치도|특별자치시|특별시|광역시/.test(label)
+  );
+}
+
+function getSggCodePrefixLabel(code: string) {
+  if (!code.startsWith("SGG_")) return null;
+  return SGG_CODE_PREFIX_LABELS[code.slice(4, 6)] ?? null;
+}
+
+function getRegionSearchDisplayLabel(label: string, code: string) {
+  if (hasAdministrativeContext(label)) return label;
+
+  const prefixLabel = getSggCodePrefixLabel(code);
+  if (!prefixLabel) return label;
+
+  return `${prefixLabel} ${label}`;
+}
+
+function getAdministrativeSearchShortLabel(label: string) {
+  return label
+    .replace(/특별자치도|특별자치시|특별시|광역시|자치시|시/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getRegionSearchPhrasesForScore(label: string, code: string) {
+  const displayLabel = getRegionSearchDisplayLabel(label, code);
+  const shortLabel = getAdministrativeSearchShortLabel(label);
+  const shortDisplayLabel = getAdministrativeSearchShortLabel(displayLabel);
+
+  return Array.from(
+    new Set([
+      label,
+      displayLabel,
+      shortLabel,
+      shortDisplayLabel,
+      code,
+      ...getRegionSearchTerms(label, code),
+    ]),
+  );
+}
+
+function getLastAdministrativeToken(value: string) {
+  const tokens = value.trim().split(/\s+/).filter(Boolean);
+  return tokens[tokens.length - 1] ?? value.trim();
+}
+
+function getRegionAdministrativeTokensForScore(label: string, code: string) {
+  return Array.from(
+    new Set(
+      getRegionSearchPhrasesForScore(label, code)
+        .filter((phrase) => !phrase.toUpperCase().startsWith("SGG_"))
+        .map(getLastAdministrativeToken)
+        .filter(Boolean),
+    ),
+  );
+}
+
+function isShortAdministrativeQuery(normalizedQuery: string) {
+  return (
+    normalizedQuery.length <= 3 &&
+    (normalizedQuery.endsWith("구") ||
+      normalizedQuery.endsWith("군") ||
+      normalizedQuery.endsWith("시"))
+  );
+}
+
+function scoreRegionSearchResult(
+  label: string,
+  code: string,
+  normalizedQuery: string,
+) {
+  const normalizedPhrases = getRegionSearchPhrasesForScore(label, code).map(
+    normalizeRegionSearchText,
+  );
+  const normalizedTokens = getRegionAdministrativeTokensForScore(label, code).map(
+    normalizeRegionSearchText,
+  );
+  const normalizedOriginalPhrases = [
+    label,
+    getAdministrativeSearchShortLabel(label),
+  ].map(normalizeRegionSearchText);
+
+  if (normalizeRegionSearchText(code) === normalizedQuery) return 1000;
+  if (normalizedPhrases.some((phrase) => phrase === normalizedQuery)) return 900;
+  if (normalizedTokens.some((token) => token === normalizedQuery)) return 850;
+
+  if (
+    normalizedOriginalPhrases.some((phrase) =>
+      phrase.startsWith(normalizedQuery),
+    )
+  ) {
+    return 750;
+  }
+
+  if (normalizedPhrases.some((phrase) => phrase.startsWith(normalizedQuery))) {
+    return 700;
+  }
+
+  if (isShortAdministrativeQuery(normalizedQuery)) return null;
+
+  if (normalizedPhrases.some((phrase) => phrase.includes(normalizedQuery))) {
+    return 200;
+  }
+
+  return null;
 }
 
 async function readSearchResult(
@@ -156,15 +290,38 @@ export function CommandPalette({
 
     return getSearchUniverseRegistry()
       .filter((universe) => universe.scope === "SIGUNGU")
-      .filter((universe) =>
-        getRegionSearchTerms(universe.label, universe.code).some((term) =>
-          term.includes(normalizedQuery),
-        ),
+      .map((universe) => {
+        const score = scoreRegionSearchResult(
+          universe.label,
+          universe.code,
+          normalizedQuery,
+        );
+
+        if (score === null) return null;
+
+        return {
+          code: universe.code,
+          label: universe.label,
+          displayLabel: getRegionSearchDisplayLabel(
+            universe.label,
+            universe.code,
+          ),
+          order: universe.order,
+          score,
+        };
+      })
+      .filter(
+        (
+          result,
+        ): result is RegionSearchResult & { order: number; score: number } =>
+          result !== null,
       )
+      .sort((a, b) => b.score - a.score || a.order - b.order)
       .slice(0, MAX_REGION_SEARCH_RESULTS)
-      .map((universe) => ({
-        code: universe.code,
-        label: universe.label,
+      .map(({ code, label, displayLabel }) => ({
+        code,
+        label,
+        displayLabel,
       }));
   }, [query]);
 
@@ -409,12 +566,14 @@ export function CommandPalette({
             REGION
           </span>
           <span className="truncate text-[26px] font-semibold leading-none text-white">
-            {result.label}
+            {result.displayLabel}
           </span>
         </div>
 
         <p className="mt-2 truncate text-sm text-emerald-100/70">
-          {result.code} · TOP1000 지역 보드로 이동
+          {result.code}
+          {result.displayLabel !== result.label ? ` - ${result.label}` : ""}
+          {" - TOP1000 지역 보드로 이동"}
         </p>
       </div>
 
