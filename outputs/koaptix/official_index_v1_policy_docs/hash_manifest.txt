@@ -1,0 +1,10 @@
+# SHA256 Hash Manifest
+
+Lane: `P-KOAPTIX-OFFICIAL-INDEX-V1-POLICY-DOCS.0`
+Date: 2026-06-15
+
+e7e5f05dd7ab3816a6f0017c0900ad18f190506ceabdda9f02e17e16949acb4d  docs/koaptix/KOAPTIX_OFFICIAL_INDEX_V1_POLICY.md
+44d6077b301e1b76ed74bc31c3e631ebdfe82d0fd30ebbb72ccda5a1e190a77c  outputs/koaptix/official_index_v1_policy_docs/2026-06-15-koaptix-official-index-v1-policy-docs.md
+9b02eec6b4c11e23ec0e132d8e68c32f1f1f18160474789bc6f35d61bcda78b6  outputs/koaptix/official_index_v1_policy_docs/index_base_date_public_language.md
+08fddc0395433c5b5f05582b1aececa66a7e89ae8a585bc0dd7021ee151d7f10  outputs/koaptix/official_index_v1_policy_docs/index_base_date_do_not_run_list.md
+0d00c8e73abf3c9d46852f46ce012202b0e2ef04c4b816022d8f69deddbacf17  outputs/koaptix/official_index_v1_policy_docs/future_2024_01_01_genesis_upgrade_path.md
