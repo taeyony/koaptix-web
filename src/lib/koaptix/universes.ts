@@ -47,6 +47,7 @@ export type UniverseRegistryItem = {
   code: KnownUniverseCode;
   label: string;
   scope: UniverseScope;
+  exposureStatus?: "public" | "coverage_warning" | "hold" | "disabled";
 
   enabled: boolean;
 
@@ -1222,11 +1223,12 @@ const SGG_UNIVERSE_REGISTRY: UniverseRegistryItem[] = [
     code: "SGG_51150",
     label: "강릉시",
     scope: "SIGUNGU",
-    enabled: true,
-    homeEnabled: true,
-    searchEnabled: true,
-    rankingEnabled: true,
-    mapEnabled: true,
+    exposureStatus: "hold",
+    enabled: false,
+    homeEnabled: false,
+    searchEnabled: false,
+    rankingEnabled: false,
+    mapEnabled: false,
     order: 182,
   },
   {
@@ -1289,12 +1291,23 @@ export const PUBLIC_UNIVERSE_REGISTRY: UniverseRegistryItem[] = [
   ...SGG_UNIVERSE_REGISTRY,
 ].sort((a, b) => a.order - b.order);
 
+const SGG_HOLD_UNIVERSE_CODES = new Set<KnownUniverseCode>(["SGG_51150"]);
+
+function isServiceExposedUniverse(universe: UniverseRegistryItem) {
+  return (
+    universe.enabled &&
+    universe.exposureStatus !== "hold" &&
+    universe.exposureStatus !== "disabled" &&
+    !SGG_HOLD_UNIVERSE_CODES.has(universe.code)
+  );
+}
+
 const ENABLED_UNIVERSE_SET = new Set(
-  PUBLIC_UNIVERSE_REGISTRY.filter((u) => u.enabled).map((u) => u.code),
+  PUBLIC_UNIVERSE_REGISTRY.filter(isServiceExposedUniverse).map((u) => u.code),
 );
 
 const PRIMARY_SERVICE_UNIVERSE_SET = new Set<PrimaryServiceUniverseCode>(
-  PUBLIC_UNIVERSE_REGISTRY.filter((u) => u.enabled).map((u) => u.code),
+  PUBLIC_UNIVERSE_REGISTRY.filter(isServiceExposedUniverse).map((u) => u.code),
 );
 
 const UNIVERSE_REGISTRY_MAP = new Map(
@@ -1372,23 +1385,31 @@ export function resolveServiceUniverseCode(
 }
 
 export function getEnabledUniverseRegistry() {
-  return PUBLIC_UNIVERSE_REGISTRY.filter((u) => u.enabled);
+  return PUBLIC_UNIVERSE_REGISTRY.filter(isServiceExposedUniverse);
 }
 
 export function getHomeUniverseRegistry() {
-  return PUBLIC_UNIVERSE_REGISTRY.filter((u) => u.enabled && u.homeEnabled);
+  return PUBLIC_UNIVERSE_REGISTRY.filter(
+    (u) => isServiceExposedUniverse(u) && u.homeEnabled,
+  );
 }
 
 export function getSearchUniverseRegistry() {
-  return PUBLIC_UNIVERSE_REGISTRY.filter((u) => u.enabled && u.searchEnabled);
+  return PUBLIC_UNIVERSE_REGISTRY.filter(
+    (u) => isServiceExposedUniverse(u) && u.searchEnabled,
+  );
 }
 
 export function getRankingUniverseRegistry() {
-  return PUBLIC_UNIVERSE_REGISTRY.filter((u) => u.enabled && u.rankingEnabled);
+  return PUBLIC_UNIVERSE_REGISTRY.filter(
+    (u) => isServiceExposedUniverse(u) && u.rankingEnabled,
+  );
 }
 
 export function getMapUniverseRegistry() {
-  return PUBLIC_UNIVERSE_REGISTRY.filter((u) => u.enabled && u.mapEnabled);
+  return PUBLIC_UNIVERSE_REGISTRY.filter(
+    (u) => isServiceExposedUniverse(u) && u.mapEnabled,
+  );
 }
 
 export const PUBLIC_UNIVERSE_OPTIONS: UniverseOption[] =

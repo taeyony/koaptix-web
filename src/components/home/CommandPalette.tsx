@@ -6,7 +6,7 @@ import type { RankingItem } from "../../lib/koaptix/types";
 import {
   DEFAULT_UNIVERSE_CODE,
   getSearchUniverseRegistry,
-  normalizeUniverseCode,
+  resolveServiceUniverseCode,
   type KnownUniverseCode,
 } from "../../lib/koaptix/universes";
 
@@ -228,7 +228,7 @@ export function CommandPalette({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const urlUniverseCode = normalizeUniverseCode(
+  const urlUniverseCode = resolveServiceUniverseCode(
     searchParams?.get("universe") ?? initialUniverseCode,
   );
 

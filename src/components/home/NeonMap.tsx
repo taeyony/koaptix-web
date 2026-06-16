@@ -7,7 +7,7 @@ import type { RankingItem } from "../../lib/koaptix/types";
 import {
   DEFAULT_UNIVERSE_CODE,
   getUniverseLabel,
-  normalizeUniverseCode,
+  resolveServiceUniverseCode,
 } from "../../lib/koaptix/universes";
 
 type Coord = { lat: number; lng: number };
@@ -465,7 +465,7 @@ function buildMapDeliveryState(
 export function NeonMap({ items }: { items: RankingItem[] }) {
   const searchParams = useSearchParams();
   const currentDistrict = searchParams?.get("district");
-  const currentUniverseCode = normalizeUniverseCode(
+  const currentUniverseCode = resolveServiceUniverseCode(
     searchParams?.get("universe") ?? DEFAULT_UNIVERSE_CODE,
   );
 
