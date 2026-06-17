@@ -18,6 +18,23 @@ const DEFAULT_VISIBLE_SGG_CODES = [
   "SGG_11290",
   "SGG_11230",
 ];
+const REQUIRED_SGG_CODES = [
+  "SGG_11710",
+  "SGG_11680",
+  "SGG_41135",
+  "SGG_52111",
+  "SGG_52113",
+];
+const HELD_FALLBACK_CHECKS = [
+  { code: "SGG_51150", expectedCode: "KOREA_ALL", contexts: ["required", "api-all"] },
+  { code: "JEONBUK_ALL", expectedCode: "KOREA_ALL", contexts: ["required"] },
+];
+const REQUIRED_MACRO_CHECKS = [
+  { code: "KOREA_ALL", expectedCode: "KOREA_ALL", checks: ["rankings", "map", "search"] },
+];
+const HOLD_SGG_CODES = new Set(["SGG_51150"]);
+const VALID_SCOPES = new Set(["required", "api-all", "deep", "extended"]);
+const VALID_CHECKS = new Set(["rankings", "map", "search", "direct-db"]);
 
 const REQUIRED_ROUTE_TIMEOUT_MS = readNumberEnv("KOAPTIX_AUDIT_REQUEST_TIMEOUT_MS", 7_000);
 const ADVISORY_ROUTE_TIMEOUT_MS = readNumberEnv("KOAPTIX_AUDIT_ADVISORY_TIMEOUT_MS", 8_000);
@@ -27,11 +44,22 @@ const CONCURRENCY = readNumberEnv("KOAPTIX_AUDIT_CONCURRENCY", 3);
 const DEFAULT_MAX_SGG = readNumberEnv("KOAPTIX_AUDIT_SGG_MAX", 10);
 
 const baseUrl = normalizeBaseUrl(process.env.KOAPTIX_SMOKE_BASE_URL || DEFAULT_BASE_URL);
-const deepMode = process.env.KOAPTIX_AUDIT_SGG_DEEP === "1";
-const directDbEnabled = deepMode || process.env.KOAPTIX_AUDIT_DIRECT_DB === "1";
+const legacyDeepMode = process.env.KOAPTIX_AUDIT_SGG_DEEP === "1";
+const auditScope = normalizeAuditScope(process.env.KOAPTIX_AUDIT_SCOPE, legacyDeepMode);
+const selectedChecks = resolveSelectedChecks(auditScope);
+const requestedSggCodes = readCsvEnv("KOAPTIX_AUDIT_SGG_CODES");
+const chunkConfig = readChunkConfig("KOAPTIX_AUDIT_CHUNK_INDEX", "KOAPTIX_AUDIT_CHUNK_TOTAL");
+const directDbEnabled = selectedChecks.has("direct-db") && (
+  process.env.KOAPTIX_AUDIT_DIRECT_DB === "1" ||
+  legacyDeepMode ||
+  auditScope === "deep" ||
+  auditScope === "extended"
+);
 const directLatestDbEnabled = process.env.KOAPTIX_AUDIT_LATEST_DB === "1";
+const skippedExtended = auditScope === "required" || auditScope === "api-all";
 const startedAt = performance.now();
 const deadlineAt = Date.now() + GLOBAL_TIMEOUT_MS;
+const routeSamples = [];
 
 function normalizeBaseUrl(value) {
   return String(value || DEFAULT_BASE_URL).replace(/\/+$/, "");
@@ -41,6 +69,49 @@ function readNumberEnv(name, fallback) {
   const raw = Number(process.env[name]);
   if (!Number.isFinite(raw) || raw <= 0) return fallback;
   return Math.trunc(raw);
+}
+
+function readCsvEnv(name) {
+  return String(process.env[name] || "")
+    .split(",")
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean);
+}
+
+function normalizeAuditScope(rawValue, deepMode) {
+  const raw = String(rawValue || "").trim().toLowerCase();
+  if (VALID_SCOPES.has(raw)) return raw;
+  return deepMode ? "deep" : "default";
+}
+
+function resolveSelectedChecks(scope) {
+  const requested = readCsvEnv("KOAPTIX_AUDIT_CHECKS").map((value) => value.toLowerCase());
+  const validRequested = requested.filter((check) => VALID_CHECKS.has(check));
+  if (validRequested.length > 0) return new Set(validRequested);
+
+  if (scope === "api-all") return new Set(["rankings", "map"]);
+  if (scope === "required") return new Set(["rankings", "map", "search"]);
+  if (scope === "deep") return new Set(["rankings", "map", "search", "direct-db"]);
+  if (scope === "extended") return new Set(["rankings", "map", "search"]);
+  return new Set(["rankings", "map", "search", "direct-db"]);
+}
+
+function readChunkConfig(indexName, totalName) {
+  const index = Number(process.env[indexName]);
+  const total = Number(process.env[totalName]);
+  if (!Number.isInteger(index) || !Number.isInteger(total) || index < 1 || total < 1) {
+    return { enabled: false, index: null, total: null };
+  }
+  if (index > total) {
+    return { enabled: true, index, total, emptyReason: "chunk_index_greater_than_total" };
+  }
+  return { enabled: true, index, total };
+}
+
+function applyChunk(items, chunk) {
+  if (!chunk.enabled) return items;
+  if (chunk.emptyReason) return [];
+  return items.filter((_, index) => index % chunk.total === chunk.index - 1);
 }
 
 function elapsedMs() {
@@ -59,7 +130,7 @@ function sanitizeMessage(value) {
   return String(value ?? "")
     .replace(/https?:\/\/[^\s"'<>]+/g, "[redacted-url]")
     .replace(/([A-Za-z0-9_-]{24,})/g, "[redacted-token]")
-    .slice(0, 220);
+    .slice(0, 260);
 }
 
 function sanitizeError(error) {
@@ -83,39 +154,73 @@ function readEnvLocal() {
   return env;
 }
 
-function readEnabledSggRegistry() {
+function readRegistryBlocks(name) {
   const raw = readFileSync(join(process.cwd(), "src/lib/koaptix/universes.ts"), "utf8");
-  const start = raw.indexOf("const SGG_UNIVERSE_REGISTRY");
-  const end = raw.indexOf("/**\n * KOAPTIX service-exposed universe registry.");
-  const block = start >= 0 && end > start ? raw.slice(start, end) : raw;
+  const start = raw.indexOf(`const ${name}`);
+  if (start < 0) return [];
+  const end = raw.indexOf("];", start);
+  const block = end > start ? raw.slice(start, end) : raw.slice(start);
+  return [...block.matchAll(/\{\s*code:\s*"(?<code>[A-Z]+_ALL|SGG_\d+)"[\s\S]*?\n\s*\}/g)]
+    .map((match) => match[0]);
+}
 
-  return [...block.matchAll(/code:\s*"(?<code>SGG_\d+)"[\s\S]*?label:\s*"(?<label>[^"]+)"[\s\S]*?enabled:\s*(?<enabled>true|false)[\s\S]*?order:\s*(?<order>\d+)/g)]
-    .map((match) => ({
-      code: match.groups.code,
-      label: match.groups.label,
-      enabled: match.groups.enabled === "true",
-      order: Number(match.groups.order),
-    }))
-    .filter((item) => item.enabled);
+function parseRegistryEntry(block) {
+  const textField = (name) => block.match(new RegExp(`${name}:\\s*"([^"]+)"`))?.[1] ?? "";
+  const boolField = (name) => block.match(new RegExp(`${name}:\\s*(true|false)`))?.[1] === "true";
+  const numberField = (name) => Number(block.match(new RegExp(`${name}:\\s*(\\d+)`))?.[1] ?? 0);
+  return {
+    code: textField("code"),
+    label: textField("label") || textField("code"),
+    scope: textField("scope"),
+    exposureStatus: textField("exposureStatus") || "public",
+    enabled: boolField("enabled"),
+    homeEnabled: boolField("homeEnabled"),
+    searchEnabled: boolField("searchEnabled"),
+    rankingEnabled: boolField("rankingEnabled"),
+    mapEnabled: boolField("mapEnabled"),
+    order: numberField("order"),
+  };
+}
+
+function isServiceExposed(item) {
+  return (
+    item.enabled &&
+    item.exposureStatus !== "hold" &&
+    item.exposureStatus !== "disabled" &&
+    !HOLD_SGG_CODES.has(item.code)
+  );
+}
+
+function readSggRegistry() {
+  return readRegistryBlocks("SGG_UNIVERSE_REGISTRY")
+    .map(parseRegistryEntry)
+    .filter((item) => item.code.startsWith("SGG_"));
+}
+
+function readEnabledSggRegistry() {
+  return readSggRegistry().filter(isServiceExposed);
 }
 
 function chooseAuditSggs(enabledSggs) {
-  if (deepMode) return enabledSggs;
-
   const byCode = new Map(enabledSggs.map((item) => [item.code, item]));
-  const visible = DEFAULT_VISIBLE_SGG_CODES.map((code) => byCode.get(code) ?? {
-    code,
-    label: code,
-    enabled: true,
-    order: 0,
-  });
+  let selected = [];
 
-  return visible.slice(0, DEFAULT_MAX_SGG);
+  if (requestedSggCodes.length > 0) {
+    selected = requestedSggCodes.map((code) => byCode.get(code)).filter(Boolean);
+  } else if (auditScope === "api-all" || auditScope === "deep" || auditScope === "extended") {
+    selected = enabledSggs;
+  } else if (auditScope === "required") {
+    selected = REQUIRED_SGG_CODES.map((code) => byCode.get(code)).filter(Boolean);
+  } else {
+    selected = DEFAULT_VISIBLE_SGG_CODES.map((code) => byCode.get(code)).filter(Boolean).slice(0, DEFAULT_MAX_SGG);
+  }
+
+  return applyChunk(selected, chunkConfig);
 }
 
-async function fetchJson(path, timeoutMs, checkName) {
+async function fetchJson(path, timeoutMs, checkName, universe) {
   const controller = new AbortController();
-  const boundedTimeoutMs = Math.max(1, Math.min(timeoutMs, remainingGlobalMs()));
+  const boundedTimeoutMs = Math.max(1, Math.min(timeoutMs, remainingGlobalMs() || timeoutMs));
   const timeout = setTimeout(() => controller.abort(), boundedTimeoutMs);
   const started = performance.now();
 
@@ -133,29 +238,41 @@ async function fetchJson(path, timeoutMs, checkName) {
       // Keep non-JSON responses bounded and concise.
     }
 
-    return {
+    const result = {
       ok: response.ok,
       status: response.status,
       ms: Math.round(performance.now() - started),
       json,
       error: null,
     };
+    recordRouteSample(universe, checkName, result);
+    return result;
   } catch (error) {
-    return {
+    const result = {
       ok: false,
       status: 0,
       ms: Math.round(performance.now() - started),
       json: null,
       error: {
         code: error instanceof Error && error.name === "AbortError" ? "HTTP_TIMEOUT" : "HTTP_ERROR",
-        message: sanitizeMessage(
-          error instanceof Error ? error.message : `${checkName} failed`,
-        ),
+        message: sanitizeMessage(error instanceof Error ? error.message : `${checkName} failed`),
       },
     };
+    recordRouteSample(universe, checkName, result);
+    return result;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function recordRouteSample(universe, check, result) {
+  routeSamples.push({
+    universe,
+    check,
+    status: result.status,
+    ms: result.ms,
+    ok: result.ok,
+  });
 }
 
 async function withClientTimeout(label, promiseLike, timeoutMs) {
@@ -169,7 +286,7 @@ async function withClientTimeout(label, promiseLike, timeoutMs) {
           message: `${label} exceeded ${timeoutMs}ms client timeout`,
         },
       });
-    }, Math.max(1, Math.min(timeoutMs, remainingGlobalMs())));
+    }, Math.max(1, Math.min(timeoutMs, remainingGlobalMs() || timeoutMs)));
   });
 
   try {
@@ -209,63 +326,63 @@ function hasCrossUniverseItems(items, expectedCode) {
 }
 
 function routeFailure(universe, check, reason) {
-  return {
-    universe,
-    check,
-    reason,
-  };
+  return { universe, check, reason };
 }
 
 function routeWarning(universe, check, reason) {
-  return {
-    universe,
-    check,
-    reason,
-  };
+  return { universe, check, reason };
 }
 
-function evaluateIdentityRoute({ universe, check, response, required = true }) {
+function evaluateIdentityRoute({
+  requestedCode,
+  expectedCode,
+  check,
+  response,
+  required = true,
+  allowEmpty = false,
+}) {
   const warnings = [];
   const failures = [];
   const payload = response.json;
+  const failureSink = required ? failures : warnings;
 
   if (!response.ok || !payload || typeof payload !== "object") {
     const reason = response.error?.code === "HTTP_TIMEOUT"
       ? `timeout after ${response.ms}ms`
       : `http_status=${response.status}`;
-    (required ? failures : warnings).push(routeFailure(universe, check, reason));
+    failureSink.push(routeFailure(requestedCode, check, reason));
     return { ok: false, warnings, failures, payload, count: 0 };
   }
 
-  const requestedUniverse = getRequestedUniverse(payload, universe);
-  const renderedUniverse = getRenderedUniverse(payload, universe);
+  const requestedUniverse = getRequestedUniverse(payload, expectedCode);
+  const renderedUniverse = getRenderedUniverse(payload, expectedCode);
   const items = getItems(payload);
   const count = getCount(payload);
 
-  if (requestedUniverse !== universe || renderedUniverse !== universe) {
+  if (requestedUniverse !== expectedCode || renderedUniverse !== expectedCode) {
     failures.push(routeFailure(
-      universe,
+      requestedCode,
       check,
-      `identity_mismatch requested=${requestedUniverse} rendered=${renderedUniverse}`,
+      `identity_mismatch requested=${requestedUniverse} rendered=${renderedUniverse} expected=${expectedCode}`,
     ));
   }
 
-  if (universe !== "KOREA_ALL" && (renderedUniverse === "KOREA_ALL" || hasCrossUniverseItems(items, universe))) {
-    failures.push(routeFailure(universe, check, "cross_universe_or_korea_substitution_observed"));
+  if (hasCrossUniverseItems(items, expectedCode)) {
+    failures.push(routeFailure(requestedCode, check, `cross_universe_items_expected=${expectedCode}`));
   }
 
-  if (count <= 0 && required) {
-    failures.push(routeFailure(universe, check, "empty_required_payload"));
+  if (count <= 0 && required && !allowEmpty) {
+    failures.push(routeFailure(requestedCode, check, "empty_required_payload"));
   }
 
   for (const field of ["source", "cacheState", "fallbackMode"]) {
     if (!(field in payload)) {
-      warnings.push(routeWarning(universe, check, `missing_${field}`));
+      warnings.push(routeWarning(requestedCode, check, `missing_${field}`));
     }
   }
 
   if (payload.fallbackMode && payload.fallbackMode !== "none") {
-    warnings.push(routeWarning(universe, check, `fallbackMode=${payload.fallbackMode}`));
+    warnings.push(routeWarning(requestedCode, check, `fallbackMode=${payload.fallbackMode}`));
   }
 
   return {
@@ -280,8 +397,50 @@ function evaluateIdentityRoute({ universe, check, response, required = true }) {
 function findSearchQuery(rankingsPayload, universeCode) {
   const firstName = rankingsPayload?.items?.[0]?.name ?? rankingsPayload?.items?.[0]?.apt_name_ko;
   if (firstName) return firstName;
+  if (universeCode === "KOREA_ALL") return "강남";
   if (universeCode === "SGG_11710") return "잠실";
   return "아파트";
+}
+
+async function runRouteCheck({ code, expectedCode, check, rankingsPayload = null, required = true }) {
+  if (check === "rankings") {
+    const response = await fetchJson(
+      `/api/rankings?universe_code=${encodeURIComponent(code)}&limit=20`,
+      REQUIRED_ROUTE_TIMEOUT_MS,
+      check,
+      code,
+    );
+    return evaluateIdentityRoute({ requestedCode: code, expectedCode, check, response, required });
+  }
+
+  if (check === "map") {
+    const response = await fetchJson(
+      `/api/map?universe_code=${encodeURIComponent(code)}&limit=32`,
+      REQUIRED_ROUTE_TIMEOUT_MS,
+      check,
+      code,
+    );
+    return evaluateIdentityRoute({ requestedCode: code, expectedCode, check, response, required });
+  }
+
+  if (check === "search") {
+    const searchQuery = findSearchQuery(rankingsPayload, expectedCode);
+    const response = await fetchJson(
+      `/api/search?universe_code=${encodeURIComponent(code)}&q=${encodeURIComponent(searchQuery)}&limit=12`,
+      REQUIRED_ROUTE_TIMEOUT_MS,
+      check,
+      code,
+    );
+    return evaluateIdentityRoute({ requestedCode: code, expectedCode, check, response, required });
+  }
+
+  return {
+    ok: true,
+    warnings: [routeWarning(code, check, "unknown_check_skipped")],
+    failures: [],
+    payload: null,
+    count: 0,
+  };
 }
 
 async function readDirectDiagnostics(supabase, universeCode) {
@@ -292,7 +451,9 @@ async function readDirectDiagnostics(supabase, universeCode) {
       snapshotOk: true,
       latestBoardOk: true,
       dynamicBoardOk: null,
-      warnings: [routeWarning(universeCode, "direct_db", "direct_db_skipped_default")],
+      warnings: selectedChecks.has("direct-db")
+        ? [routeWarning(universeCode, "direct_db", "direct_db_skipped_default")]
+        : [],
     };
   }
 
@@ -393,6 +554,7 @@ async function readSgg11710FullBoardGuard() {
     `/api/ranking?universe_code=${encodeURIComponent(universe)}&limit=1000`,
     ADVISORY_ROUTE_TIMEOUT_MS,
     "sgg_11710_full_board",
+    universe,
   );
   const warnings = [];
 
@@ -449,8 +611,10 @@ async function readSgg11710FullBoardGuard() {
 
 async function auditOne(item, supabase) {
   const universe = item.code;
+  const expectedCode = universe;
   const failures = [];
   const warnings = [];
+  const checkResults = {};
 
   if (isGlobalTimedOut()) {
     warnings.push(routeWarning(universe, "global_timeout", "WARN_GLOBAL_TIMEOUT"));
@@ -472,48 +636,38 @@ async function auditOne(item, supabase) {
     };
   }
 
-  const rankingsResponse = await fetchJson(
-    `/api/rankings?universe_code=${encodeURIComponent(universe)}&limit=20`,
-    REQUIRED_ROUTE_TIMEOUT_MS,
-    "rankings",
-  );
-  const rankings = evaluateIdentityRoute({
-    universe,
-    check: "rankings",
-    response: rankingsResponse,
-  });
-  failures.push(...rankings.failures);
-  warnings.push(...rankings.warnings);
+  let rankingsPayload = null;
+  if (selectedChecks.has("rankings")) {
+    const rankings = await runRouteCheck({ code: universe, expectedCode, check: "rankings" });
+    checkResults.rankings = rankings;
+    rankingsPayload = rankings.payload;
+    failures.push(...rankings.failures);
+    warnings.push(...rankings.warnings);
+  }
 
-  const mapResponse = await fetchJson(
-    `/api/map?universe_code=${encodeURIComponent(universe)}&limit=32`,
-    REQUIRED_ROUTE_TIMEOUT_MS,
-    "map",
-  );
-  const map = evaluateIdentityRoute({
-    universe,
-    check: "map",
-    response: mapResponse,
-  });
-  failures.push(...map.failures);
-  warnings.push(...map.warnings);
+  if (selectedChecks.has("map")) {
+    const map = await runRouteCheck({ code: universe, expectedCode, check: "map" });
+    checkResults.map = map;
+    failures.push(...map.failures);
+    warnings.push(...map.warnings);
+  }
 
-  const searchQuery = findSearchQuery(rankings.payload, universe);
-  const searchResponse = await fetchJson(
-    `/api/search?universe_code=${encodeURIComponent(universe)}&q=${encodeURIComponent(searchQuery)}&limit=12`,
-    REQUIRED_ROUTE_TIMEOUT_MS,
-    "search",
-  );
-  const search = evaluateIdentityRoute({
-    universe,
-    check: "search",
-    response: searchResponse,
-    required: false,
-  });
-  failures.push(...search.failures);
-  warnings.push(...search.warnings);
+  if (selectedChecks.has("search")) {
+    const search = await runRouteCheck({
+      code: universe,
+      expectedCode,
+      check: "search",
+      rankingsPayload,
+      required: auditScope === "required",
+    });
+    checkResults.search = search;
+    failures.push(...search.failures);
+    warnings.push(...search.warnings);
+  }
 
-  const directDb = await readDirectDiagnostics(supabase, universe);
+  const directDb = selectedChecks.has("direct-db")
+    ? await readDirectDiagnostics(supabase, universe)
+    : await readDirectDiagnostics(null, universe);
   warnings.push(...directDb.warnings);
 
   const blockingOk = failures.length === 0;
@@ -527,21 +681,23 @@ async function auditOne(item, supabase) {
     snapshotDate: directDb.snapshotDate ?? null,
     latestBoardOk: directDb.latestBoardOk,
     dynamicBoardOk: directDb.dynamicBoardOk,
-    rankingsOk: rankings.ok,
-    rankingsStatus: rankingsResponse.status,
-    rankingsCount: rankings.count,
-    mapOk: map.ok,
-    mapOperationalOk: map.ok,
-    mapOperationalStatus: mapResponse.status,
-    mapStatus: mapResponse.status,
-    mapCount: map.count,
-    searchOk: search.failures.length === 0,
-    searchStatus: searchResponse.status,
-    searchLocalCount: search.count,
-    searchGlobalCount: Array.isArray(search.payload?.globalItems) ? search.payload.globalItems.length : null,
+    rankingsOk: selectedChecks.has("rankings") ? checkResults.rankings?.ok === true : true,
+    rankingsStatus: findRouteStatus(universe, "rankings"),
+    rankingsCount: checkResults.rankings?.count ?? null,
+    mapOk: selectedChecks.has("map") ? checkResults.map?.ok === true : true,
+    mapOperationalOk: selectedChecks.has("map") ? checkResults.map?.ok === true : true,
+    mapOperationalStatus: findRouteStatus(universe, "map"),
+    mapStatus: findRouteStatus(universe, "map"),
+    mapCount: checkResults.map?.count ?? null,
+    searchOk: selectedChecks.has("search") ? checkResults.search?.failures?.length === 0 : true,
+    searchStatus: findRouteStatus(universe, "search"),
+    searchLocalCount: checkResults.search?.count ?? null,
+    searchGlobalCount: Array.isArray(checkResults.search?.payload?.globalItems)
+      ? checkResults.search.payload.globalItems.length
+      : null,
     rankingPageOk: true,
     rankingPageStatus: null,
-    sampleName: searchQuery,
+    sampleName: findSearchQuery(rankingsPayload, universe),
     blockingOk,
     advisoryOk,
     auditClass: blockingOk ? (advisoryOk ? "confirmed" : "delivery-confirmed-advisory-warnings") : "blocking-fail",
@@ -549,6 +705,66 @@ async function auditOne(item, supabase) {
     warnings,
     directDb,
   };
+}
+
+function findRouteStatus(universe, check) {
+  return [...routeSamples].reverse().find((sample) => sample.universe === universe && sample.check === check)?.status ?? null;
+}
+
+async function auditRequiredControlRoutes() {
+  const results = [];
+  const routeChecks = [];
+
+  for (const spec of HELD_FALLBACK_CHECKS) {
+    if (spec.contexts.includes(auditScope)) {
+      const checks = selectedChecks.has("search") && auditScope === "required"
+        ? ["rankings", "map", "search"]
+        : ["rankings", "map"].filter((check) => selectedChecks.has(check));
+      routeChecks.push({ ...spec, checks, required: true, kind: "fallback" });
+    }
+  }
+
+  if (auditScope === "required") {
+    routeChecks.push(...REQUIRED_MACRO_CHECKS.map((spec) => ({ ...spec, required: true, kind: "macro" })));
+  }
+
+  for (const spec of routeChecks) {
+    let rankingsPayload = null;
+    const failures = [];
+    const warnings = [];
+    const checkResults = {};
+    for (const check of spec.checks) {
+      const result = await runRouteCheck({
+        code: spec.code,
+        expectedCode: spec.expectedCode,
+        check,
+        rankingsPayload,
+        required: true,
+      });
+      checkResults[check] = result;
+      if (check === "rankings") rankingsPayload = result.payload;
+      failures.push(...result.failures);
+      warnings.push(...result.warnings);
+    }
+
+    results.push({
+      code: spec.code,
+      expectedCode: spec.expectedCode,
+      kind: spec.kind,
+      checks: spec.checks,
+      blockingOk: failures.length === 0,
+      advisoryOk: warnings.length === 0,
+      failures,
+      warnings,
+      counts: {
+        rankings: checkResults.rankings?.count ?? null,
+        map: checkResults.map?.count ?? null,
+        search: checkResults.search?.count ?? null,
+      },
+    });
+  }
+
+  return results;
 }
 
 async function mapWithConcurrency(items, limit, fn) {
@@ -563,7 +779,7 @@ async function mapWithConcurrency(items, limit, fn) {
     }
   }
 
-  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  const workers = Array.from({ length: Math.min(limit, items.length || 1) }, () => worker());
   await Promise.all(workers);
   return results;
 }
@@ -576,11 +792,34 @@ function buildSupabaseClientIfNeeded() {
   });
 }
 
+function slowestRouteSamples(limit = 12) {
+  return [...routeSamples]
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, limit);
+}
+
 async function main() {
+  const allSggs = readSggRegistry();
   const enabledSggs = readEnabledSggRegistry();
   const selectedSggs = chooseAuditSggs(enabledSggs);
   const supabase = buildSupabaseClientIfNeeded();
   const globalWarnings = [];
+
+  const requestedButNotServiceExposed = requestedSggCodes.filter(
+    (code) => code.startsWith("SGG_") && !enabledSggs.some((item) => item.code === code),
+  );
+  for (const code of requestedButNotServiceExposed) {
+    const registryItem = allSggs.find((item) => item.code === code);
+    globalWarnings.push(routeWarning(
+      code,
+      "selection",
+      registryItem ? `not_service_exposed:${registryItem.exposureStatus}` : "unknown_sgg_code",
+    ));
+  }
+
+  if (chunkConfig.emptyReason) {
+    globalWarnings.push(routeWarning("ALL", "chunk", chunkConfig.emptyReason));
+  }
 
   const enabledResults = await mapWithConcurrency(
     selectedSggs,
@@ -592,28 +831,45 @@ async function main() {
     globalWarnings.push(routeWarning("ALL", "global_timeout", "WARN_GLOBAL_TIMEOUT"));
   }
 
-  const sgg11710Guard = await readSgg11710FullBoardGuard();
-  globalWarnings.push(...sgg11710Guard.warnings);
+  const controlResults = await auditRequiredControlRoutes();
 
-  if (sgg11710Guard.korea_substitution_observed === true) {
-    enabledResults
-      .find((row) => row.code === "SGG_11710")
-      ?.failures.push(routeFailure("SGG_11710", "sgg_11710_guard", "korea_substitution_observed"));
+  let sgg11710Guard = {
+    warnings: [],
+    identity_preserved: null,
+    korea_substitution_observed: null,
+    latest_board_date: null,
+    latest_board_row_count: null,
+    partial_2026_05_31_exposed: null,
+    confirmation_source: "skipped_in_fast_scope",
+  };
+  if (auditScope === "default" || auditScope === "deep" || auditScope === "extended") {
+    sgg11710Guard = await readSgg11710FullBoardGuard();
+    globalWarnings.push(...sgg11710Guard.warnings);
+
+    if (sgg11710Guard.korea_substitution_observed === true) {
+      enabledResults
+        .find((row) => row.code === "SGG_11710")
+        ?.failures.push(routeFailure("SGG_11710", "sgg_11710_guard", "korea_substitution_observed"));
+    }
+
+    if (sgg11710Guard.partial_2026_05_31_exposed === true) {
+      enabledResults
+        .find((row) => row.code === "SGG_11710")
+        ?.failures.push(routeFailure("SGG_11710", "sgg_11710_guard", "partial_2026_05_31_exposed"));
+    }
   }
 
-  if (sgg11710Guard.partial_2026_05_31_exposed === true) {
-    enabledResults
-      .find((row) => row.code === "SGG_11710")
-      ?.failures.push(routeFailure("SGG_11710", "sgg_11710_guard", "partial_2026_05_31_exposed"));
-  }
-
-  const failures = enabledResults.flatMap((row) => row.failures);
+  const failures = [
+    ...enabledResults.flatMap((row) => row.failures),
+    ...controlResults.flatMap((row) => row.failures),
+  ];
   const warnings = [
     ...globalWarnings,
     ...enabledResults.flatMap((row) => row.warnings),
+    ...controlResults.flatMap((row) => row.warnings),
   ];
   const status = failures.length > 0
-    ? "FAIL"
+    ? "FAIL_REQUIRED"
     : warnings.length > 0
       ? "PASS_WITH_WARNINGS"
       : "PASS";
@@ -622,8 +878,6 @@ async function main() {
 
   const legacyRows = enabledResults.map((row) => ({
     ...row,
-    // Legacy release-gate compatibility: skipped direct DB diagnostics are advisory,
-    // not blocking snapshot/latest failures.
     snapshotOk: row.directDb?.attempted ? row.snapshotOk : true,
     latestBoardOk: row.directDb?.attempted ? row.latestBoardOk : true,
     advisoryOk: row.warnings.length === 0,
@@ -634,14 +888,24 @@ async function main() {
     checkedAt: new Date().toISOString(),
     status,
     baseUrl: sanitizeMessage(baseUrl),
-    mode: deepMode ? "deep" : "default_bounded_advisory",
+    mode: auditScope,
+    scope: auditScope,
+    selected_checks: Array.from(selectedChecks),
     checked_sgg_count: checkedCodes.length,
+    service_exposed_sgg_count: enabledSggs.length,
     checked_sgg_codes: checkedCodes,
+    chunk: chunkConfig.enabled
+      ? { index: chunkConfig.index, total: chunkConfig.total, empty_reason: chunkConfig.emptyReason ?? null }
+      : null,
     elapsed_ms: elapsedMs(),
     required_failures_count: failures.length,
     warnings_count: warnings.length,
+    route_timing_slowest: slowestRouteSamples(),
+    skipped_extended: skippedExtended,
+    skipped_extended_status: skippedExtended ? "SKIPPED_EXTENDED" : "NOT_SKIPPED",
     failures,
     warnings,
+    required_control_results: controlResults,
     sgg_11710_guard: {
       identity_preserved: sgg11710Guard.identity_preserved,
       korea_substitution_observed: sgg11710Guard.korea_substitution_observed,
@@ -661,16 +925,17 @@ async function main() {
       advisoryDefault: true,
       hardFailConditions: [
         "requested/rendered universe identity mismatch",
-        "KOREA_ALL substitution for SGG",
-        "cross-universe item fallback",
+        "held SGG or disabled macro exposure instead of KOREA_ALL fallback",
+        "cross-universe item leakage",
         "required route hard failure",
-        "SGG_11710 2026-05-31 partial public exposure",
+        "empty required route payload",
+        "SGG_11710 2026-05-31 partial public exposure when advisory guard is enabled",
       ],
       warningConditions: [
         "direct DB diagnostic skipped or timed out",
-        "SGG_11710 date/count unavailable from fast route",
         "same-universe degraded or stale fallback",
         "non-critical metadata missing",
+        "selection requested a non-service-exposed SGG",
       ],
       timeouts: {
         perRequestMs: REQUIRED_ROUTE_TIMEOUT_MS,
@@ -700,14 +965,16 @@ async function main() {
   };
 
   console.log(JSON.stringify(payload, null, 2));
-  process.exit(status === "FAIL" ? 1 : 0);
+  process.exit(status === "FAIL_REQUIRED" ? 1 : 0);
 }
 
 main().catch((error) => {
   console.error(
     JSON.stringify(
       {
-        status: "FAIL",
+        status: "FAIL_REQUIRED",
+        scope: auditScope,
+        selected_checks: Array.from(selectedChecks),
         elapsed_ms: elapsedMs(),
         required_failures_count: 1,
         warnings_count: 0,

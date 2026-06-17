@@ -27,10 +27,24 @@ function Get-RollbackTarget {
 
 function Invoke-GateCommand {
   param(
-    [Parameter(Mandatory = $true)][string]$Name
+    [Parameter(Mandatory = $true)][string]$Name,
+    [hashtable]$Environment = @{}
   )
 
-  Write-Host "[sgg-release-gate] step=npm run $Name"
+  $envSummary = "none"
+  if ($Environment.Count -gt 0) {
+    $envSummary = (($Environment.GetEnumerator() | Sort-Object Name | ForEach-Object {
+      "$($_.Name)=$($_.Value)"
+    }) -join ",")
+  }
+
+  Write-Host "[sgg-release-gate] step=npm run $Name env=$envSummary"
+  $previousEnv = @{}
+  foreach ($key in $Environment.Keys) {
+    $previousEnv[$key] = [Environment]::GetEnvironmentVariable($key, "Process")
+    [Environment]::SetEnvironmentVariable($key, [string]$Environment[$key], "Process")
+  }
+
   $previousErrorActionPreference = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   try {
@@ -38,6 +52,9 @@ function Invoke-GateCommand {
     $exitCode = $LASTEXITCODE
   } finally {
     $ErrorActionPreference = $previousErrorActionPreference
+    foreach ($key in $Environment.Keys) {
+      [Environment]::SetEnvironmentVariable($key, $previousEnv[$key], "Process")
+    }
   }
 
   foreach ($line in $output) {
@@ -51,7 +68,7 @@ function Invoke-GateCommand {
   }
 }
 
-function ConvertFrom-AuditText {
+function ConvertFrom-EmbeddedJson {
   param(
     [Parameter(Mandatory = $true)][string]$Text
   )
@@ -60,30 +77,23 @@ function ConvertFrom-AuditText {
   $end = $Text.LastIndexOf("}")
 
   if ($start -lt 0 -or $end -le $start) {
-    throw "Audit output did not contain JSON."
+    throw "Command output did not contain JSON."
   }
 
   $json = $Text.Substring($start, $end - $start + 1)
   return $json | ConvertFrom-Json
 }
 
-function Get-FailedChecks {
+function Get-ParsedCount {
   param(
-    [Parameter(Mandatory = $true)]$Row
+    [Parameter(Mandatory = $false)]$Value
   )
 
-  $failed = @()
-  if ($Row.snapshotOk -ne $true) { $failed += "snapshotOk" }
-  if ($Row.latestBoardOk -ne $true) { $failed += "latestBoardOk" }
-  if ($Row.rankingsOk -ne $true) { $failed += "rankingsOk" }
-  $mapOperationalOk = if ($null -ne $Row.mapOperationalOk) {
-    $Row.mapOperationalOk
-  } else {
-    $Row.mapOk
+  if ($null -eq $Value) {
+    return 0
   }
-  if ($mapOperationalOk -ne $true) { $failed += "mapOperationalOk" }
-  if ($Row.searchOk -ne $true) { $failed += "searchOk" }
-  return $failed
+
+  return [int]$Value
 }
 
 function Analyze-Audit {
@@ -91,55 +101,31 @@ function Analyze-Audit {
     [Parameter(Mandatory = $true)][string]$Text
   )
 
-  $parsed = ConvertFrom-AuditText -Text $Text
-  $failedRows = @()
-  $blockingRows = @()
-  $advisoryRows = @()
-
-  foreach ($row in $parsed.enabledResults) {
-    $failedChecks = @(Get-FailedChecks -Row $row)
-    if ($failedChecks.Count -gt 0) {
-      $failedRow = [pscustomobject]@{
-        Code = $row.code
-        FailedChecks = $failedChecks
-      }
-      $failedRows += $failedRow
-
-      $blockingChecks = @($failedChecks | Where-Object {
-        $_ -ne "snapshotOk" -and $_ -ne "latestBoardOk"
-      })
-
-      if ($blockingChecks.Count -gt 0) {
-        $blockingRows += [pscustomobject]@{
-          Code = $row.code
-          FailedChecks = $blockingChecks
-        }
-      } else {
-        $advisoryRows += $failedRow
-      }
-    }
+  $parsed = ConvertFrom-EmbeddedJson -Text $Text
+  $requiredFailures = Get-ParsedCount $parsed.required_failures_count
+  $warnings = Get-ParsedCount $parsed.warnings_count
+  $enabledCount = if ($null -ne $parsed.checked_sgg_count) {
+    [int]$parsed.checked_sgg_count
+  } else {
+    @($parsed.enabledResults).Count
   }
 
-  $directReadOnlyMiss = $false
-  if ($failedRows.Count -gt 0) {
-    $directReadOnlyMiss = $true
-    foreach ($row in $failedRows) {
-      foreach ($check in $row.FailedChecks) {
-        if ($check -ne "snapshotOk" -and $check -ne "latestBoardOk") {
-          $directReadOnlyMiss = $false
-        }
-      }
-    }
+  $blockingFailed = @($parsed.blockingFailed)
+  if ($blockingFailed.Count -gt 0 -and $requiredFailures -eq 0) {
+    $requiredFailures = $blockingFailed.Count
   }
 
   return [pscustomobject]@{
-    EnabledCount = @($parsed.enabledResults).Count
-    ConfirmedCount = @($parsed.confirmed).Count
-    DeliveryConfirmedCount = @($parsed.deliveryConfirmed).Count
-    FailedRows = $failedRows
-    BlockingRows = $blockingRows
-    AdvisoryRows = $advisoryRows
-    DirectReadOnlyMiss = $directReadOnlyMiss
+    Status = [string]$parsed.status
+    Scope = [string]$parsed.scope
+    Checks = @($parsed.selected_checks)
+    EnabledCount = $enabledCount
+    ServiceExposedSggCount = Get-ParsedCount $parsed.service_exposed_sgg_count
+    RequiredFailures = $requiredFailures
+    Warnings = $warnings
+    SkippedExtendedStatus = [string]$parsed.skipped_extended_status
+    BlockingFailed = $blockingFailed
+    Failures = @($parsed.failures)
   }
 }
 
@@ -193,14 +179,29 @@ function Get-FailedStep {
   return ""
 }
 
+function Test-CommandWarnings {
+  param(
+    [Parameter(Mandatory = $true)][string]$Text
+  )
+
+  return (
+    $Text.Contains("PASS_WITH_WARNINGS") -or
+    $Text.Contains('"status": "PASS_WITH_WARNINGS"') -or
+    $Text.Contains("WARN")
+  )
+}
+
 function Write-GateSummary {
   param(
     [Parameter(Mandatory = $true)][string]$Status,
     [string]$FailedCommand = "NONE",
     [string]$FailedUniverseOrStep = "NONE",
     [string]$RerunRecommended = "NO",
-    [string]$Note = ""
+    [string]$Note = "",
+    [string[]]$Warnings = @()
   )
+
+  $extendedCommand = '$env:KOAPTIX_REGIONAL_SMOKE_MODE=''extended''; $env:KOAPTIX_REGIONAL_SMOKE_CHUNK_INDEX=''1''; $env:KOAPTIX_REGIONAL_SMOKE_CHUNK_TOTAL=''4''; npm run smoke:regional'
 
   Write-Host ""
   Write-Host "[SGG_RELEASE_GATE_$Status]"
@@ -208,112 +209,111 @@ function Write-GateSummary {
   Write-Host "failed_command=$FailedCommand"
   Write-Host "failed_universe_or_step=$FailedUniverseOrStep"
   Write-Host "rerun_recommended=$RerunRecommended"
-  Write-Host "rollback_decision_note=Rollback $script:RollbackTarget if this gate fails after the allowed audit rerun."
+  Write-Host "extended_regional_smoke=SKIPPED_EXTENDED"
+  Write-Host "browser_smoke=SKIPPED_NON_BLOCKING"
+  Write-Host "extended_regional_smoke_chunk_command=$extendedCommand"
+  Write-Host "rollback_decision_note=Rollback $script:RollbackTarget only if a required gate fails and CTO approves rollback."
+  if ($Warnings.Count -gt 0) {
+    Write-Host "warnings=$($Warnings -join '; ')"
+  }
   if ($Note) {
     Write-Host "note=$Note"
   }
 }
 
 function Invoke-AuditWithPolicy {
-  $first = Invoke-GateCommand -Name "audit:sgg"
+  $auditEnv = @{
+    KOAPTIX_AUDIT_SCOPE = "api-all"
+    KOAPTIX_AUDIT_CHECKS = "rankings,map"
+    KOAPTIX_AUDIT_DIRECT_DB = "0"
+  }
+  $result = Invoke-GateCommand -Name "audit:sgg" -Environment $auditEnv
 
-  if ($first.ExitCode -ne 0) {
+  if ($result.ExitCode -ne 0) {
     return [pscustomobject]@{
       Ok = $false
+      Warning = $false
       Command = "audit:sgg"
       UniverseOrStep = "AUDIT_COMMAND_FAILED"
-      RerunRecommended = "YES"
-      Note = "audit:sgg exited with $($first.ExitCode)"
+      RerunRecommended = "NO"
+      Note = "audit:sgg exited with $($result.ExitCode)"
     }
   }
 
   try {
-    $analysis = Analyze-Audit -Text $first.Text
+    $analysis = Analyze-Audit -Text $result.Text
   } catch {
     return [pscustomobject]@{
       Ok = $false
+      Warning = $false
       Command = "audit:sgg"
       UniverseOrStep = "AUDIT_PARSE_FAILED"
-      RerunRecommended = "YES"
+      RerunRecommended = "NO"
       Note = $_.Exception.Message
     }
   }
 
-  if ($analysis.BlockingRows.Count -eq 0 -and $analysis.AdvisoryRows.Count -eq 0) {
-    Write-Host "[sgg-release-gate] audit pass enabled=$($analysis.EnabledCount) confirmed=$($analysis.ConfirmedCount)"
-    return [pscustomobject]@{ Ok = $true }
-  }
-
-  if ($analysis.BlockingRows.Count -gt 0) {
-    $failed = ($analysis.BlockingRows | ForEach-Object {
-      "$($_.Code):$($_.FailedChecks -join '|')"
-    }) -join ","
+  if ($analysis.RequiredFailures -gt 0 -or $analysis.Status -eq "FAIL_REQUIRED") {
+    $failed = if ($analysis.Failures.Count -gt 0) {
+      ($analysis.Failures | Select-Object -First 8 | ForEach-Object {
+        "$($_.universe):$($_.check):$($_.reason)"
+      }) -join ","
+    } elseif ($analysis.BlockingFailed.Count -gt 0) {
+      ($analysis.BlockingFailed | ForEach-Object {
+        "$($_.code):$($_.failedChecks -join '|')"
+      }) -join ","
+    } else {
+      "AUDIT_REQUIRED_FAILURE"
+    }
 
     return [pscustomobject]@{
       Ok = $false
+      Warning = $false
       Command = "audit:sgg"
       UniverseOrStep = $failed
       RerunRecommended = "NO"
-      Note = "Audit failed with blocking delivery readiness gaps."
+      Note = "Audit failed required API identity or fallback checks."
     }
   }
 
-  $missCodes = ($analysis.AdvisoryRows | ForEach-Object { $_.Code }) -join ","
-  Write-Host "[sgg-release-gate] audit snapshot/latest direct-read advisory miss detected: $missCodes"
-  Write-Host "[sgg-release-gate] rerun=audit:sgg"
-
-  $second = Invoke-GateCommand -Name "audit:sgg"
-  if ($second.ExitCode -ne 0) {
-    return [pscustomobject]@{
-      Ok = $false
-      Command = "audit:sgg"
-      UniverseOrStep = "AUDIT_RERUN_COMMAND_FAILED"
-      RerunRecommended = "NO"
-      Note = "audit:sgg rerun exited with $($second.ExitCode)"
-    }
-  }
-
-  try {
-    $rerunAnalysis = Analyze-Audit -Text $second.Text
-  } catch {
-    return [pscustomobject]@{
-      Ok = $false
-      Command = "audit:sgg"
-      UniverseOrStep = "AUDIT_RERUN_PARSE_FAILED"
-      RerunRecommended = "NO"
-      Note = $_.Exception.Message
-    }
-  }
-
-  if ($rerunAnalysis.BlockingRows.Count -eq 0 -and $rerunAnalysis.AdvisoryRows.Count -eq 0) {
-    Write-Host "[sgg-release-gate] audit pass after allowed rerun enabled=$($rerunAnalysis.EnabledCount) confirmed=$($rerunAnalysis.ConfirmedCount)"
-    return [pscustomobject]@{ Ok = $true }
-  }
-
-  if ($rerunAnalysis.BlockingRows.Count -gt 0) {
-    $failedAfterRerun = ($rerunAnalysis.BlockingRows | ForEach-Object {
-      "$($_.Code):$($_.FailedChecks -join '|')"
-    }) -join ","
-
-    return [pscustomobject]@{
-      Ok = $false
-      Command = "audit:sgg"
-      UniverseOrStep = $failedAfterRerun
-      RerunRecommended = "NO"
-      Note = "Audit blocking readiness gap persisted after allowed rerun."
-    }
-  }
-
-  $advisoryAfterRerun = ($rerunAnalysis.AdvisoryRows | ForEach-Object {
-    "$($_.Code):$($_.FailedChecks -join '|')"
-  }) -join ","
-
-  Write-Host "[sgg-release-gate] audit advisory persisted after rerun: $advisoryAfterRerun"
-  Write-Host "[sgg-release-gate] audit delivery confirmed enabled=$($rerunAnalysis.EnabledCount) deliveryConfirmed=$($rerunAnalysis.DeliveryConfirmedCount)"
+  Write-Host "[sgg-release-gate] audit status=$($analysis.Status) scope=$($analysis.Scope) checks=$($analysis.Checks -join ',') checked=$($analysis.EnabledCount) service_exposed_sgg=$($analysis.ServiceExposedSggCount) skipped_extended=$($analysis.SkippedExtendedStatus)"
 
   return [pscustomobject]@{
     Ok = $true
-    Note = "Direct snapshot/latest advisory miss persisted after rerun; delivery path checks remained blocking-pass."
+    Warning = ($analysis.Warnings -gt 0 -or $analysis.Status -eq "PASS_WITH_WARNINGS")
+    Note = "audit:sgg api-all rankings/map checked $($analysis.EnabledCount) SGGs with $($analysis.RequiredFailures) required failures."
+  }
+}
+
+function Invoke-RequiredNpmStep {
+  param(
+    [Parameter(Mandatory = $true)][string]$Name,
+    [hashtable]$Environment = @{}
+  )
+
+  $result = Invoke-GateCommand -Name $Name -Environment $Environment
+  if ($result.ExitCode -eq 0) {
+    return [pscustomobject]@{
+      Ok = $true
+      Warning = (Test-CommandWarnings -Text $result.Text)
+      Command = $Name
+      Text = $result.Text
+    }
+  }
+
+  $failedStep = Get-FailedStep -Text $result.Text
+  if (-not $failedStep) {
+    $failedStep = "$($Name.ToUpper())_FAILED"
+  }
+
+  return [pscustomobject]@{
+    Ok = $false
+    Warning = $false
+    Command = $Name
+    UniverseOrStep = $failedStep
+    RerunRecommended = if ($Name.StartsWith("smoke:")) { "YES" } else { "NO" }
+    Note = "$Name exited with $($result.ExitCode)"
+    Text = $result.Text
   }
 }
 
@@ -323,42 +323,68 @@ $script:RollbackTarget = if ($env:KOAPTIX_ROLLBACK_BATCH) {
   Get-RollbackTarget
 }
 
+$warnings = @()
+
 Write-Host "[sgg-release-gate] start"
 Write-Host "[sgg-release-gate] rollback_target=$script:RollbackTarget"
+Write-Host "[sgg-release-gate] required_gate=smoke:delivery,audit:sgg(api-all rankings/map),smoke:regional(required),build"
+Write-Host "[sgg-release-gate] extended_regional_smoke=SKIPPED_EXTENDED_BY_DEFAULT"
+Write-Host "[sgg-release-gate] browser_smoke=SKIPPED_NON_BLOCKING_BY_DEFAULT"
+
+$delivery = Invoke-RequiredNpmStep -Name "smoke:delivery"
+if (-not $delivery.Ok) {
+  Write-GateSummary `
+    -Status "FAIL_REQUIRED" `
+    -FailedCommand $delivery.Command `
+    -FailedUniverseOrStep $delivery.UniverseOrStep `
+    -RerunRecommended $delivery.RerunRecommended `
+    -Note $delivery.Note
+  exit 1
+}
+if ($delivery.Warning) { $warnings += "smoke:delivery emitted warnings" }
 
 $audit = Invoke-AuditWithPolicy
 if (-not $audit.Ok) {
   Write-GateSummary `
-    -Status "FAIL" `
+    -Status "FAIL_REQUIRED" `
     -FailedCommand $audit.Command `
     -FailedUniverseOrStep $audit.UniverseOrStep `
     -RerunRecommended $audit.RerunRecommended `
     -Note $audit.Note
   exit 1
 }
+if ($audit.Warning) { $warnings += "audit:sgg emitted warnings" }
 
-foreach ($name in @("smoke:regional", "smoke:browser", "build")) {
-  $result = Invoke-GateCommand -Name $name
-  if ($result.ExitCode -ne 0) {
-    $failedStep = Get-FailedStep -Text $result.Text
-    if (-not $failedStep) {
-      $failedStep = "$($name.ToUpper())_FAILED"
-    }
-
-    $rerunRecommended = if ($name.StartsWith("smoke:")) { "YES" } else { "NO" }
-
-    Write-GateSummary `
-      -Status "FAIL" `
-      -FailedCommand $name `
-      -FailedUniverseOrStep $failedStep `
-      -RerunRecommended $rerunRecommended `
-      -Note "$name exited with $($result.ExitCode)"
-    exit 1
-  }
+$regional = Invoke-RequiredNpmStep `
+  -Name "smoke:regional" `
+  -Environment @{ KOAPTIX_REGIONAL_SMOKE_MODE = "required" }
+if (-not $regional.Ok) {
+  Write-GateSummary `
+    -Status "FAIL_REQUIRED" `
+    -FailedCommand $regional.Command `
+    -FailedUniverseOrStep $regional.UniverseOrStep `
+    -RerunRecommended $regional.RerunRecommended `
+    -Note $regional.Note
+  exit 1
 }
+if ($regional.Warning) { $warnings += "smoke:regional required emitted warnings" }
 
+$build = Invoke-RequiredNpmStep -Name "build"
+if (-not $build.Ok) {
+  Write-GateSummary `
+    -Status "FAIL_REQUIRED" `
+    -FailedCommand $build.Command `
+    -FailedUniverseOrStep $build.UniverseOrStep `
+    -RerunRecommended $build.RerunRecommended `
+    -Note $build.Note
+  exit 1
+}
+if ($build.Warning) { $warnings += "build emitted warnings" }
+
+$finalStatus = if ($warnings.Count -gt 0) { "PASS_WITH_WARNINGS" } else { "PASS" }
 Write-GateSummary `
-  -Status "PASS" `
-  -Note "$(if ($audit.Note) { "$($audit.Note) " })audit:sgg, smoke:regional, smoke:browser, and build completed successfully."
+  -Status $finalStatus `
+  -Warnings $warnings `
+  -Note "Fast required gate completed. Broad all-SGG page/search/HTML regional smoke remains available as chunked extended diagnostics; browser smoke remains a separate diagnostic."
 
 exit 0

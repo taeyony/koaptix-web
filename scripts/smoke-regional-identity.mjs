@@ -2,138 +2,330 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 
 const DEFAULT_BASE_URL = "http://localhost:3000";
+const RECENT_STAGED_SGG_MIN_ORDER = 125;
+const REQUEST_TIMEOUT_MS = readNumberEnv("KOAPTIX_REGIONAL_SMOKE_TIMEOUT_MS", 20_000);
+const MAX_ATTEMPTS = readNumberEnv("KOAPTIX_REGIONAL_SMOKE_RETRY", 3);
+const HOLD_SGG_CODES = new Set(["SGG_51150"]);
+
 const baseUrl = normalizeBaseUrl(
   process.env.KOAPTIX_SMOKE_BASE_URL || process.argv[2] || DEFAULT_BASE_URL,
 );
-const RECENT_STAGED_SGG_MIN_ORDER = 125;
-
-const steps = [
-  { step: "BUSAN_ALL", code: "BUSAN_ALL", label: "부산 전체", title: "KOAPTIX BUSAN" },
-  { step: "ULSAN_ALL", code: "ULSAN_ALL", label: "울산 전체", title: "KOAPTIX ULSAN" },
-  { step: "GWANGJU_ALL", code: "GWANGJU_ALL", label: "광주 전체", title: "KOAPTIX GWANGJU" },
-  { step: "DAEJEON_ALL", code: "DAEJEON_ALL", label: "대전 전체", title: "KOAPTIX DAEJEON" },
-  { step: "BUSAN_ALL_RETURN", code: "BUSAN_ALL", label: "부산 전체", title: "KOAPTIX BUSAN" },
-];
-
-const baseSggSteps = [
-  { step: "SGG_SONGPA", code: "SGG_11710", label: "송파구", title: "KOAPTIX SGG 11710" },
-  { step: "SGG_BUNDANG", code: "SGG_41135", label: "분당구", title: "KOAPTIX SGG 41135" },
-  { step: "SGG_JONGNO_BATCH1", code: "SGG_11110", label: "종로구", title: "KOAPTIX SGG 11110" },
-  { step: "SGG_JUNG_BATCH1", code: "SGG_11140", label: "중구", title: "KOAPTIX SGG 11140" },
-  { step: "SGG_GWANGJIN_BATCH1", code: "SGG_11215", label: "광진구", title: "KOAPTIX SGG 11215" },
-  { step: "SGG_JUNGNANG_BATCH2", code: "SGG_11260", label: "중랑구", title: "KOAPTIX SGG 11260" },
-  { step: "SGG_GANGBUK_BATCH2", code: "SGG_11305", label: "강북구", title: "KOAPTIX SGG 11305" },
-  { step: "SGG_DOBONG_BATCH2", code: "SGG_11320", label: "도봉구", title: "KOAPTIX SGG 11320" },
-];
-
-const recentStagedSggSteps = readEnabledSggRegistry(RECENT_STAGED_SGG_MIN_ORDER)
-  .map((item) => ({
-    step: `SGG_ENABLED_${item.code}`,
-    code: item.code,
-    label: item.label,
-    title: `KOAPTIX SGG ${item.code.replace("SGG_", "")}`,
-  }));
-
-const sggSteps = mergeUniqueSggSteps(baseSggSteps, recentStagedSggSteps);
+const mode = normalizeMode(process.env.KOAPTIX_REGIONAL_SMOKE_MODE);
+const requestedCodes = readCsvEnv("KOAPTIX_REGIONAL_SMOKE_CODES");
+const chunkConfig = readChunkConfig(
+  "KOAPTIX_REGIONAL_SMOKE_CHUNK_INDEX",
+  "KOAPTIX_REGIONAL_SMOKE_CHUNK_TOTAL",
+);
+const apiOnly = process.env.KOAPTIX_REGIONAL_SMOKE_API_ONLY === "1";
+const skipPage = apiOnly || process.env.KOAPTIX_REGIONAL_SMOKE_SKIP_PAGE === "1";
+const skipSearch = apiOnly || process.env.KOAPTIX_REGIONAL_SMOKE_SKIP_SEARCH === "1";
+const startedAt = performance.now();
+const routeSamples = [];
 
 function normalizeBaseUrl(value) {
-  return value.replace(/\/+$/, "");
+  return String(value || DEFAULT_BASE_URL).replace(/\/+$/, "");
 }
 
-function readEnabledSggRegistry(minOrder) {
+function normalizeMode(value) {
+  return String(value || "required").trim().toLowerCase() === "extended"
+    ? "extended"
+    : "required";
+}
+
+function readNumberEnv(name, fallback) {
+  const raw = Number(process.env[name]);
+  if (!Number.isFinite(raw) || raw <= 0) return fallback;
+  return Math.trunc(raw);
+}
+
+function readCsvEnv(name) {
+  return String(process.env[name] || "")
+    .split(",")
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean);
+}
+
+function readChunkConfig(indexName, totalName) {
+  const index = Number(process.env[indexName]);
+  const total = Number(process.env[totalName]);
+  if (!Number.isInteger(index) || !Number.isInteger(total) || index < 1 || total < 1) {
+    return { enabled: false, index: null, total: null };
+  }
+  if (index > total) {
+    return { enabled: true, index, total, emptyReason: "chunk_index_greater_than_total" };
+  }
+  return { enabled: true, index, total };
+}
+
+function applyChunk(items, chunk) {
+  if (!chunk.enabled) return items;
+  if (chunk.emptyReason) return [];
+  return items.filter((_, index) => index % chunk.total === chunk.index - 1);
+}
+
+function elapsedMs() {
+  return Math.round(performance.now() - startedAt);
+}
+
+function sanitizeMessage(value) {
+  return String(value ?? "")
+    .replace(/https?:\/\/[^\s"'<>]+/g, "[redacted-url]")
+    .replace(/([A-Za-z0-9_-]{24,})/g, "[redacted-token]")
+    .slice(0, 280);
+}
+
+function readRegistryBlocks(name) {
   const raw = readFileSync(join(process.cwd(), "src/lib/koaptix/universes.ts"), "utf8");
-  const start = raw.indexOf("const SGG_UNIVERSE_REGISTRY");
-  const end = raw.indexOf("/**\n * KOAPTIX service-exposed universe registry.");
-  const block = raw.slice(start, end);
-
-  return [...block.matchAll(/code:\s*"(?<code>SGG_\d+)"[\s\S]*?label:\s*"(?<label>[^"]+)"[\s\S]*?enabled:\s*(?<enabled>true|false)[\s\S]*?order:\s*(?<order>\d+)/g)]
-    .map((match) => ({
-      code: match.groups.code,
-      label: match.groups.label,
-      enabled: match.groups.enabled === "true",
-      order: Number(match.groups.order),
-    }))
-    .filter((item) => item.enabled && item.order >= minOrder);
+  const start = raw.indexOf(`const ${name}`);
+  if (start < 0) return [];
+  const end = raw.indexOf("];", start);
+  const block = end > start ? raw.slice(start, end) : raw.slice(start);
+  return [...block.matchAll(/\{\s*code:\s*"(?<code>[A-Z]+_ALL|SGG_\d+)"[\s\S]*?\n\s*\}/g)]
+    .map((match) => match[0]);
 }
 
-function mergeUniqueSggSteps(primary, secondary) {
+function parseRegistryEntry(block) {
+  const textField = (name) => block.match(new RegExp(`${name}:\\s*"([^"]+)"`))?.[1] ?? "";
+  const boolField = (name) => block.match(new RegExp(`${name}:\\s*(true|false)`))?.[1] === "true";
+  const numberField = (name) => Number(block.match(new RegExp(`${name}:\\s*(\\d+)`))?.[1] ?? 0);
+  return {
+    code: textField("code"),
+    label: textField("label") || textField("code"),
+    scope: textField("scope"),
+    exposureStatus: textField("exposureStatus") || "public",
+    enabled: boolField("enabled"),
+    homeEnabled: boolField("homeEnabled"),
+    searchEnabled: boolField("searchEnabled"),
+    rankingEnabled: boolField("rankingEnabled"),
+    mapEnabled: boolField("mapEnabled"),
+    order: numberField("order"),
+  };
+}
+
+function readRegistry() {
+  return [
+    ...readRegistryBlocks("MACRO_UNIVERSE_REGISTRY"),
+    ...readRegistryBlocks("SGG_UNIVERSE_REGISTRY"),
+  ].map(parseRegistryEntry);
+}
+
+function isServiceExposed(item) {
+  return (
+    item.enabled &&
+    item.exposureStatus !== "hold" &&
+    item.exposureStatus !== "disabled" &&
+    !HOLD_SGG_CODES.has(item.code)
+  );
+}
+
+const registry = readRegistry();
+const registryByCode = new Map(registry.map((item) => [item.code, item]));
+
+function getRegistryItem(code) {
+  return registryByCode.get(code) ?? {
+    code,
+    label: code,
+    scope: code.startsWith("SGG_") ? "SIGUNGU" : "MACRO",
+    enabled: false,
+    exposureStatus: "unknown",
+    order: 0,
+  };
+}
+
+function makeSpec(code, options = {}) {
+  const item = getRegistryItem(code);
+  const expectedCode = options.expectedCode ?? code;
+  return {
+    step: options.step ?? code,
+    code,
+    expectedCode,
+    expectedUrlCode: options.expectedUrlCode ?? code,
+    label: options.label ?? item.label ?? code,
+    title: options.title ?? `KOAPTIX ${code}`,
+    required: options.required ?? false,
+    skipPage: options.skipPage ?? false,
+    skipHtmlIdentity: options.skipHtmlIdentity ?? false,
+    searchRequired: options.searchRequired ?? false,
+    kind: options.kind ?? item.scope ?? "UNKNOWN",
+  };
+}
+
+function fallbackSpec(code, required = true) {
+  return makeSpec(code, {
+    step: `${code}_FALLBACK`,
+    expectedCode: "KOREA_ALL",
+    expectedUrlCode: code,
+    required,
+    skipPage: true,
+    skipHtmlIdentity: true,
+    searchRequired: false,
+    kind: "fallback",
+  });
+}
+
+function buildRequiredSpecs() {
+  return [
+    makeSpec("KOREA_ALL", { required: true, searchRequired: true, skipHtmlIdentity: true }),
+    makeSpec("SEOUL_ALL", { required: true, skipHtmlIdentity: true }),
+    makeSpec("BUSAN_ALL", { required: true, skipHtmlIdentity: true }),
+    makeSpec("GYEONGGI_ALL", { required: true, skipHtmlIdentity: true }),
+    fallbackSpec("SGG_51150"),
+    fallbackSpec("JEONBUK_ALL"),
+    makeSpec("SGG_52111", { required: true, skipHtmlIdentity: true }),
+    makeSpec("SGG_52113", { required: true, skipHtmlIdentity: true }),
+    makeSpec("SGG_11710", { required: true, skipHtmlIdentity: true }),
+  ];
+}
+
+function buildExtendedSpecs() {
+  const macroSpecs = [
+    makeSpec("BUSAN_ALL", { step: "BUSAN_ALL" }),
+    makeSpec("ULSAN_ALL", { step: "ULSAN_ALL" }),
+    makeSpec("GWANGJU_ALL", { step: "GWANGJU_ALL" }),
+    makeSpec("DAEJEON_ALL", { step: "DAEJEON_ALL" }),
+    makeSpec("BUSAN_ALL", { step: "BUSAN_ALL_RETURN" }),
+  ];
+  const baseSggCodes = [
+    "SGG_11710",
+    "SGG_41135",
+    "SGG_11110",
+    "SGG_11140",
+    "SGG_11215",
+    "SGG_11260",
+    "SGG_11305",
+    "SGG_11320",
+  ];
+  const recentSggCodes = registry
+    .filter((item) => item.code.startsWith("SGG_") && isServiceExposed(item) && item.order >= RECENT_STAGED_SGG_MIN_ORDER)
+    .map((item) => item.code);
+  const sggSpecs = mergeUniqueCodes([...baseSggCodes, ...recentSggCodes])
+    .map((code) => makeSpec(code, { step: `SGG_ENABLED_${code}` }));
+
+  return [
+    fallbackSpec("SGG_51150"),
+    fallbackSpec("JEONBUK_ALL"),
+    ...macroSpecs,
+    ...sggSpecs,
+  ];
+}
+
+function mergeUniqueCodes(codes) {
   const seen = new Set();
-  return [...primary, ...secondary].filter((item) => {
-    if (seen.has(item.code)) return false;
-    seen.add(item.code);
+  return codes.filter((code) => {
+    if (seen.has(code)) return false;
+    seen.add(code);
     return true;
   });
+}
+
+function selectSpecs() {
+  const allSpecs = mode === "extended" ? buildExtendedSpecs() : buildRequiredSpecs();
+
+  if (requestedCodes.length === 0) {
+    return applyChunk(allSpecs, chunkConfig);
+  }
+
+  const specsByCode = new Map();
+  for (const spec of allSpecs) {
+    if (!specsByCode.has(spec.code)) specsByCode.set(spec.code, spec);
+  }
+
+  const filtered = requestedCodes
+    .map((code) => {
+      if (code === "SGG_51150" || code === "JEONBUK_ALL") return fallbackSpec(code);
+      return specsByCode.get(code) ?? makeSpec(code, {
+        required: mode === "required",
+        skipHtmlIdentity: mode === "required",
+      });
+    })
+    .filter(Boolean);
+
+  return applyChunk(filtered, chunkConfig);
 }
 
 function buildUrl(path) {
   return `${baseUrl}${path}`;
 }
 
-async function fetchWithTimeout(url, options = {}) {
+async function fetchPayload(path, options = {}) {
+  const accept = options.accept ?? "application/json";
+  let last = null;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const result = await fetchOnce(path, { ...options, accept });
+    last = result;
+
+    if (result.ok || ![500, 502, 503, 504].includes(result.status)) {
+      return result;
+    }
+
+    if (attempt < MAX_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
+    }
+  }
+
+  return last;
+}
+
+async function fetchOnce(path, options = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 20_000);
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const started = performance.now();
+  const url = buildUrl(path);
 
   try {
     const response = await fetch(url, {
-      ...options,
       signal: controller.signal,
-      headers: {
-        accept: options.accept ?? "*/*",
-        ...(options.headers ?? {}),
-      },
+      headers: { accept: options.accept ?? "*/*" },
     });
+    const text = await response.text();
+    let json = null;
+    if ((options.accept ?? "").includes("json")) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        // Preserve a non-JSON failure as a bounded diagnostic.
+      }
+    }
 
-    return response;
+    return {
+      ok: response.ok,
+      status: response.status,
+      ms: Math.round(performance.now() - started),
+      finalUrl: response.url,
+      text,
+      json,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      ms: Math.round(performance.now() - started),
+      finalUrl: url,
+      text: "",
+      json: null,
+      error: error instanceof Error && error.name === "AbortError"
+        ? "HTTP_TIMEOUT"
+        : sanitizeMessage(error instanceof Error ? error.message : String(error)),
+    };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function readText(path) {
-  const url = buildUrl(path);
-  const response = await fetchWithRetry(url, { accept: "text/html" });
-
-  if (!response.ok) {
-    throw new Error(`HTTP_${response.status}:${url}`);
-  }
-
-  return {
-    finalUrl: response.url,
-    text: await response.text(),
-  };
-}
-
-async function readJson(path) {
-  const url = buildUrl(path);
-  const response = await fetchWithRetry(url, { accept: "application/json" });
-
-  if (!response.ok) {
-    throw new Error(`HTTP_${response.status}:${url}`);
-  }
-
-  return await response.json();
-}
-
-async function fetchWithRetry(url, options = {}) {
-  const maxAttempts = options.maxAttempts ?? 3;
-  let lastResponse = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const response = await fetchWithTimeout(url, options);
-    lastResponse = response;
-
-    if (response.ok || ![500, 502, 503, 504].includes(response.status)) {
-      return response;
-    }
-
-    if (attempt < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
-    }
-  }
-
-  return lastResponse;
+function recordRouteSample(step, code, check, result) {
+  routeSamples.push({
+    step,
+    universe: code,
+    check,
+    status: result.status,
+    ms: result.ms,
+    ok: result.ok,
+  });
 }
 
 function extractCurrentUniverseLabel(html) {
@@ -187,14 +379,28 @@ function getItemUniverse(item) {
   return item?.universeCode || item?.universe_code || "";
 }
 
-function findStaleRankingUniverse(items, expectedCode) {
+function findStaleUniverse(items, expectedCode) {
   return (items ?? [])
     .map(getItemUniverse)
     .find((code) => code && code !== expectedCode) || "";
 }
 
-function findStaleSearchUniverse(items, expectedCode) {
-  return findStaleRankingUniverse(items, expectedCode);
+function getPayloadUniverse(payload, fallbackCode) {
+  return payload?.renderedUniverseCode ?? payload?.universeCode ?? payload?.universe_code ?? fallbackCode;
+}
+
+function getPayloadRequestedUniverse(payload, fallbackCode) {
+  return payload?.requestedUniverseCode ?? payload?.universeCode ?? payload?.universe_code ?? fallbackCode;
+}
+
+function getPayloadItems(payload) {
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.localItems)) return payload.localItems;
+  return [];
+}
+
+function getPayloadCount(payload) {
+  return Number(payload?.resultCount ?? payload?.count ?? payload?.items?.length ?? payload?.localItems?.length ?? 0);
 }
 
 function makeFailure({
@@ -224,193 +430,328 @@ function makeFailure({
   ].join("\n");
 }
 
-async function checkStep(spec) {
-  const pagePath = `/?universe=${encodeURIComponent(spec.code)}`;
-  const { finalUrl, text: html } = await readText(pagePath);
-  const mapPayload = await readJson(
-    `/api/map?universe_code=${encodeURIComponent(spec.code)}&limit=20`,
-  );
-  const rankingsPayload = await readJson(
-    `/api/rankings?universe_code=${encodeURIComponent(spec.code)}&limit=20`,
-  );
-
-  const urlUniverse = getUrlUniverse(finalUrl);
-  const currentUniverseLabel = extractCurrentUniverseLabel(html);
-
-  const mapCount = Number(mapPayload?.count ?? mapPayload?.items?.length ?? 0);
-  const mapIdentity =
-    mapPayload?.universeCode !== spec.code
-      ? "STALE"
-      : mapCount <= 0
-        ? "EMPTY"
-        : "OK";
-
-  const rankingItems = rankingsPayload?.items ?? [];
-  const rankingCount = Number(rankingsPayload?.count ?? rankingItems.length ?? 0);
-  const staleRankingUniverse = findStaleRankingUniverse(rankingItems, spec.code);
-  const rankingsIdentity =
-    rankingsPayload?.universeCode !== spec.code || staleRankingUniverse
-      ? "STALE"
-      : rankingCount <= 0
-        ? "EMPTY"
-        : "OK";
-
-  const searchQuery = rankingItems[0]?.name || "";
-  const searchPayload = searchQuery
-    ? await readJson(
-        `/api/search?q=${encodeURIComponent(searchQuery)}&universe_code=${encodeURIComponent(
-          spec.code,
-        )}&limit=12`,
-      )
-    : { ok: false, localItems: [], globalItems: [], message: "NO_RANKING_ITEM_FOR_SEARCH" };
-  const searchLocalItems = searchPayload?.localItems ?? [];
-  const searchGlobalItems = searchPayload?.globalItems ?? [];
-  const staleSearchUniverse = findStaleSearchUniverse(searchLocalItems, spec.code);
-  const searchIdentity =
-    searchPayload?.universeCode !== spec.code || staleSearchUniverse
-      ? "STALE"
-      : searchLocalItems.length <= 0
-        ? "EMPTY"
-        : "OK";
-
-  const hasMarketIndex = html.includes("Market Index");
-  const hasExpectedChartIdentity =
-    html.includes(spec.title) || html.includes(spec.label) || html.includes(spec.code);
-  const hasKoreaChartTitle = html.includes("KOAPTIX KOREA");
-  const hasAllowedHistoryState =
-    html.includes("History Building") ||
-    html.includes("현재 유니버스 지수 히스토리") ||
-    html.includes("표시할 KOAPTIX 지수 데이터");
-  const chartIdentity = hasMarketIndex && hasExpectedChartIdentity && !hasKoreaChartTitle;
-  const chartRendered = chartIdentity
-    ? spec.code
-    : hasKoreaChartTitle
-      ? "KOREA_ALL"
-      : hasAllowedHistoryState
-        ? "HISTORY_STATE_WITHOUT_EXPECTED_IDENTITY"
-        : "UNKNOWN";
-
-  const visibleError =
-    html.includes("signal is aborted without reason")
-      ? "signal is aborted without reason"
-      : rankingsPayload?.ok === false
-        ? rankingsPayload?.message || "rankings api error"
-        : mapPayload?.ok === false
-          ? mapPayload?.message || "map api error"
-          : "NONE";
-
+function evaluateJsonIdentity({ spec, check, payload, required, allowEmpty = false }) {
   const failures = [];
+  const warnings = [];
 
-  if (urlUniverse !== spec.code) {
-    failures.push(`URL universe mismatch: got ${urlUniverse || "EMPTY"}`);
+  if (!payload || typeof payload !== "object") {
+    (required ? failures : warnings).push(`${check}:missing_json_payload`);
+    return { ok: false, failures, warnings, count: 0, identity: "MISSING" };
   }
 
-  if (currentUniverseLabel !== spec.label) {
-    failures.push(`Current Universe mismatch: got ${currentUniverseLabel || "EMPTY"}`);
+  const requested = getPayloadRequestedUniverse(payload, spec.expectedCode);
+  const rendered = getPayloadUniverse(payload, spec.expectedCode);
+  const count = getPayloadCount(payload);
+  const items = getPayloadItems(payload);
+  const staleUniverse = findStaleUniverse(items, spec.expectedCode);
+
+  if (requested !== spec.expectedCode || rendered !== spec.expectedCode) {
+    failures.push(`${check}:identity_mismatch requested=${requested} rendered=${rendered}`);
   }
 
-  if (mapIdentity !== "OK") {
-    failures.push(`NeonMap identity ${mapIdentity}`);
+  if (staleUniverse) {
+    failures.push(`${check}:stale_item_universe=${staleUniverse}`);
   }
 
-  if (!chartIdentity) {
-    failures.push(`MarketChartCard identity ${chartRendered}`);
+  if (count <= 0 && required && !allowEmpty) {
+    failures.push(`${check}:empty_required_payload`);
+  } else if (count <= 0 && !allowEmpty) {
+    warnings.push(`${check}:empty_payload`);
   }
 
-  if (rankingsIdentity !== "OK") {
-    failures.push(
-      staleRankingUniverse
-        ? `Rankings stale universe ${staleRankingUniverse}`
-        : `Rankings identity ${rankingsIdentity}`,
-    );
-  }
-
-  if (searchIdentity !== "OK") {
-    failures.push(
-      staleSearchUniverse
-        ? `Search stale universe ${staleSearchUniverse}`
-        : `Search identity ${searchIdentity}`,
-    );
-  }
-
-  if (visibleError !== "NONE") {
-    failures.push(`Visible/API error: ${visibleError}`);
-  }
-
-  if (failures.length > 0) {
-    throw new Error(
-      makeFailure({
-        step: spec.step,
-        expectedCode: spec.code,
-        urlUniverse,
-        currentUniverseLabel,
-        mapIdentity,
-        chartRequested: spec.code,
-        chartRendered,
-        rankingsIdentity:
-          rankingsIdentity === "OK" && searchIdentity === "OK"
-            ? "OK"
-            : `rankings=${rankingsIdentity},search=${searchIdentity}`,
-        visibleError,
-        notes: failures.join("; "),
-      }),
-    );
+  if (payload.fallbackMode && payload.fallbackMode !== "none") {
+    warnings.push(`${check}:fallbackMode=${payload.fallbackMode}`);
   }
 
   return {
-    step: spec.step,
-    universe: spec.code,
-    currentUniverseLabel,
-    mapCount,
-    rankingCount,
-    chartRendered,
-    searchCount: searchLocalItems.length,
-    searchGlobalCount: searchGlobalItems.length,
+    ok: failures.length === 0,
+    failures,
+    warnings,
+    count,
+    identity: failures.length === 0 ? (count > 0 || allowEmpty ? "OK" : "EMPTY") : "STALE",
   };
 }
 
+function findSearchQuery(rankingsPayload, expectedCode) {
+  const firstName = rankingsPayload?.items?.[0]?.name ?? rankingsPayload?.items?.[0]?.apt_name_ko;
+  if (firstName) return firstName;
+  if (expectedCode === "KOREA_ALL") return "강남";
+  if (expectedCode === "SGG_11710") return "잠실";
+  return "아파트";
+}
+
+async function checkStep(spec) {
+  const stepStarted = performance.now();
+  const failures = [];
+  const warnings = [];
+  const pageShouldSkip = skipPage || spec.skipPage;
+  let pageStatus = "SKIPPED";
+  let urlUniverse = "";
+  let currentUniverseLabel = "";
+  let chartRendered = "SKIPPED";
+  let visibleError = "NONE";
+
+  if (!pageShouldSkip) {
+    const page = await fetchPayload(`/?universe=${encodeURIComponent(spec.code)}`, { accept: "text/html" });
+    recordRouteSample(spec.step, spec.code, "page", page);
+    pageStatus = page.ok ? "OK" : `HTTP_${page.status || page.error}`;
+    urlUniverse = getUrlUniverse(page.finalUrl);
+
+    if (!page.ok) {
+      failures.push(`page:${pageStatus}`);
+    } else {
+      currentUniverseLabel = extractCurrentUniverseLabel(page.text);
+      visibleError = page.text.includes("signal is aborted without reason")
+        ? "signal is aborted without reason"
+        : "NONE";
+
+      if (urlUniverse && urlUniverse !== spec.expectedUrlCode) {
+        failures.push(`page:url_universe=${urlUniverse}`);
+      }
+
+      if (!spec.skipHtmlIdentity) {
+        const htmlHasExpectedIdentity =
+          page.text.includes(spec.title) ||
+          page.text.includes(spec.label) ||
+          page.text.includes(spec.expectedCode) ||
+          page.text.includes(spec.code);
+        const hasMarketIndex = page.text.includes("Market Index");
+        const hasKoreaChartTitle = page.text.includes("KOAPTIX KOREA");
+        const allowedKorea = spec.expectedCode === "KOREA_ALL";
+        chartRendered = htmlHasExpectedIdentity
+          ? spec.expectedCode
+          : hasKoreaChartTitle
+            ? "KOREA_ALL"
+            : "UNKNOWN";
+
+        if (hasMarketIndex && !htmlHasExpectedIdentity && !(allowedKorea && hasKoreaChartTitle)) {
+          failures.push(`html:market_chart_identity=${chartRendered}`);
+        }
+      } else {
+        chartRendered = "HTML_IDENTITY_SKIPPED";
+      }
+
+      if (visibleError !== "NONE") {
+        failures.push(`page:visible_error=${visibleError}`);
+      }
+    }
+  }
+
+  const mapPayload = await fetchPayload(
+    `/api/map?universe_code=${encodeURIComponent(spec.code)}&limit=20`,
+    { accept: "application/json" },
+  );
+  recordRouteSample(spec.step, spec.code, "map", mapPayload);
+  if (!mapPayload.ok) {
+    failures.push(`map:http_${mapPayload.status || mapPayload.error}`);
+  }
+  const mapResult = evaluateJsonIdentity({
+    spec,
+    check: "map",
+    payload: mapPayload.json,
+    required: true,
+  });
+  failures.push(...mapResult.failures);
+  warnings.push(...mapResult.warnings);
+
+  const rankingsPayload = await fetchPayload(
+    `/api/rankings?universe_code=${encodeURIComponent(spec.code)}&limit=20`,
+    { accept: "application/json" },
+  );
+  recordRouteSample(spec.step, spec.code, "rankings", rankingsPayload);
+  if (!rankingsPayload.ok) {
+    failures.push(`rankings:http_${rankingsPayload.status || rankingsPayload.error}`);
+  }
+  const rankingsResult = evaluateJsonIdentity({
+    spec,
+    check: "rankings",
+    payload: rankingsPayload.json,
+    required: true,
+  });
+  failures.push(...rankingsResult.failures);
+  warnings.push(...rankingsResult.warnings);
+
+  let searchCount = null;
+  let searchIdentity = "SKIPPED";
+  if (!skipSearch) {
+    const searchQuery = findSearchQuery(rankingsPayload.json, spec.expectedCode);
+    const searchPayload = await fetchPayload(
+      `/api/search?q=${encodeURIComponent(searchQuery)}&universe_code=${encodeURIComponent(spec.code)}&limit=12`,
+      { accept: "application/json" },
+    );
+    recordRouteSample(spec.step, spec.code, "search", searchPayload);
+    if (!searchPayload.ok) {
+      (spec.searchRequired ? failures : warnings).push(`search:http_${searchPayload.status || searchPayload.error}`);
+    }
+    const searchResult = evaluateJsonIdentity({
+      spec,
+      check: "search",
+      payload: searchPayload.json,
+      required: spec.searchRequired,
+      allowEmpty: !spec.searchRequired,
+    });
+    failures.push(...searchResult.failures);
+    warnings.push(...searchResult.warnings);
+    searchCount = searchResult.count;
+    searchIdentity = searchResult.identity;
+  }
+
+  const requiredFailure = mode === "required" || spec.required;
+  return {
+    step: spec.step,
+    universe: spec.code,
+    expectedUniverse: spec.expectedCode,
+    requiredFailure,
+    currentUniverseLabel,
+    urlUniverse,
+    pageStatus,
+    mapCount: mapResult.count,
+    mapIdentity: mapResult.identity,
+    rankingCount: rankingsResult.count,
+    rankingsIdentity: rankingsResult.identity,
+    chartRendered,
+    searchCount,
+    searchIdentity,
+    visibleError,
+    failures,
+    warnings,
+    ms: Math.round(performance.now() - stepStarted),
+  };
+}
+
+function slowestSteps(results, limit = 10) {
+  return [...results]
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, limit)
+    .map((result) => ({
+      step: result.step,
+      universe: result.universe,
+      expectedUniverse: result.expectedUniverse,
+      ms: result.ms,
+      pageStatus: result.pageStatus,
+      mapCount: result.mapCount,
+      rankingCount: result.rankingCount,
+      searchCount: result.searchCount,
+    }));
+}
+
+function slowestRoutes(limit = 12) {
+  return [...routeSamples].sort((a, b) => b.ms - a.ms).slice(0, limit);
+}
+
 async function main() {
-  console.log(`[regional-smoke] base_url=${baseUrl}`);
+  const specs = selectSpecs();
+  const globalWarnings = [];
+  if (chunkConfig.emptyReason) {
+    globalWarnings.push(`chunk:${chunkConfig.emptyReason}`);
+  }
+
+  console.log(
+    `[regional-smoke] base_url=${baseUrl} mode=${mode} selected=${specs.length} api_only=${apiOnly ? "1" : "0"} skip_page=${skipPage ? "1" : "0"} skip_search=${skipSearch ? "1" : "0"}`,
+  );
+  if (chunkConfig.enabled) {
+    console.log(`[regional-smoke] chunk_index=${chunkConfig.index} chunk_total=${chunkConfig.total}`);
+  }
 
   const results = [];
-  for (const spec of steps) {
+  for (const spec of specs) {
     const result = await checkStep(spec);
     results.push(result);
+    const outcome = result.failures.length === 0
+      ? result.warnings.length === 0 ? "ok" : "warn"
+      : result.requiredFailure ? "fail" : "warn";
     console.log(
-      `[regional-smoke] ok step=${result.step} universe=${result.universe} map=${result.mapCount} rankings=${result.rankingCount} search=${result.searchCount} global=${result.searchGlobalCount} chart=${result.chartRendered}`,
+      `[regional-smoke] ${outcome} step=${result.step} requested=${result.universe} expected=${result.expectedUniverse} page=${result.pageStatus} map=${result.mapCount}:${result.mapIdentity} rankings=${result.rankingCount}:${result.rankingsIdentity} search=${result.searchCount ?? "SKIPPED"}:${result.searchIdentity} ms=${result.ms}`,
     );
   }
 
-  for (const spec of sggSteps) {
-    const result = await checkStep(spec);
-    results.push(result);
-    console.log(
-      `[regional-smoke] ok step=${result.step} universe=${result.universe} map=${result.mapCount} rankings=${result.rankingCount} search=${result.searchCount} global=${result.searchGlobalCount} chart=${result.chartRendered}`,
-    );
+  const requiredFailures = results
+    .filter((result) => result.requiredFailure)
+    .flatMap((result) => result.failures.map((failure) => ({ result, failure })));
+  const extendedWarnings = [
+    ...globalWarnings.map((warning) => ({ step: "HARNESS", universe: "ALL", warning })),
+    ...results.flatMap((result) => [
+      ...result.warnings.map((warning) => ({ step: result.step, universe: result.universe, warning })),
+      ...(!result.requiredFailure ? result.failures.map((warning) => ({ step: result.step, universe: result.universe, warning })) : []),
+    ]),
+  ];
+
+  if (requiredFailures.length > 0) {
+    for (const { result, failure } of requiredFailures) {
+      console.error(
+        makeFailure({
+          step: result.step,
+          expectedCode: result.expectedUniverse,
+          urlUniverse: result.urlUniverse,
+          currentUniverseLabel: result.currentUniverseLabel,
+          mapIdentity: result.mapIdentity,
+          chartRequested: result.universe,
+          chartRendered: result.chartRendered,
+          rankingsIdentity:
+            result.rankingsIdentity === "OK" && result.searchIdentity !== "STALE"
+              ? "OK"
+              : `rankings=${result.rankingsIdentity},search=${result.searchIdentity}`,
+          visibleError: result.visibleError,
+          notes: failure,
+        }),
+      );
+    }
   }
 
-  console.log(`[regional-smoke] pass steps=${results.length}`);
+  const status = requiredFailures.length > 0
+    ? "FAIL_REQUIRED"
+    : extendedWarnings.length > 0
+      ? "PASS_WITH_WARNINGS"
+      : "PASS";
+  const summary = {
+    checkedAt: new Date().toISOString(),
+    status,
+    mode,
+    baseUrl: sanitizeMessage(baseUrl),
+    selected_code_count: specs.length,
+    selected_codes: specs.map((spec) => spec.code),
+    chunk: chunkConfig.enabled
+      ? { index: chunkConfig.index, total: chunkConfig.total, empty_reason: chunkConfig.emptyReason ?? null }
+      : null,
+    skipped_check_classes: {
+      page: skipPage,
+      html_identity: specs.some((spec) => spec.skipHtmlIdentity || skipPage),
+      search: skipSearch,
+      extended: mode === "required",
+    },
+    required_failures_count: requiredFailures.length,
+    warnings_count: extendedWarnings.length,
+    elapsed_ms: elapsedMs(),
+    slowest_steps: slowestSteps(results),
+    slowest_routes: slowestRoutes(),
+    required_failures: requiredFailures.map(({ result, failure }) => ({
+      step: result.step,
+      universe: result.universe,
+      expectedUniverse: result.expectedUniverse,
+      failure,
+    })),
+    warnings: extendedWarnings,
+    results,
+  };
+
+  console.log(JSON.stringify(summary, null, 2));
+  process.exit(status === "FAIL_REQUIRED" ? 1 : 0);
 }
 
 main().catch((error) => {
-  const message = error instanceof Error ? error.message : String(error);
-
-  if (message.includes("[REGIONAL_IDENTITY_SMOKE_FAIL]")) {
-    console.error(message);
-  } else {
-    console.error(
-      makeFailure({
-        step: "HARNESS",
-        expectedCode: "UNKNOWN",
-        mapIdentity: "UNKNOWN",
-        chartRequested: "UNKNOWN",
-        chartRendered: "UNKNOWN",
-        rankingsIdentity: "ERROR",
-        visibleError: message,
-        notes: "Smoke harness failed before a scenario assertion completed.",
-      }),
-    );
-  }
+  const message = sanitizeMessage(error instanceof Error ? error.message : String(error));
+  console.error(
+    makeFailure({
+      step: "HARNESS",
+      expectedCode: "UNKNOWN",
+      mapIdentity: "UNKNOWN",
+      chartRequested: "UNKNOWN",
+      chartRendered: "UNKNOWN",
+      rankingsIdentity: "ERROR",
+      visibleError: message,
+      notes: "Smoke harness failed before a scenario assertion completed.",
+    }),
+  );
 
   process.exit(1);
 });
