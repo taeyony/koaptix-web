@@ -149,7 +149,7 @@ export function ComplexHistoryMiniChart({
   if (normalizedSeries.length === 0 || mergedData.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55">
-        차트를 그릴 히스토리 데이터가 아직 충분하지 않다.
+        최근 6개월 시총 흐름을 계산할 스냅샷 데이터가 아직 충분하지 않습니다.
       </div>
     );
   }

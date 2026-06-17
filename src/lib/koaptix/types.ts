@@ -4,9 +4,9 @@ export type WeeklyDeltaWindow = "7d";
 
 export type WeeklyDeltaPayload = {
   history_snapshot_date: string | null;
-  rank_delta_7d: number;
-  market_cap_delta_7d: number;
-  market_cap_delta_pct_7d: number;
+  rank_delta_7d: number | null;
+  market_cap_delta_7d: number | null;
+  market_cap_delta_pct_7d: number | null;
 };
 
 export type DbLatestRankBoardRow = {
@@ -173,6 +173,10 @@ export type ComplexDetail = {
   rankDelta7d: number;
   marketCapDelta7d: number;
   marketCapDeltaPct7d: number;
+  weeklyComparisonAvailable: boolean;
+  rankDelta7dNullable: number | null;
+  marketCapDelta7dNullable: number | null;
+  marketCapDeltaPct7dNullable: number | null;
   deltaWindow: "7d";
 
   rankDelta1d: number;

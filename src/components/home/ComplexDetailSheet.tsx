@@ -68,6 +68,10 @@ function formatPercent(value: number): string {
   return "0.00%";
 }
 
+function formatDeltaUnavailable(): string {
+  return "기준 없음";
+}
+
 function formatRankDelta(delta: number): string {
   if (delta > 0) return `▲ +${delta}`;
   if (delta < 0) return `▼ ${delta}`;
@@ -311,6 +315,24 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
   const highMarketCap52w = detail?.highMarketCap52w ?? item.highMarketCap52w;
   const recoveryRate52w = detail?.recoveryRate52w ?? item.recoveryRate52w;
   const tierBadges = item.tierBadges?.slice(0, 2) ?? [];
+  const weeklyComparisonAvailable =
+    detail?.weeklyComparisonAvailable ??
+    (historySnapshotDate != null &&
+      (rankDelta7d != null ||
+        marketCapDelta7d != null ||
+        marketCapDeltaPct7d != null));
+  const displayRankDelta7d = weeklyComparisonAvailable
+    ? detail?.rankDelta7dNullable ?? rankDelta7d ?? 0
+    : null;
+  const displayMarketCapDelta7d = weeklyComparisonAvailable
+    ? detail?.marketCapDelta7dNullable ?? marketCapDelta7d ?? 0
+    : null;
+  const displayMarketCapDeltaPct7d = weeklyComparisonAvailable
+    ? detail?.marketCapDeltaPct7dNullable ?? marketCapDeltaPct7d ?? 0
+    : null;
+  const householdCount = detail?.householdCount ?? item?.households ?? null;
+  const approvalYear = detail?.approvalYear ?? item?.buildYear ?? null;
+  const ageYears = detail?.ageYears ?? item?.ageYears ?? null;
 
   // 🚨 리턴될 JSX 전체를 'content' 라는 바구니에 담습니다!
   const content = (
@@ -387,8 +409,32 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <Metric label="현재 순위" value={`#${formatPlainNumber(rank)}`} />
               <Metric label="시가총액" value={formatMarketCapKrw(marketCap)} />
-              <Metric label="주간 순위 변동" value={formatRankDelta(rankDelta7d ?? 0)} tone={rankDeltaTone(rankDelta7d ?? 0)} />
-              <Metric label="Momentum (W)" value={formatPercent(marketCapDeltaPct7d ?? 0)} tone={momentumTone(marketCapDeltaPct7d ?? 0)} />
+              <Metric
+                label="주간 순위 변동"
+                value={
+                  displayRankDelta7d != null
+                    ? formatRankDelta(displayRankDelta7d)
+                    : formatDeltaUnavailable()
+                }
+                tone={
+                  displayRankDelta7d != null
+                    ? rankDeltaTone(displayRankDelta7d)
+                    : "text-white/45"
+                }
+              />
+              <Metric
+                label="Momentum (W)"
+                value={
+                  displayMarketCapDeltaPct7d != null
+                    ? formatPercent(displayMarketCapDeltaPct7d)
+                    : formatDeltaUnavailable()
+                }
+                tone={
+                  displayMarketCapDeltaPct7d != null
+                    ? momentumTone(displayMarketCapDeltaPct7d)
+                    : "text-white/45"
+                }
+              />
             </div>
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">
@@ -437,7 +483,7 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
                   <ComplexHistoryMiniChart data={chartData} />
                 ) : (
                   <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55">
-                    차트를 그릴 히스토리 데이터가 아직 충분하지 않다.
+                    최근 6개월 시총 흐름을 계산할 스냅샷 데이터가 아직 충분하지 않습니다.
                   </div>
                 )}
               </div>
@@ -453,15 +499,30 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
                 </div>
               ) : (
                 <>
-                  <DetailRow label="최근 7일 시총 변동" value={`${formatSignedNumber(marketCapDelta7d ?? 0)}원`} />
-                  <DetailRow label="비교 기준 스냅샷" value={historySnapshotDate ?? "-"} />
-                 {/* 🚨 상세 API(detail)가 없으면 메인 데이터(item)에서 강제로 끌어옵니다!! */}
-                  <DetailRow label="세대수" value={formatCount(detail?.householdCount ?? item?.households)} />
-                  <DetailRow label="준공연도" value={formatYear(detail?.approvalYear ?? item?.buildYear)} />
-                  <DetailRow label="연식" value={(detail?.ageYears ?? item?.ageYears) != null ? `${detail?.ageYears ?? item?.ageYears}년차` : "-"} />
-                  <DetailRow label="동 수" value={formatCount(detail?.buildingCount)} />
-                  <DetailRow label="주차대수" value={formatCount(detail?.parkingCount)} />
-                  <DetailRow label="데이터 기준일" value={formatUpdatedAt(detail?.updatedAt)} />
+                  <DetailRow
+                    label="최근 7일 시총 변동"
+                    value={
+                      displayMarketCapDelta7d != null
+                        ? `${formatSignedNumber(displayMarketCapDelta7d)}원`
+                        : "비교 기준 데이터 없음"
+                    }
+                  />
+                  <DetailRow
+                    label="비교 기준 스냅샷"
+                    value={historySnapshotDate ?? "비교 기준 데이터 없음"}
+                  />
+                  {householdCount != null ? (
+                    <DetailRow label="세대수" value={formatCount(householdCount)} />
+                  ) : null}
+                  {approvalYear != null ? (
+                    <DetailRow label="준공연도" value={formatYear(approvalYear)} />
+                  ) : null}
+                  {ageYears != null ? (
+                    <DetailRow label="연식" value={`${ageYears}년차`} />
+                  ) : null}
+                  {detail?.updatedAt ? (
+                    <DetailRow label="데이터 기준일" value={formatUpdatedAt(detail.updatedAt)} />
+                  ) : null}
                 </>
               )}
             </div>

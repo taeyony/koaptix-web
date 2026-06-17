@@ -213,9 +213,17 @@ export function mapComplexDetailRow(
   const approvalYear = toNullableNumber(row.approval_year);
   const currentYear = new Date().getFullYear();
 
-  const rankDelta7d = toNumber(row.rank_delta_7d, 0);
-  const marketCapDelta7d = toNumber(row.market_cap_delta_7d, 0);
-  const marketCapDeltaPct7d = toNumber(row.market_cap_delta_pct_7d, 0);
+  const rankDelta7dNullable = toNullableNumber(row.rank_delta_7d);
+  const marketCapDelta7dNullable = toNullableNumber(row.market_cap_delta_7d);
+  const marketCapDeltaPct7dNullable = toNullableNumber(row.market_cap_delta_pct_7d);
+  const weeklyComparisonAvailable =
+    row.history_snapshot_date != null &&
+    (rankDelta7dNullable != null ||
+      marketCapDelta7dNullable != null ||
+      marketCapDeltaPct7dNullable != null);
+  const rankDelta7d = rankDelta7dNullable ?? 0;
+  const marketCapDelta7d = marketCapDelta7dNullable ?? 0;
+  const marketCapDeltaPct7d = marketCapDeltaPct7dNullable ?? 0;
 
   const highMarketCap52w = toNullableNumber(row.high_market_cap_52w);
   const recoveryRate52w = deriveRecoveryRate52w(
@@ -246,6 +254,10 @@ export function mapComplexDetailRow(
     rankDelta7d,
     marketCapDelta7d,
     marketCapDeltaPct7d,
+    weeklyComparisonAvailable,
+    rankDelta7dNullable,
+    marketCapDelta7dNullable,
+    marketCapDeltaPct7dNullable,
     deltaWindow: "7d",
 
     rankDelta1d: rankDelta7d,
