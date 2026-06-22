@@ -64,36 +64,49 @@ begin
 
   with active_clusters as (
     select
-      area_cluster_id,
-      area_cluster_code,
-      min_exclusive_area_m2,
-      max_exclusive_area_m2
-    from public.area_cluster_dim
-    where is_active = true
+      ac.area_cluster_id as cluster_area_cluster_id,
+      ac.area_cluster_code as cluster_area_cluster_code,
+      ac.min_exclusive_area_m2 as cluster_min_exclusive_area_m2,
+      ac.max_exclusive_area_m2 as cluster_max_exclusive_area_m2
+    from public.area_cluster_dim as ac
+    where ac.is_active = true
   ),
   ordered as (
     select
-      *,
-      lag(min_exclusive_area_m2) over (order by min_exclusive_area_m2, area_cluster_id) as previous_min,
-      lead(min_exclusive_area_m2) over (order by min_exclusive_area_m2, area_cluster_id) as next_min
-    from active_clusters
+      ac.cluster_area_cluster_id,
+      ac.cluster_area_cluster_code,
+      ac.cluster_min_exclusive_area_m2,
+      ac.cluster_max_exclusive_area_m2,
+      lag(ac.cluster_min_exclusive_area_m2) over (
+        order by ac.cluster_min_exclusive_area_m2, ac.cluster_area_cluster_id
+      ) as previous_min,
+      lead(ac.cluster_min_exclusive_area_m2) over (
+        order by ac.cluster_min_exclusive_area_m2, ac.cluster_area_cluster_id
+      ) as next_min
+    from active_clusters as ac
   )
   select
     count(*)::integer,
     count(*) filter (
-      where area_cluster_id is null
-         or area_cluster_code is null
-         or min_exclusive_area_m2 is null
-         or max_exclusive_area_m2 is null
+      where o.cluster_area_cluster_id is null
+         or o.cluster_area_cluster_code is null
+         or o.cluster_min_exclusive_area_m2 is null
+         or o.cluster_max_exclusive_area_m2 is null
     )::integer,
-    count(*) filter (where previous_min is not null and min_exclusive_area_m2 <= previous_min)::integer,
-    (count(*) - count(distinct min_exclusive_area_m2))::integer,
-    count(*) filter (where next_min is not null and max_exclusive_area_m2 >= next_min)::integer,
-    min(min_exclusive_area_m2),
-    max(area_cluster_id) filter (where area_cluster_code = 'EXCL_260_PLUS'),
-    max(area_cluster_code) filter (where area_cluster_code = 'EXCL_260_PLUS'),
-    max(min_exclusive_area_m2) filter (where area_cluster_code = 'EXCL_260_PLUS'),
-    max(max_exclusive_area_m2) filter (where area_cluster_code = 'EXCL_260_PLUS')
+    count(*) filter (
+      where o.previous_min is not null
+        and o.cluster_min_exclusive_area_m2 <= o.previous_min
+    )::integer,
+    (count(*) - count(distinct o.cluster_min_exclusive_area_m2))::integer,
+    count(*) filter (
+      where o.next_min is not null
+        and o.cluster_max_exclusive_area_m2 >= o.next_min
+    )::integer,
+    min(o.cluster_min_exclusive_area_m2),
+    max(o.cluster_area_cluster_id) filter (where o.cluster_area_cluster_code = 'EXCL_260_PLUS'),
+    max(o.cluster_area_cluster_code) filter (where o.cluster_area_cluster_code = 'EXCL_260_PLUS'),
+    max(o.cluster_min_exclusive_area_m2) filter (where o.cluster_area_cluster_code = 'EXCL_260_PLUS'),
+    max(o.cluster_max_exclusive_area_m2) filter (where o.cluster_area_cluster_code = 'EXCL_260_PLUS')
   into
     v_active_count,
     v_required_field_error_count,
@@ -105,7 +118,7 @@ begin
     v_terminal_code,
     v_terminal_min,
     v_terminal_max
-  from ordered;
+  from ordered as o;
 
   if v_active_count = 0 then
     return query select null::bigint, null::text, 'HOLD'::text, 'HOLD_NO_ACTIVE_CLUSTER'::text;
@@ -137,35 +150,39 @@ begin
 
   with ordered as (
     select
-      area_cluster_id,
-      area_cluster_code,
-      min_exclusive_area_m2,
-      max_exclusive_area_m2,
-      lead(min_exclusive_area_m2) over (order by min_exclusive_area_m2, area_cluster_id) as next_min
-    from public.area_cluster_dim
-    where is_active = true
+      ac.area_cluster_id as cluster_area_cluster_id,
+      ac.area_cluster_code as cluster_area_cluster_code,
+      ac.min_exclusive_area_m2 as cluster_min_exclusive_area_m2,
+      ac.max_exclusive_area_m2 as cluster_max_exclusive_area_m2,
+      lead(ac.min_exclusive_area_m2) over (
+        order by ac.min_exclusive_area_m2, ac.area_cluster_id
+      ) as next_min
+    from public.area_cluster_dim as ac
+    where ac.is_active = true
   ),
   candidates as (
-    select area_cluster_id, area_cluster_code
-    from ordered
+    select
+      o.cluster_area_cluster_id,
+      o.cluster_area_cluster_code
+    from ordered as o
     where (
-      next_min is not null
-      and raw_exclusive_area_m2 >= min_exclusive_area_m2
-      and raw_exclusive_area_m2 < next_min
+      o.next_min is not null
+      and raw_exclusive_area_m2 >= o.cluster_min_exclusive_area_m2
+      and raw_exclusive_area_m2 < o.next_min
     )
     or (
-      next_min is null
-      and area_cluster_code = 'EXCL_260_PLUS'
-      and raw_exclusive_area_m2 >= min_exclusive_area_m2
-      and raw_exclusive_area_m2 <= max_exclusive_area_m2
+      o.next_min is null
+      and o.cluster_area_cluster_code = 'EXCL_260_PLUS'
+      and raw_exclusive_area_m2 >= o.cluster_min_exclusive_area_m2
+      and raw_exclusive_area_m2 <= o.cluster_max_exclusive_area_m2
     )
   )
   select
     count(*)::integer,
-    min(area_cluster_id),
-    min(area_cluster_code)
+    min(c.cluster_area_cluster_id),
+    min(c.cluster_area_cluster_code)
   into v_match_count, v_match_id, v_match_code
-  from candidates;
+  from candidates as c;
 
   if v_match_count > 1 then
     return query select null::bigint, null::text, 'HOLD'::text, 'HOLD_DUPLICATE_MATCH'::text;
