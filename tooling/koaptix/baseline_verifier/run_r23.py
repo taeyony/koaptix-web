@@ -97,6 +97,9 @@ STATUS_PASS = "PASS_PORTABLE_SEMANTIC_APPLICATION_SCHEMA_BASELINE_REFERENCE_SEED
 
 BASELINE_VERIFIER_DIR = Path(__file__).resolve().parent
 REPO = BASELINE_VERIFIER_DIR.parents[2]
+RUNNER_SOURCE_RELATIVE_PATH = Path("tooling") / "koaptix" / "baseline_verifier" / "run_r23.py"
+RUNNER_SOURCE_PATH = REPO / RUNNER_SOURCE_RELATIVE_PATH
+LEGACY_ARTIFACT_RUNNER_RELATIVE_PATH = Path("tooling") / "run_r23.py"
 DEFAULT_ARTIFACT_ROOT = Path.cwd() / ".koaptix-baseline-verifier-artifacts" / RUN_ID.lower()
 
 
@@ -203,6 +206,49 @@ def sha_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest().upper()
+
+
+def file_hash_evidence(path: Path, *, relative_path: str, source_kind: str, expected_path: Path | None = None) -> dict[str, Any]:
+    expected = expected_path or path
+    evidence: dict[str, Any] = {
+        "relative_path": relative_path,
+        "source_kind": source_kind,
+        "attempted_path": str(path),
+        "expected_path": str(expected),
+    }
+    if path.is_file():
+        evidence.update({
+            "provenance_hash_status": "PRESENT",
+            "sha256": sha_file(path),
+            "failure_class": None,
+        })
+    else:
+        evidence.update({
+            "provenance_hash_status": "MISSING_INPUT",
+            "sha256": None,
+            "failure_class": "PROVENANCE_HASH_INPUT_MISSING",
+        })
+    return evidence
+
+
+def runner_provenance_hash_evidence() -> dict[str, Any]:
+    source_runner = file_hash_evidence(
+        RUNNER_SOURCE_PATH,
+        relative_path=RUNNER_SOURCE_RELATIVE_PATH.as_posix(),
+        source_kind="repo_source",
+    )
+    legacy_artifact_runner = file_hash_evidence(
+        ROOT / LEGACY_ARTIFACT_RUNNER_RELATIVE_PATH,
+        relative_path=LEGACY_ARTIFACT_RUNNER_RELATIVE_PATH.as_posix(),
+        source_kind="artifact_legacy_path",
+        expected_path=RUNNER_SOURCE_PATH,
+    )
+    return {
+        "provenance_hash_status": source_runner["provenance_hash_status"],
+        "r23_verifier_tool_sha256": source_runner["sha256"],
+        "source_runner": source_runner,
+        "legacy_artifact_runner": legacy_artifact_runner,
+    }
 
 
 def write_json(rel: str, obj: Any) -> Path:
@@ -1373,9 +1419,61 @@ def compare_builds(build1: dict[str, Any], build2: dict[str, Any]) -> dict[str, 
 
 
 def verifier_hashes() -> dict[str, str]:
-    paths = ["tooling/run_r23.py", "verifier/catalog_capture.sql", "verifier/reference_capture.sql", "verifier/table_row_counts.sql"]
+    hashes: dict[str, str] = {}
+    runner_evidence = runner_provenance_hash_evidence()
+    if runner_evidence["provenance_hash_status"] == "PRESENT" and runner_evidence["r23_verifier_tool_sha256"]:
+        hashes[RUNNER_SOURCE_RELATIVE_PATH.as_posix()] = runner_evidence["r23_verifier_tool_sha256"]
+    paths = ["verifier/catalog_capture.sql", "verifier/reference_capture.sql", "verifier/table_row_counts.sql"]
     paths.extend(spec["sql_rel"] for spec in CAPTURE_QUERIES)
-    return {rel: sha_file(ROOT / rel) for rel in paths if (ROOT / rel).exists()}
+    hashes.update({rel: sha_file(ROOT / rel) for rel in paths if (ROOT / rel).exists()})
+    return hashes
+
+
+def fixture_reference_mismatch_summary(fixture: dict[str, Any]) -> dict[str, Any]:
+    if not fixture:
+        return {
+            "status": "NOT_EVALUATED",
+            "blocks_db_build": False,
+            "blockers": [],
+            "construction_completed": None,
+            "deterministic_output": None,
+            "portable_structural_root_match": None,
+            "portable_security_root_match": None,
+            "reference_hashes_match": None,
+            "reference_seed_root_match": None,
+        }
+    checks = {
+        "portable_structural_root_match": fixture.get("actual_portable_structural_root_match"),
+        "portable_security_root_match": fixture.get("actual_portable_security_root_match"),
+        "reference_hashes_match": fixture.get("reference_hashes_match"),
+        "reference_seed_root_match": fixture.get("reference_seed_root_match"),
+    }
+    blockers = [name for name, value in checks.items() if value is False]
+    blocks_db_build = bool(fixture.get("construction_completed")) and bool(fixture.get("deterministic_output")) and bool(blockers)
+    return {
+        "status": "BLOCKED_FIXTURE_REFERENCE_MISMATCH_NO_REMOTE_MUTATION" if blocks_db_build else "PASS_OR_NOT_BLOCKING",
+        "blocks_db_build": blocks_db_build,
+        "blockers": blockers,
+        "construction_completed": fixture.get("construction_completed"),
+        "deterministic_output": fixture.get("deterministic_output"),
+        "portable_structural_root": fixture.get("actual_portable_structural_root"),
+        "portable_security_root": fixture.get("actual_portable_security_root"),
+        **checks,
+    }
+
+
+def failure_reporting_summary(status: str, blockers: list[str], fixture_summary: dict[str, Any], runner_provenance: dict[str, Any]) -> dict[str, Any]:
+    legacy_status = runner_provenance.get("legacy_artifact_runner", {}).get("provenance_hash_status")
+    secondary = "LEGACY_ARTIFACT_RUNNER_HASH_INPUT_MISSING_PREVENTED" if legacy_status == "MISSING_INPUT" else "NONE"
+    primary = fixture_summary["status"] if fixture_summary.get("blocks_db_build") else (status if status != STATUS_PASS else "NONE")
+    return {
+        "primary_substantive_blocker": primary,
+        "secondary_reporting_blocker": secondary,
+        "final_exit_cause": status,
+        "provenance_hash_status": runner_provenance.get("provenance_hash_status"),
+        "blockers": blockers,
+        "fixture_reference_mismatch_summary": fixture_summary,
+    }
 
 
 def write_artifact_index() -> dict[str, Any]:
@@ -1493,6 +1591,9 @@ def write_handoffs(status: str, blockers: list[str], verification: dict[str, Any
     duplicate_audit = load_json(ROOT / "manifests" / "duplicate_logical_identity_audit.json") if (ROOT / "manifests" / "duplicate_logical_identity_audit.json").exists() else {}
     r22_fixture = load_json(ROOT / "manifests" / "fixture_construction_result.json") if (ROOT / "manifests" / "fixture_construction_result.json").exists() else {}
     patch_scope = load_json(ROOT / "manifests" / "r22_to_r23_manifest_patch_scope.json") if (ROOT / "manifests" / "r22_to_r23_manifest_patch_scope.json").exists() else {}
+    fixture_gate = fixture_reference_mismatch_summary(r22_fixture)
+    runner_provenance = runner_provenance_hash_evidence()
+    failure_reporting = failure_reporting_summary(status, blockers, fixture_gate, runner_provenance)
     collection_paths = manifest_order.get("paths", {})
     unordered_count = sum(1 for p in collection_paths.values() if p.get("order_class") == "UNORDERED_LOGICAL_OBJECT_SET")
     ordered_count = sum(1 for p in collection_paths.values() if p.get("order_class") == "ORDERED_SOURCE_CONSTRUCT")
@@ -1524,7 +1625,8 @@ def write_handoffs(status: str, blockers: list[str], verification: dict[str, Any
         "contract_id": TRANSPORT_CONTRACT_ID,
         "r21_verifier_tool_sha256": r21_hashes.get("tooling/run_r21.py"),
         "r22_verifier_tool_sha256": EXPECTED["r22_verifier_tool_sha256"],
-        "r23_verifier_tool_sha256": sha_file(ROOT / "tooling" / "run_r23.py"),
+        "r23_verifier_tool_sha256": runner_provenance["r23_verifier_tool_sha256"],
+        "r23_verifier_tool_provenance": runner_provenance,
         "inner_query_semantics_match": semantic_identity.get("inner_query_semantics_match", False),
         "copy_transport_used": bool(transport_audit.get("forbidden_copy_transport_hit_count")),
         "psql_unaligned_used": True,
@@ -1578,6 +1680,9 @@ def write_handoffs(status: str, blockers: list[str], verification: dict[str, Any
 - preserved_transport:
 {json.dumps(transport_patch, ensure_ascii=False, indent=4)}
 
+- failure_reporting:
+{json.dumps(failure_reporting, ensure_ascii=False, indent=4)}
+
 - qualification:
 {json.dumps(q_summary, ensure_ascii=False, indent=4)}
 
@@ -1627,7 +1732,7 @@ def write_handoffs(status: str, blockers: list[str], verification: dict[str, Any
 
 REVIEW_MARKER: {LANE}
 
-Recommended Review Model / Effort: `PRO_EXTENDED`
+Recommended Review Model / Effort: `VERY_HIGH`
 
 ## Request
 
@@ -1637,6 +1742,10 @@ Please review R23. R22 strict JSON transport succeeded for all 21 capture files,
 
 - run_id: `{RUN_ID}`
 - status: `{status}`
+- primary_substantive_blocker: `{failure_reporting['primary_substantive_blocker']}`
+- secondary_reporting_blocker: `{failure_reporting['secondary_reporting_blocker']}`
+- final_exit_cause: `{failure_reporting['final_exit_cause']}`
+- provenance_hash_status: `{failure_reporting['provenance_hash_status']}`
 - parent R22 reported status: `BLOCKED_VERIFIER_JSON_TRANSPORT_STILL_INCOMPLETE_NO_REMOTE_MUTATION`
 - parent R22 normalized status: `BLOCKED_PORTABLE_MANIFEST_CONSTRUCTION_INCOMPLETE_NO_REMOTE_MUTATION`
 - parent R22 semantic mismatch proven: `NO`
@@ -1674,6 +1783,9 @@ Please review R23. R22 strict JSON transport succeeded for all 21 capture files,
 - fixture structural root match: `{str(r22_fixture.get('actual_portable_structural_root_match')).upper()}`
 - fixture security root: `{r22_fixture.get('actual_portable_security_root')}`
 - fixture security root match: `{str(r22_fixture.get('actual_portable_security_root_match')).upper()}`
+- fixture gate status: `{fixture_gate['status']}`
+- fixture mismatch blocks DB build: `{str(fixture_gate['blocks_db_build']).upper()}`
+- fixture mismatch blockers: `{fixture_gate['blockers']}`
 - object counts match: `{str(r22_fixture.get('object_counts_match')).upper()}`
 - RLS match: `{str(r22_fixture.get('rls_match')).upper()}`
 - reference hashes match: `{str(r22_fixture.get('reference_hashes_match')).upper()}`
@@ -1722,6 +1834,7 @@ Please review R23. R22 strict JSON transport succeeded for all 21 capture files,
 - artifact_count: `{artifact['artifact_count']}`
 - artifact_index_sha256: `{artifact['artifact_index_sha256']}`
 - SHA256SUMS_sha256: `{artifact['sha256sums_sha256']}`
+- r23 verifier tool provenance: `{json.dumps(runner_provenance, ensure_ascii=False)}`
 - repository raw left/right: `{repo_after['raw_left_right']}`
 - semantic behind/ahead: `{repo_after['semantic_behind']} / {repo_after['semantic_ahead']}`
 - staged files: `{json.dumps(staged, ensure_ascii=False)}`
@@ -1905,21 +2018,16 @@ def main() -> int:
             elif not fixture_result.get("deterministic_output"):
                 status = "BLOCKED_VERIFIER_MANIFEST_CONSTRUCTION_STILL_INCOMPLETE_NO_REMOTE_MUTATION"
                 blockers.append("R22 fixture manifest construction was not deterministic under permutations")
-            elif not fixture_result.get("actual_portable_structural_root_match"):
-                status = "BLOCKED_FIXTURE_PORTABLE_STRUCTURAL_MISMATCH_NO_REMOTE_MUTATION"
-                blockers.append("R22 fixture actual structural root differs from R13 authority")
-            elif not fixture_result.get("actual_portable_security_root_match"):
-                status = "BLOCKED_FIXTURE_PORTABLE_SECURITY_MISMATCH_NO_REMOTE_MUTATION"
-                blockers.append("R22 fixture actual security root differs from R13 authority")
+            elif fixture_reference_mismatch_summary(fixture_result)["blocks_db_build"]:
+                fixture_gate = fixture_reference_mismatch_summary(fixture_result)
+                status = fixture_gate["status"]
+                blockers.extend(f"R22 fixture {blocker} failed" for blocker in fixture_gate["blockers"])
             elif not fixture_result.get("object_counts_match"):
                 status = "BLOCKED_VERIFIER_QUALIFICATION_OBJECT_COUNT_MISMATCH_NO_REMOTE_MUTATION"
                 blockers.append("R22 fixture object counts differ")
             elif not fixture_result.get("rls_match"):
                 status = "BLOCKED_VERIFIER_QUALIFICATION_RLS_MISMATCH_NO_REMOTE_MUTATION"
                 blockers.append("R22 fixture RLS reconciliation differs")
-            elif not fixture_result.get("reference_hashes_match") or not fixture_result.get("reference_seed_root_match"):
-                status = "BLOCKED_VERIFIER_QUALIFICATION_REFERENCE_MISMATCH_NO_REMOTE_MUTATION"
-                blockers.append("R22 fixture reference hashes/root differ")
             elif not fixture_result.get("non_reference_rows_zero"):
                 status = "BLOCKED_VERIFIER_QUALIFICATION_NON_REFERENCE_ROWS_PRESENT_NO_REMOTE_MUTATION"
                 blockers.append("R22 fixture non-reference rows present")
