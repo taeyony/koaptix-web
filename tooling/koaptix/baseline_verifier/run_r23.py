@@ -40,14 +40,33 @@ EXTENSION_OWNER_CANONICALIZATION_TARGETS = frozenset({
     "plpgsql",
     "supabase_vault",
 })
+EXTENSION_RUNTIME_METADATA_RULE_ID = "KOAPTIX_EXT_RUNTIME_METADATA_V1"
+EXTENSION_RUNTIME_METADATA_TOKEN = "__KOAPTIX_RUNTIME_EXTENSION_METADATA__"
+EXTENSION_MANAGED_OBJECT_RULE_ID = "KOAPTIX_EXTENSION_MANAGED_OBJECT_CANONICALIZATION_V1"
+EXTENSION_MANAGED_OBJECT_OWNER_TOKEN = "__KOAPTIX_EXTENSION_MANAGED_OBJECT_OWNER__"
+EXTENSION_MANAGED_ROUTINE_ACL_TOKEN = "__KOAPTIX_EXTENSION_MANAGED_ROUTINE_ACL__"
+EXTENSION_MANAGED_ROUTINE_GRANT_EXCLUSION_RULE_ID = "KOAPTIX_EXTENSION_MANAGED_ROUTINE_GRANT_EXCLUSION_V1"
+RI_CONSTRAINT_TRIGGER_RULE_ID = "KOAPTIX_RI_CONSTRAINT_TRIGGER_GENERATED_NAME_V1"
+RI_CONSTRAINT_TRIGGER_NAME_RE = re.compile(r"RI_ConstraintTrigger_([ac])_\d+")
+EXTENSION_TYPE_OWNER_CANONICALIZATION_TARGETS = frozenset({
+    "public._gtrgm",
+    "public.gtrgm",
+})
+APP_ROUTINE_PUBLIC_EXECUTE_POLICY_REVIEW_REQUIRED = "APP_ROUTINE_PUBLIC_EXECUTE_POLICY_REVIEW_REQUIRED"
+APP_ROUTINE_PUBLIC_EXECUTE_POLICY_CLEAR = "NO_APP_ROUTINE_PUBLIC_EXECUTE_POLICY_EVIDENCE"
 
 
 def is_extension_owner_canonicalization_target(record: dict[str, Any]) -> bool:
     return record.get("extname") in EXTENSION_OWNER_CANONICALIZATION_TARGETS
 
 
+def is_pg_cron_extension_record(record: dict[str, Any]) -> bool:
+    return record.get("extname") == "pg_cron"
+
+
 def project_extension_owner_record_for_portable_root(record: dict[str, Any], *, source_side: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
     projected = dict(record)
+    audit_records: list[dict[str, Any]] = []
     if not is_extension_owner_canonicalization_target(projected):
         return projected, None
     audit = {
@@ -60,16 +79,36 @@ def project_extension_owner_record_for_portable_root(record: dict[str, Any], *, 
     }
     if "owner" not in projected:
         audit.update({"status": "UNRESOLVED_OWNER_FIELD_MISSING", "raw_owner": None, "portable_owner": None})
-        return projected, audit
-    raw_owner = projected.pop("owner")
-    audit["raw_owner"] = raw_owner
-    if raw_owner is None or not isinstance(raw_owner, str):
-        audit.update({"status": "UNRESOLVED_OWNER_VALUE_NON_STRING_OR_NULL", "portable_owner": None})
-        projected["owner"] = raw_owner
-        return projected, audit
-    projected["portable_owner"] = EXTENSION_OWNER_PORTABLE_OWNER_TOKEN
-    audit.update({"status": "CANONICALIZED_RUNTIME_METADATA", "portable_owner": EXTENSION_OWNER_PORTABLE_OWNER_TOKEN})
-    return projected, audit
+        audit_records.append(audit)
+    else:
+        raw_owner = projected.pop("owner")
+        audit["raw_owner"] = raw_owner
+        if raw_owner is None or not isinstance(raw_owner, str):
+            audit.update({"status": "UNRESOLVED_OWNER_VALUE_NON_STRING_OR_NULL", "portable_owner": None})
+            projected["owner"] = raw_owner
+            audit_records.append(audit)
+        else:
+            projected["portable_owner"] = EXTENSION_OWNER_PORTABLE_OWNER_TOKEN
+            audit.update({"status": "CANONICALIZED_RUNTIME_METADATA", "portable_owner": EXTENSION_OWNER_PORTABLE_OWNER_TOKEN})
+            audit_records.append(audit)
+    if is_pg_cron_extension_record(projected) or record.get("extname") == "pg_cron":
+        for field in ("extconfig", "extcondition"):
+            if field in projected:
+                raw_value = projected.pop(field)
+                portable_field = f"portable_{field}"
+                projected[portable_field] = EXTENSION_RUNTIME_METADATA_TOKEN
+                audit_records.append({
+                    "rule_id": EXTENSION_RUNTIME_METADATA_RULE_ID,
+                    "source_side": source_side,
+                    "object_class": "extensions",
+                    "object_identity": "pg_cron",
+                    "raw_field_path": f"/{field}",
+                    "portable_field_path": f"/{portable_field}",
+                    "raw_value_present": raw_value is not None,
+                    "portable_value": EXTENSION_RUNTIME_METADATA_TOKEN,
+                    "status": "CANONICALIZED_RUNTIME_METADATA",
+                })
+    return projected, audit_records[0] if len(audit_records) == 1 else {"status": "CANONICALIZATION_AUDIT_GROUP", "records": audit_records}
 
 
 def project_extension_owner_records_for_portable_root(records: list[dict[str, Any]], *, source_side: str) -> dict[str, Any]:
@@ -80,17 +119,20 @@ def project_extension_owner_records_for_portable_root(records: list[dict[str, An
         projected, audit = project_extension_owner_record_for_portable_root(record, source_side=source_side)
         portable_records.append(projected)
         if audit is not None:
-            audit_records.append(audit)
-            if audit.get("status") != "CANONICALIZED_RUNTIME_METADATA":
-                warning_records.append(audit)
+            grouped = audit.get("records") if audit.get("status") == "CANONICALIZATION_AUDIT_GROUP" else None
+            for audit_record in (grouped or [audit]):
+                audit_records.append(audit_record)
+                if audit_record.get("status") != "CANONICALIZED_RUNTIME_METADATA":
+                    warning_records.append(audit_record)
     canonicalized = [r for r in audit_records if r.get("status") == "CANONICALIZED_RUNTIME_METADATA"]
-    if sorted(r.get("object_identity") for r in canonicalized) != sorted(EXTENSION_OWNER_CANONICALIZATION_TARGETS):
+    owner_canonicalized = [r for r in canonicalized if r.get("rule_id") == EXTENSION_OWNER_CANONICALIZATION_RULE_ID]
+    if sorted(r.get("object_identity") for r in owner_canonicalized) != sorted(EXTENSION_OWNER_CANONICALIZATION_TARGETS):
         warning_records.append({
             "rule_id": EXTENSION_OWNER_CANONICALIZATION_RULE_ID,
             "source_side": source_side,
             "status": "UNRESOLVED_TARGET_SET_INCOMPLETE",
             "expected_targets": sorted(EXTENSION_OWNER_CANONICALIZATION_TARGETS),
-            "observed_targets": sorted(r.get("object_identity") for r in canonicalized),
+            "observed_targets": sorted(r.get("object_identity") for r in owner_canonicalized),
         })
     return {
         "portable_records": portable_records,
@@ -99,12 +141,185 @@ def project_extension_owner_records_for_portable_root(records: list[dict[str, An
     }
 
 
-def project_expected_structural_manifest_for_extension_owner_runtime_metadata(manifest: dict[str, Any]) -> dict[str, Any]:
+def project_extension_managed_routine_record_for_portable_root(record: dict[str, Any], *, source_side: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    projected = dict(record)
+    if not projected.get("extension_managed"):
+        return projected, []
+    routine_identity = projected.get("routine_identity") or (
+        f"{projected.get('schema_name')}.{projected.get('name')}({projected.get('identity_arguments') or ''})"
+    )
+    audit_records: list[dict[str, Any]] = []
+    if "owner" in projected:
+        raw_owner = projected.pop("owner")
+        projected["portable_owner"] = EXTENSION_MANAGED_OBJECT_OWNER_TOKEN
+        audit_records.append({
+            "rule_id": EXTENSION_MANAGED_OBJECT_RULE_ID,
+            "source_side": source_side,
+            "object_class": "routines",
+            "object_identity": routine_identity,
+            "raw_owner": raw_owner,
+            "portable_owner": EXTENSION_MANAGED_OBJECT_OWNER_TOKEN,
+            "status": "CANONICALIZED_EXTENSION_MANAGED_OWNER",
+        })
+    if "acl" in projected:
+        raw_acl = projected.pop("acl")
+        projected["portable_acl"] = EXTENSION_MANAGED_ROUTINE_ACL_TOKEN
+        audit_records.append({
+            "rule_id": EXTENSION_MANAGED_OBJECT_RULE_ID,
+            "source_side": source_side,
+            "object_class": "routines",
+            "object_identity": routine_identity,
+            "raw_acl_present": raw_acl not in (None, "", "{}"),
+            "portable_acl": EXTENSION_MANAGED_ROUTINE_ACL_TOKEN,
+            "status": "CANONICALIZED_EXTENSION_MANAGED_ROUTINE_ACL",
+        })
+    return projected, audit_records
+
+
+def project_extension_managed_type_record_for_portable_root(record: dict[str, Any], *, source_side: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    projected = dict(record)
+    type_identity = projected.get("type_identity") or f"{projected.get('schema_name')}.{projected.get('name')}"
+    if type_identity not in EXTENSION_TYPE_OWNER_CANONICALIZATION_TARGETS:
+        return projected, []
+    if "owner" not in projected:
+        return projected, []
+    raw_owner = projected.pop("owner")
+    projected["portable_owner"] = EXTENSION_MANAGED_OBJECT_OWNER_TOKEN
+    return projected, [{
+        "rule_id": EXTENSION_MANAGED_OBJECT_RULE_ID,
+        "source_side": source_side,
+        "object_class": "types",
+        "object_identity": type_identity,
+        "raw_owner": raw_owner,
+        "portable_owner": EXTENSION_MANAGED_OBJECT_OWNER_TOKEN,
+        "status": "CANONICALIZED_EXTENSION_MANAGED_OWNER",
+    }]
+
+
+def is_internal_ri_constraint_trigger(record: dict[str, Any]) -> bool:
+    return bool(record.get("tgisinternal")) and bool(RI_CONSTRAINT_TRIGGER_NAME_RE.fullmatch(str(record.get("name") or "")))
+
+
+def project_ri_constraint_trigger_record_for_portable_root(record: dict[str, Any], *, source_side: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    projected = dict(record)
+    if not is_internal_ri_constraint_trigger(projected):
+        return projected, []
+    raw_name = str(projected.get("name"))
+    portable_name = RI_CONSTRAINT_TRIGGER_NAME_RE.sub(r"RI_ConstraintTrigger_\1__KOAPTIX_GENERATED__", raw_name)
+    raw_definition = projected.get("definition")
+    projected["name"] = portable_name
+    if isinstance(raw_definition, str):
+        projected["definition"] = RI_CONSTRAINT_TRIGGER_NAME_RE.sub(r"RI_ConstraintTrigger_\1__KOAPTIX_GENERATED__", raw_definition)
+    return projected, [{
+        "rule_id": RI_CONSTRAINT_TRIGGER_RULE_ID,
+        "source_side": source_side,
+        "object_class": "triggers",
+        "object_identity": f"{record.get('schema_name')}.{record.get('table_name')}.{raw_name}",
+        "portable_name": portable_name,
+        "status": "CANONICALIZED_RI_CONSTRAINT_TRIGGER_GENERATED_NAME",
+    }]
+
+
+def project_structural_manifest_for_portable_runtime_noise(manifest: dict[str, Any], *, source_side: str) -> dict[str, Any]:
     projected_manifest = json.loads(canon(manifest))
-    projection = project_extension_owner_records_for_portable_root(projected_manifest.get("extensions", []), source_side="expected")
-    projected_manifest["extensions"] = projection["portable_records"]
+    audit_records: list[dict[str, Any]] = []
+    warning_records: list[dict[str, Any]] = []
+
+    extension_projection = project_extension_owner_records_for_portable_root(projected_manifest.get("extensions", []), source_side=source_side)
+    projected_manifest["extensions"] = extension_projection["portable_records"]
+    audit_records.extend(extension_projection["audit_records"])
+    warning_records.extend(extension_projection["warning_records"])
+
+    projected_routines: list[dict[str, Any]] = []
+    for record in projected_manifest.get("routines", []):
+        projected, audits = project_extension_managed_routine_record_for_portable_root(record, source_side=source_side)
+        projected_routines.append(projected)
+        audit_records.extend(audits)
+    projected_manifest["routines"] = projected_routines
+
+    projected_triggers: list[dict[str, Any]] = []
+    for record in projected_manifest.get("triggers", []):
+        projected, audits = project_ri_constraint_trigger_record_for_portable_root(record, source_side=source_side)
+        projected_triggers.append(projected)
+        audit_records.extend(audits)
+    projected_manifest["triggers"] = projected_triggers
+
     sort_structural_manifest(projected_manifest)
-    return {"manifest": projected_manifest, **projection}
+    return {"manifest": projected_manifest, "audit_records": audit_records, "warning_records": warning_records}
+
+
+def project_security_manifest_for_portable_runtime_noise(manifest: dict[str, Any], *, source_side: str) -> dict[str, Any]:
+    projected_manifest = json.loads(canon(manifest))
+    audit_records: list[dict[str, Any]] = []
+    warning_records: list[dict[str, Any]] = []
+
+    extension_routine_identities = {
+        record.get("routine_identity")
+        for record in projected_manifest.get("routines", [])
+        if record.get("extension_managed") and record.get("routine_identity")
+    }
+
+    projected_routines: list[dict[str, Any]] = []
+    for record in projected_manifest.get("routines", []):
+        projected, audits = project_extension_managed_routine_record_for_portable_root(record, source_side=source_side)
+        projected_routines.append(projected)
+        audit_records.extend(audits)
+    projected_manifest["routines"] = projected_routines
+
+    projected_types: list[dict[str, Any]] = []
+    for record in projected_manifest.get("types", []):
+        projected, audits = project_extension_managed_type_record_for_portable_root(record, source_side=source_side)
+        projected_types.append(projected)
+        audit_records.extend(audits)
+    projected_manifest["types"] = projected_types
+
+    retained_routine_grants: list[dict[str, Any]] = []
+    excluded_grants: list[dict[str, Any]] = []
+    for grant in projected_manifest.get("expanded_routine_grants", []):
+        if grant.get("object_identity") in extension_routine_identities:
+            excluded_grants.append(grant)
+        else:
+            retained_routine_grants.append(grant)
+    projected_manifest["expanded_routine_grants"] = retained_routine_grants
+    if excluded_grants:
+        audit_records.append({
+            "rule_id": EXTENSION_MANAGED_ROUTINE_GRANT_EXCLUSION_RULE_ID,
+            "source_side": source_side,
+            "object_class": "expanded_routine_grants",
+            "excluded_count": len(excluded_grants),
+            "sample_object_identities": sorted({g.get("object_identity") for g in excluded_grants})[:20],
+            "status": "EXCLUDED_EXTENSION_MANAGED_ROUTINE_GRANTS",
+        })
+
+    sort_security_manifest(projected_manifest)
+    return {"manifest": projected_manifest, "audit_records": audit_records, "warning_records": warning_records}
+
+
+def app_routine_public_execute_policy_evidence(security: dict[str, Any]) -> dict[str, Any]:
+    app_routine_identities = {
+        record.get("routine_identity")
+        for record in security.get("routines", [])
+        if not record.get("extension_managed") and record.get("routine_identity")
+    }
+    grants = [
+        grant
+        for grant in security.get("expanded_routine_grants", [])
+        if grant.get("object_identity") in app_routine_identities
+        and grant.get("object_class") == "routine"
+        and grant.get("grantee") == "PUBLIC"
+        and grant.get("privilege_type") == "EXECUTE"
+        and not grant.get("grant_option")
+    ]
+    identities = sorted({grant.get("object_identity") for grant in grants})
+    return {
+        "status": APP_ROUTINE_PUBLIC_EXECUTE_POLICY_REVIEW_REQUIRED if identities else APP_ROUTINE_PUBLIC_EXECUTE_POLICY_CLEAR,
+        "count": len(identities),
+        "routine_identities": identities,
+    }
+
+
+def project_expected_structural_manifest_for_extension_owner_runtime_metadata(manifest: dict[str, Any]) -> dict[str, Any]:
+    return project_structural_manifest_for_portable_runtime_noise(manifest, source_side="expected")
 STATUS_PASS = "PASS_PORTABLE_SEMANTIC_APPLICATION_SCHEMA_BASELINE_REFERENCE_SEED_V1_AND_TWO_CLEAN_DISPOSABLE_FRESH_BUILDS_NO_REMOTE_MUTATION"
 
 BASELINE_VERIFIER_DIR = Path(__file__).resolve().parent
@@ -667,7 +882,7 @@ def sort_structural_manifest(structural: dict[str, Any]) -> dict[str, Any]:
     structural["views"] = sort_records("structural.views", structural["views"], ["schema_name", "name"], lambda r: scalar_tuple([r.get("schema_name"), r.get("name")]))
     structural["constraints"] = sort_records("structural.constraints", structural["constraints"], ["schema_name", "relation_name", "name", "contype"], lambda r: scalar_tuple([r.get("schema_name") or "", r.get("relation_name") or "", r.get("name"), r.get("contype")]))
     structural["indexes"] = sort_records("structural.indexes", structural["indexes"], ["table_schema", "table_name", "schema_name", "index_name"], lambda r: scalar_tuple([r.get("table_schema"), r.get("table_name"), r.get("schema_name"), r.get("index_name")]))
-    structural["triggers"] = sort_records("structural.triggers", structural["triggers"], ["schema_name", "table_name", "name"], lambda r: scalar_tuple([r.get("schema_name"), r.get("table_name"), r.get("name")]))
+    structural["triggers"] = sort_records("structural.triggers", structural["triggers"], ["schema_name", "table_name", "name", "definition"], lambda r: scalar_tuple([r.get("schema_name"), r.get("table_name"), r.get("name"), r.get("definition")]))
     return structural
 
 
@@ -902,13 +1117,11 @@ def build_actual_manifests(capture: dict[str, Any]) -> dict[str, Any]:
     rel_delta = {f"{r['schema_name']}.{r['relation_name']}:{r['relkind']}": r for r in capture["relation_delta"]}
     routine_delta = {r["routine_identity"]: r for r in capture["routine_delta"]}
 
-    extension_owner_projection = project_extension_owner_records_for_portable_root([strip_oid_fields(r) for r in capture["extensions"]], source_side="actual")
-
     structural = {
         "basis": "R7 immutable logical evidence merged with R13 portable catalog field delta",
         "contract_id": PORTABLE_CONTRACT_ID,
         "excludes": ["object_oids", "database_oids", "role_oids", "relfilenodes", "internal_dependency_addresses", "snapshot_identifiers", "planner_statistics", "physical_storage_estimates"],
-        "extensions": extension_owner_projection["portable_records"],
+        "extensions": [strip_oid_fields(r) for r in capture["extensions"]],
         "relations": [],
         "columns": [],
         "sequences": [strip_oid_fields(r) for r in capture["sequences"]],
@@ -973,9 +1186,34 @@ def build_actual_manifests(capture: dict[str, Any]) -> dict[str, Any]:
         "policies": strip_oid_fields(capture["policies"]),
         "rls_reconciliation": rls_reconciliation,
     }
-    sort_structural_manifest(structural)
-    sort_security_manifest(security)
-    return {"structural": structural, "security": security, "rls_reconciliation": rls_reconciliation, "ext_set": ext_set, "capture": capture, "extension_owner_runtime_metadata_audit": extension_owner_projection["audit_records"], "extension_owner_runtime_metadata_warnings": extension_owner_projection["warning_records"]}
+    structural_projection = project_structural_manifest_for_portable_runtime_noise(structural, source_side="actual")
+    security_projection = project_security_manifest_for_portable_runtime_noise(security, source_side="actual")
+    structural = structural_projection["manifest"]
+    security = security_projection["manifest"]
+    policy_visibility = app_routine_public_execute_policy_evidence(security)
+    return {
+        "structural": structural,
+        "security": security,
+        "rls_reconciliation": rls_reconciliation,
+        "ext_set": ext_set,
+        "capture": capture,
+        "portable_canonicalization_audit": {
+            "structural": structural_projection["audit_records"],
+            "security": security_projection["audit_records"],
+            "warnings": structural_projection["warning_records"] + security_projection["warning_records"],
+        },
+        "security_policy_visibility": {
+            "app_routine_public_execute": policy_visibility,
+        },
+        "extension_owner_runtime_metadata_audit": [
+            r for r in structural_projection["audit_records"]
+            if r.get("rule_id") == EXTENSION_OWNER_CANONICALIZATION_RULE_ID
+        ],
+        "extension_owner_runtime_metadata_warnings": [
+            r for r in structural_projection["warning_records"]
+            if r.get("rule_id") == EXTENSION_OWNER_CANONICALIZATION_RULE_ID
+        ],
+    }
 
 
 def count_actual_objects(capture: dict[str, Any], ext_set: set[tuple[str, str]]) -> dict[str, int]:
@@ -1115,15 +1353,25 @@ def build_semantic_outputs(capture: dict[str, Any], canonical_dir: Path, prefix:
     security_input = manifest_input(built["security"], ["relations", "routines", "types", "expanded_relation_grants", "expanded_routine_grants", "expanded_type_grants", "expanded_default_acl_grants", "policies"])
     structural_root = sha_text(structural_input)
     security_root = sha_text(security_input)
-    expected_extension_owner_projection = project_expected_structural_manifest_for_extension_owner_runtime_metadata(load_json(ROOT / "authority" / "portable" / "expected_portable_structural_manifest.json"))
-    expected_structural_input = manifest_input(expected_extension_owner_projection["manifest"], ["extensions", "relations", "columns", "sequences", "routines", "views", "constraints", "indexes", "triggers"])
+    expected_structural_projection = project_expected_structural_manifest_for_extension_owner_runtime_metadata(load_json(ROOT / "authority" / "portable" / "expected_portable_structural_manifest.json"))
+    expected_structural_input = manifest_input(expected_structural_projection["manifest"], ["extensions", "relations", "columns", "sequences", "routines", "views", "constraints", "indexes", "triggers"])
     expected_structural_root = sha_text(expected_structural_input)
-    expected_security_input = (ROOT / "authority" / "portable" / "expected_portable_security_input.txt").read_text(encoding="utf-8")
+    expected_security_projection = project_security_manifest_for_portable_runtime_noise(load_json(ROOT / "authority" / "portable" / "expected_portable_security_manifest.json"), source_side="expected")
+    expected_security_input = manifest_input(expected_security_projection["manifest"], ["relations", "routines", "types", "expanded_relation_grants", "expanded_routine_grants", "expanded_type_grants", "expanded_default_acl_grants", "policies"])
+    expected_security_root = sha_text(expected_security_input)
     structural_diff = diff_inputs(expected_structural_input, structural_input)
     security_diff = diff_inputs(expected_security_input, security_input)
     write_json_pretty(f"{prefix}_actual_portable_structural_manifest.json", built["structural"])
     write_json_pretty(f"{prefix}_actual_portable_security_manifest.json", built["security"])
-    write_json_pretty(f"{prefix}_extension_owner_runtime_metadata_audit.json", {"expected": expected_extension_owner_projection["audit_records"], "actual": built["extension_owner_runtime_metadata_audit"], "warnings": expected_extension_owner_projection["warning_records"] + built["extension_owner_runtime_metadata_warnings"]})
+    write_json_pretty(f"{prefix}_extension_owner_runtime_metadata_audit.json", {"expected": [r for r in expected_structural_projection["audit_records"] if r.get("rule_id") == EXTENSION_OWNER_CANONICALIZATION_RULE_ID], "actual": built["extension_owner_runtime_metadata_audit"], "warnings": [r for r in expected_structural_projection["warning_records"] if r.get("rule_id") == EXTENSION_OWNER_CANONICALIZATION_RULE_ID] + built["extension_owner_runtime_metadata_warnings"]})
+    write_json_pretty(f"{prefix}_portable_canonicalization_audit.json", {
+        "expected_structural": expected_structural_projection["audit_records"],
+        "actual_structural": built["portable_canonicalization_audit"]["structural"],
+        "expected_security": expected_security_projection["audit_records"],
+        "actual_security": built["portable_canonicalization_audit"]["security"],
+        "warnings": expected_structural_projection["warning_records"] + expected_security_projection["warning_records"] + built["portable_canonicalization_audit"]["warnings"],
+        "security_policy_visibility": built["security_policy_visibility"],
+    })
     write_text(f"fingerprints/{fingerprint_prefix}_portable_structural_input.txt", structural_input)
     write_text(f"fingerprints/{fingerprint_prefix}_portable_security_input.txt", security_input)
     roots = {
@@ -1131,8 +1379,8 @@ def build_semantic_outputs(capture: dict[str, Any], canonical_dir: Path, prefix:
         "expected_portable_structural_root": expected_structural_root,
         "portable_structural_root_match": structural_root == expected_structural_root,
         "portable_security_root": security_root,
-        "expected_portable_security_root": EXPECTED["security_root"],
-        "portable_security_root_match": security_root == EXPECTED["security_root"],
+        "expected_portable_security_root": expected_security_root,
+        "portable_security_root_match": security_root == expected_security_root,
     }
     write_json_pretty(f"fingerprints/{fingerprint_prefix}_portable_roots.json", roots)
     write_json_pretty(f"{prefix}_portable_difference.json", {"structural": structural_diff, "security": security_diff})
@@ -1153,13 +1401,16 @@ def build_semantic_outputs(capture: dict[str, Any], canonical_dir: Path, prefix:
         "complete_verification_captured": True,
         "verification_succeeded": True,
         "portable_structural_root": structural_root,
-        "portable_structural_root_match": structural_root == EXPECTED["structural_root"],
+        "portable_structural_root_match": structural_root == expected_structural_root,
         "portable_security_root": security_root,
-        "portable_security_root_match": security_root == EXPECTED["security_root"],
+        "portable_security_root_match": security_root == expected_security_root,
+        "expected_portable_structural_root": expected_structural_root,
+        "expected_portable_security_root": expected_security_root,
         "object_counts": object_counts,
         "object_counts_match": object_counts == EXPECTED_COUNTS,
         "rls_reconciliation": built["rls_reconciliation"],
         "rls_match": built["rls_reconciliation"].get("accepted_19_plus_9_equals_28_reproduced") and built["rls_reconciliation"].get("staging_market_raw_disabled_confirmed"),
+        "security_policy_visibility": built["security_policy_visibility"],
         "reference": reference,
         "reference_hashes_match": all(v["hash_match"] for v in reference["tables"].values()),
         "reference_seed_root": reference["reference_seed_root"],
@@ -1454,9 +1705,12 @@ def build_summary_fields(build: dict[str, Any]) -> dict[str, Any]:
         "accepted_indexes": counts.get("accepted_indexes"),
         "accepted_non_internal_triggers": counts.get("accepted_non_internal_triggers"),
         "portable_structural_root": build.get("portable_structural_root"),
+        "expected_portable_structural_root": build.get("expected_portable_structural_root"),
         "portable_structural_root_match": build.get("portable_structural_root_match", False),
         "portable_security_root": build.get("portable_security_root"),
+        "expected_portable_security_root": build.get("expected_portable_security_root"),
         "portable_security_root_match": build.get("portable_security_root_match", False),
+        "security_policy_visibility": build.get("security_policy_visibility"),
         "rls_applicable": rls.get("applicable_total"),
         "rls_enabled": rls.get("enabled"),
         "rls_disabled": rls.get("disabled"),
@@ -1656,9 +1910,12 @@ def write_handoffs(status: str, blockers: list[str], verification: dict[str, Any
         "missing_capture_files": qualification.get("missing_capture_files", []),
         "complete_capture": qualification.get("complete_capture", False),
         "actual_portable_structural_root": qualification.get("portable_structural_root"),
+        "expected_portable_structural_root": qualification.get("expected_portable_structural_root"),
         "actual_portable_structural_root_match": qualification.get("portable_structural_root_match", False),
         "actual_portable_security_root": qualification.get("portable_security_root"),
+        "expected_portable_security_root": qualification.get("expected_portable_security_root"),
         "actual_portable_security_root_match": qualification.get("portable_security_root_match", False),
+        "security_policy_visibility": qualification.get("security_policy_visibility"),
         "object_counts_match": qualification.get("object_counts_match", False),
         "rls_match": qualification.get("rls_match", False),
         "comment_semantics_match": "INCLUDED_IN_PORTABLE_STRUCTURAL_ROOT_MATCH" if qualification.get("portable_structural_root_match") else False,
@@ -1743,8 +2000,8 @@ def write_handoffs(status: str, blockers: list[str], verification: dict[str, Any
 - environment_or_secret_file_read: false
 - docker_network_or_pull_attempted: false
 - authority_integrity_verified: {str(verification.get('authority_integrity_verified')).lower()}
-- expected_portable_structural_root: {EXPECTED['structural_root']}
-- expected_portable_security_root: {EXPECTED['security_root']}
+- expected_portable_structural_root: {q_summary['expected_portable_structural_root']}
+- expected_portable_security_root: {q_summary['expected_portable_security_root']}
 
 - frozen_r20_package:
     harness_sha256: {frozen['hashes']['harness/000_disposable_cluster_prerequisites.sql']}
@@ -1897,9 +2154,12 @@ Please review R23. R22 strict JSON transport succeeded for all 21 capture files,
 - missing capture files: `{q_summary['missing_capture_files']}`
 - complete capture: `{str(q_summary['complete_capture']).upper()}`
 - structural root: `{q_summary['actual_portable_structural_root']}`
+- expected structural root: `{q_summary['expected_portable_structural_root']}`
 - structural root match: `{str(q_summary['actual_portable_structural_root_match']).upper()}`
 - security root: `{q_summary['actual_portable_security_root']}`
+- expected security root: `{q_summary['expected_portable_security_root']}`
 - security root match: `{str(q_summary['actual_portable_security_root_match']).upper()}`
+- security policy visibility: `{q_summary['security_policy_visibility']}`
 - object counts match: `{str(q_summary['object_counts_match']).upper()}`
 - RLS match: `{str(q_summary['rls_match']).upper()}`
 - reference hashes match: `{str(q_summary['reference_hashes_match']).upper()}`
