@@ -26,6 +26,10 @@ REFERENCE_ONLY_STATUS_ROOT_REQUIRED = "BLOCKED_ARTIFACT_ROOT_REQUIRED"
 REFERENCE_ONLY_STATUS_AUTHORITY_MISMATCH = "BLOCKED_REFERENCE_AUTHORITY_MISMATCH"
 REFERENCE_ONLY_STATUS_UNSAFE_ENV = "BLOCKED_UNSAFE_ENV_OR_DB_RISK"
 REFERENCE_ONLY_STATUS_FAILED = "REFERENCE_PACKAGE_GENERATION_FAILED"
+REFERENCE_ONLY_STATUS_ACCEPTED_AUTHORITY_MISSING = "BLOCKED_ACCEPTED_REGION_ID_AUTHORITY_BYTES_MISSING"
+REFERENCE_SOURCE_POLICY_CAPTURE = "CAPTURE_DIR"
+REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY = "ACCEPTED_AUTHORITY_CANONICAL_JSONL"
+REJECTED_STALE_REGION_DIM_SHA256 = "6641DBFB3B1314A4A33EA282B971F8F803E0A630529BAEA21050C472AD9F9F90"
 
 
 EXTENSION_OWNER_CANONICALIZATION_RULE_ID = "KOAPTIX_EXT_OWNER_RUNTIME_METADATA_V1"
@@ -988,31 +992,93 @@ def count_actual_objects(capture: dict[str, Any], ext_set: set[tuple[str, str]])
     }
 
 
-def canonicalize_reference(capture_dir: Path) -> dict[str, Any]:
+def accepted_reference_canonical_path(table_identity: str) -> Path:
+    return ROOT / "authority" / "reference" / f"{table_identity}.canonical.jsonl"
+
+
+def accepted_reference_canonical_text(table_identity: str) -> tuple[str, Path]:
+    path = accepted_reference_canonical_path(table_identity)
+    if not path.is_file():
+        raise ReferenceOnlyGenerationBlocked(
+            REFERENCE_ONLY_STATUS_ACCEPTED_AUTHORITY_MISSING,
+            f"accepted reference authority bytes missing for {table_identity}: {path}",
+        )
+    text = path.read_text(encoding="utf-8")
+    row_hash = sha_text(text)
+    expected_hash = REFERENCE_TABLES[table_identity]["sha256"]
+    if row_hash != expected_hash:
+        raise ReferenceOnlyGenerationBlocked(
+            REFERENCE_ONLY_STATUS_AUTHORITY_MISMATCH,
+            f"accepted reference authority hash mismatch for {table_identity}: {row_hash} != {expected_hash}",
+        )
+    if table_identity == "public.region_dim" and row_hash == REJECTED_STALE_REGION_DIM_SHA256:
+        raise ReferenceOnlyGenerationBlocked(
+            REFERENCE_ONLY_STATUS_AUTHORITY_MISMATCH,
+            "public.region_dim accepted authority unexpectedly matches rejected stale region_code hash",
+        )
+    return text, path
+
+
+def canonicalize_reference_from_capture(capture_dir: Path, table_identity: str, cols_meta: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+    raw_path = capture_dir / f"reference_{table_identity}.json"
+    raw = json.loads(raw_path.read_text(encoding="utf-8").strip())
+    lines = []
+    for row in raw:
+        cells = []
+        for col_meta in cols_meta:
+            col = col_meta["column"]
+            value = row.get(col)
+            is_null = bool(row.get(col + "__is_null"))
+            cells.append({"column": col, "format_type": col_meta["format_type"], "is_null": is_null, "text_value": None if is_null else value})
+        lines.append(json.dumps(cells, ensure_ascii=False, separators=(",", ":")))
+    return "\n".join(lines), {
+        "source_policy": REFERENCE_SOURCE_POLICY_CAPTURE,
+        "source_path": str(raw_path),
+        "accepted_authority_path": str(accepted_reference_canonical_path(table_identity)),
+        "stale_r22_capture_fallback_allowed": True,
+    }
+
+
+def canonicalize_reference_from_accepted_authority(table_identity: str) -> tuple[str, dict[str, Any]]:
+    text, path = accepted_reference_canonical_text(table_identity)
+    return text, {
+        "source_policy": REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY,
+        "source_path": str(path),
+        "accepted_authority_path": str(path),
+        "stale_r22_capture_fallback_allowed": False,
+    }
+
+
+def canonicalize_reference(capture_dir: Path, *, source_policy: str = REFERENCE_SOURCE_POLICY_CAPTURE) -> dict[str, Any]:
     results = {}
     aggregate_lines = []
+    source_trace = {}
     for table_identity, meta in REFERENCE_TABLES.items():
-        cols_meta = reference_columns(table_identity)
-        raw = json.loads((capture_dir / f"reference_{table_identity}.json").read_text(encoding="utf-8").strip())
-        lines = []
-        for row in raw:
-            cells = []
-            for col_meta in cols_meta:
-                col = col_meta["column"]
-                value = row.get(col)
-                is_null = bool(row.get(col + "__is_null"))
-                cells.append({"column": col, "format_type": col_meta["format_type"], "is_null": is_null, "text_value": None if is_null else value})
-            lines.append(json.dumps(cells, ensure_ascii=False, separators=(",", ":")))
-        text = "\n".join(lines)
+        if source_policy == REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY:
+            text, trace = canonicalize_reference_from_accepted_authority(table_identity)
+        else:
+            cols_meta = reference_columns(table_identity)
+            text, trace = canonicalize_reference_from_capture(capture_dir, table_identity, cols_meta)
+        lines = text.splitlines() if text else []
         out_rel = f"freshbuild/{capture_dir.name}_{table_identity}.canonical.jsonl"
         write_text(out_rel, text)
         row_hash = sha_text(text)
+        trace.update({
+            "output_path": str(ROOT / out_rel),
+            "rows": len(lines),
+            "sha256": row_hash,
+            "expected_sha256": meta["sha256"],
+            "hash_match": row_hash == meta["sha256"],
+        })
+        source_trace[table_identity] = trace
         results[table_identity] = {
             "rows": len(lines),
             "expected_rows": meta["rows"],
             "sha256": row_hash,
             "expected_sha256": meta["sha256"],
             "hash_match": row_hash == meta["sha256"],
+            "source_policy": trace["source_policy"],
+            "source_path": trace["source_path"],
         }
         aggregate_lines.append(f"{table_identity}\t{len(lines)}\t{row_hash}")
     aggregate_input = "\n".join(sorted(aggregate_lines))
@@ -1026,6 +1092,9 @@ def canonicalize_reference(capture_dir: Path) -> dict[str, Any]:
         "reference_seed_root_match": aggregate_root == EXPECTED["reference_seed_root"],
         "reference_seed_aggregate_input_final_lf_audit": aggregate_input_final_lf_variant,
         "reference_seed_root_final_lf_audit": aggregate_root_final_lf_variant,
+        "source_policy": source_policy,
+        "source_trace": source_trace,
+        "final_region_dim_source": source_trace.get("public.region_dim"),
     }
 
 
@@ -1040,7 +1109,7 @@ def table_row_counts(capture_dir: Path) -> dict[str, Any]:
     }
 
 
-def build_semantic_outputs(capture: dict[str, Any], canonical_dir: Path, prefix: str, fingerprint_prefix: str) -> dict[str, Any]:
+def build_semantic_outputs(capture: dict[str, Any], canonical_dir: Path, prefix: str, fingerprint_prefix: str, *, reference_source_policy: str = REFERENCE_SOURCE_POLICY_CAPTURE) -> dict[str, Any]:
     built = build_actual_manifests(capture)
     structural_input = manifest_input(built["structural"], ["extensions", "relations", "columns", "sequences", "routines", "views", "constraints", "indexes", "triggers"])
     security_input = manifest_input(built["security"], ["relations", "routines", "types", "expanded_relation_grants", "expanded_routine_grants", "expanded_type_grants", "expanded_default_acl_grants", "policies"])
@@ -1071,7 +1140,7 @@ def build_semantic_outputs(capture: dict[str, Any], canonical_dir: Path, prefix:
     object_counts = count_actual_objects(normalized_capture, built["ext_set"])
     write_json_pretty(f"{prefix}_object_counts.json", {"actual": object_counts, "expected": EXPECTED_COUNTS, "match": object_counts == EXPECTED_COUNTS})
     write_json_pretty(f"{prefix}_rls_reconciliation.json", built["rls_reconciliation"])
-    reference = canonicalize_reference(canonical_dir)
+    reference = canonicalize_reference(canonical_dir, source_policy=reference_source_policy)
     write_json_pretty(f"{prefix}_reference_hashes.json", reference)
     counts = table_row_counts(canonical_dir)
     write_json_pretty(f"{prefix}_table_row_counts.json", counts)
@@ -1115,7 +1184,7 @@ def permute_capture(capture: dict[str, Any], seed: int) -> dict[str, Any]:
     return out
 
 
-def run_fixture_construction() -> dict[str, Any]:
+def run_fixture_construction(*, reference_source_policy: str = REFERENCE_SOURCE_POLICY_CAPTURE) -> dict[str, Any]:
     raw_dir = ROOT / "fixture" / "r22_qualification_1_raw_transport"
     canonical_dir = ROOT / "fixture" / "r22_qualification_1_canonical_capture"
     validation = parse_raw_capture_dir(raw_dir, canonical_dir, CAPTURE_QUERIES)
@@ -1139,8 +1208,8 @@ def run_fixture_construction() -> dict[str, Any]:
         write_json_pretty("manifests/fixture_construction_result.json", result)
         return result
     capture = validation["capture"]
-    first = build_semantic_outputs(capture, canonical_dir, "fixture/actual", "fixture")
-    second = build_semantic_outputs(json.loads(canon(capture)), canonical_dir, "fixture/replay", "fixture_replay")
+    first = build_semantic_outputs(capture, canonical_dir, "fixture/actual", "fixture", reference_source_policy=reference_source_policy)
+    second = build_semantic_outputs(json.loads(canon(capture)), canonical_dir, "fixture/replay", "fixture_replay", reference_source_policy=reference_source_policy)
     first_struct = (ROOT / "fixture" / "actual_actual_portable_structural_manifest.json").read_bytes()
     second_struct = (ROOT / "fixture" / "replay_actual_portable_structural_manifest.json").read_bytes()
     first_sec = (ROOT / "fixture" / "actual_actual_portable_security_manifest.json").read_bytes()
@@ -1148,7 +1217,7 @@ def run_fixture_construction() -> dict[str, Any]:
     permutation_hashes: list[dict[str, Any]] = []
     deterministic = first_struct == second_struct and first_sec == second_sec
     for seed in range(20):
-        perm = build_semantic_outputs(permute_capture(capture, seed), canonical_dir, f"fixture/permutation_{seed:02d}", f"fixture_permutation_{seed:02d}")
+        perm = build_semantic_outputs(permute_capture(capture, seed), canonical_dir, f"fixture/permutation_{seed:02d}", f"fixture_permutation_{seed:02d}", reference_source_policy=reference_source_policy)
         struct_path = ROOT / "fixture" / f"permutation_{seed:02d}_actual_portable_structural_manifest.json"
         sec_path = ROOT / "fixture" / f"permutation_{seed:02d}_actual_portable_security_manifest.json"
         struct_match = struct_path.read_bytes() == first_struct
@@ -1174,6 +1243,8 @@ def run_fixture_construction() -> dict[str, Any]:
         "rls_match": first["rls_match"],
         "reference_hashes_match": first["reference_hashes_match"],
         "reference_seed_root_match": first["reference_seed_root_match"],
+        "reference_source_policy": reference_source_policy,
+        "final_region_dim_source": first["reference"].get("final_region_dim_source"),
         "non_reference_rows_zero": first["non_reference_rows_zero"],
         "unexpected_application_objects": first["unexpected_application_objects"],
         "missing_expected_objects": first["missing_expected_objects"],
@@ -1992,7 +2063,7 @@ def run_reference_only_generation(artifact_root: str | Path | None) -> dict[str,
         generate_reference_sql()
         generate_row_count_sql(expected_structural)
         transport_fixture = run_transport_fixture()
-        fixture_result = run_fixture_construction()
+        fixture_result = run_fixture_construction(reference_source_policy=REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY)
         artifact = write_artifact_index()
         status = REFERENCE_ONLY_STATUS_COMPLETE
         if artifact["secret_scan_findings"]:
@@ -2010,6 +2081,21 @@ def run_reference_only_generation(artifact_root: str | Path | None) -> dict[str,
             "p3_execution": False,
         }
         write_json_pretty("manifests/reference_only_generation_result.json", result)
+        return result
+    except ReferenceOnlyGenerationBlocked as exc:
+        result = {
+            "status": exc.status,
+            "artifact_root": str(ROOT),
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+            "full_runner_execution": False,
+            "docker_or_db_execution": False,
+            "p3_execution": False,
+        }
+        try:
+            write_json_pretty("manifests/reference_only_generation_result.json", result)
+        except Exception:
+            pass
         return result
     except Exception as exc:
         return {
