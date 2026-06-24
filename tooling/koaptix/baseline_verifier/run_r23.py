@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -18,6 +19,13 @@ CONTRACT_ID = "KOAPTIX_PORTABLE_FRESH_BUILD_VERIFIER_V1"
 TRANSPORT_CONTRACT_ID = "KOAPTIX_PSQL_NUL_JSON_TRANSPORT_V1"
 MANIFEST_CONSTRUCTION_CONTRACT_ID = "KOAPTIX_PORTABLE_MANIFEST_COLLECTION_ORDER_V1"
 PORTABLE_CONTRACT_ID = "KOAPTIX_SCHEMA_SECURITY_PORTABLE_SEMANTIC_EQUIVALENCE_V1"
+REFERENCE_ONLY_COMMAND = "generate-fixture-reference-package"
+REFERENCE_ONLY_STATUS_COMPLETE = "REFERENCE_PACKAGE_GENERATION_COMPLETE"
+REFERENCE_ONLY_STATUS_ROOT_EXISTS = "BLOCKED_ARTIFACT_ROOT_ALREADY_EXISTS"
+REFERENCE_ONLY_STATUS_ROOT_REQUIRED = "BLOCKED_ARTIFACT_ROOT_REQUIRED"
+REFERENCE_ONLY_STATUS_AUTHORITY_MISMATCH = "BLOCKED_REFERENCE_AUTHORITY_MISMATCH"
+REFERENCE_ONLY_STATUS_UNSAFE_ENV = "BLOCKED_UNSAFE_ENV_OR_DB_RISK"
+REFERENCE_ONLY_STATUS_FAILED = "REFERENCE_PACKAGE_GENERATION_FAILED"
 
 
 EXTENSION_OWNER_CANONICALIZATION_RULE_ID = "KOAPTIX_EXT_OWNER_RUNTIME_METADATA_V1"
@@ -182,6 +190,12 @@ REFERENCE_TABLES = {
     },
 }
 CAPTURE_QUERIES: list[dict[str, str]] = []
+
+
+class ReferenceOnlyGenerationBlocked(RuntimeError):
+    def __init__(self, status: str, message: str) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 def run(cmd: list[str], *, timeout: int = 120) -> subprocess.CompletedProcess[str]:
@@ -1864,6 +1878,183 @@ Final CTO decision requested: choose exactly one of `ACCEPT_PORTABLE_FRESH_BUILD
     (REPO / ".handoff" / "review-prompt.md").write_text(review, encoding="utf-8", newline="\n")
 
 
+def configure_artifact_root(artifact_root: Path) -> None:
+    global ROOT
+    ROOT = artifact_root
+
+
+def validate_reference_only_artifact_root(artifact_root: str | Path | None) -> Path:
+    if artifact_root is None or str(artifact_root).strip() == "":
+        raise ReferenceOnlyGenerationBlocked(
+            REFERENCE_ONLY_STATUS_ROOT_REQUIRED,
+            "reference-only generation requires an explicit artifact root",
+        )
+    root = Path(artifact_root).expanduser()
+    if root.exists():
+        raise ReferenceOnlyGenerationBlocked(
+            REFERENCE_ONLY_STATUS_ROOT_EXISTS,
+            f"artifact root already exists: {root}",
+        )
+    return root
+
+
+def reference_only_unsafe_env_names(env: Any | None = None) -> list[str]:
+    source = os.environ if env is None else env
+    exact = {
+        "DATABASE" + "_URL",
+        "PG" + "HOST",
+        "PG" + "PORT",
+        "PG" + "USER",
+        "PG" + "PASSWORD",
+        "PG" + "DATABASE",
+        "PG" + "SERVICE",
+        "SUPA" + "BASE" + "_DB_URL",
+        "SUPA" + "BASE" + "_DATABASE_URL",
+        "SUPA" + "BASE" + "_SERVICE_ROLE_KEY",
+        "SERVICE" + "_ROLE" + "_KEY",
+    }
+    findings = []
+    for name in source:
+        upper = str(name).upper()
+        if upper in exact:
+            findings.append(str(name))
+    return sorted(findings)
+
+
+def reference_only_authority_report() -> dict[str, Any]:
+    expected = {
+        "public.region_dim": {"order": ["region_id"], "sha256": "72C96B12990CB070965C2CE06BD27418DFDF91F63AF14024880AD811CAAA0095"},
+        "public.area_group": {"order": ["area_group_id"], "sha256": "294B1FD579300E865D5E3796513EE252B788E74D39903ACBBBA94CFF082EBB0A"},
+        "public.area_cluster_dim": {"order": ["area_cluster_id", "area_cluster_code"], "sha256": "ABEB8A3E3B74428025F8BD9C6716C00F9A8A68D63ECD57E7B99A5C9F74B1DAFB"},
+    }
+    mismatches = []
+    for identity, contract in expected.items():
+        actual = REFERENCE_TABLES.get(identity, {})
+        for key, expected_value in contract.items():
+            if actual.get(key) != expected_value:
+                mismatches.append({
+                    "table_identity": identity,
+                    "field": key,
+                    "expected": expected_value,
+                    "actual": actual.get(key),
+                })
+    return {
+        "matches": not mismatches,
+        "expected": expected,
+        "mismatches": mismatches,
+    }
+
+
+def prepare_reference_only_generation(artifact_root: str | Path | None, *, env: Any | None = None) -> dict[str, Any]:
+    unsafe_env_names = reference_only_unsafe_env_names(env)
+    if unsafe_env_names:
+        return {
+            "status": REFERENCE_ONLY_STATUS_UNSAFE_ENV,
+            "artifact_root": str(artifact_root) if artifact_root is not None else None,
+            "unsafe_env_names": unsafe_env_names,
+        }
+    try:
+        root = validate_reference_only_artifact_root(artifact_root)
+    except ReferenceOnlyGenerationBlocked as exc:
+        return {
+            "status": exc.status,
+            "artifact_root": str(artifact_root) if artifact_root is not None else None,
+            "message": str(exc),
+        }
+    authority = reference_only_authority_report()
+    if not authority["matches"]:
+        return {
+            "status": REFERENCE_ONLY_STATUS_AUTHORITY_MISMATCH,
+            "artifact_root": str(root),
+            "authority": authority,
+        }
+    return {
+        "status": "REFERENCE_PACKAGE_GENERATION_READY",
+        "artifact_root": str(root),
+        "authority": authority,
+        "full_runner_execution": False,
+        "docker_or_db_execution": False,
+        "p3_execution": False,
+    }
+
+
+def run_reference_only_generation(artifact_root: str | Path | None) -> dict[str, Any]:
+    preflight = prepare_reference_only_generation(artifact_root)
+    if preflight["status"] != "REFERENCE_PACKAGE_GENERATION_READY":
+        return preflight
+    root = Path(preflight["artifact_root"])
+    configure_artifact_root(root)
+    try:
+        verification = copy_inputs()
+        expected_structural = load_json(ROOT / "authority" / "portable" / "expected_portable_structural_manifest.json")
+        CAPTURE_QUERIES.clear()
+        generate_catalog_sql()
+        generate_reference_sql()
+        generate_row_count_sql(expected_structural)
+        transport_fixture = run_transport_fixture()
+        fixture_result = run_fixture_construction()
+        artifact = write_artifact_index()
+        status = REFERENCE_ONLY_STATUS_COMPLETE
+        if artifact["secret_scan_findings"]:
+            status = "BLOCKED_SECRET_SANITIZATION_FAILURE_NO_REMOTE_MUTATION"
+        result = {
+            "status": status,
+            "artifact_root": str(ROOT),
+            "verification": verification,
+            "transport_fixture": transport_fixture,
+            "fixture_result": fixture_result,
+            "artifact": artifact,
+            "authority": preflight["authority"],
+            "full_runner_execution": False,
+            "docker_or_db_execution": False,
+            "p3_execution": False,
+        }
+        write_json_pretty("manifests/reference_only_generation_result.json", result)
+        return result
+    except Exception as exc:
+        return {
+            "status": REFERENCE_ONLY_STATUS_FAILED,
+            "artifact_root": str(ROOT),
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+        }
+
+
+def build_cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="KOAPTIX portable baseline verifier runner")
+    subparsers = parser.add_subparsers(dest="command")
+    reference = subparsers.add_parser(
+        REFERENCE_ONLY_COMMAND,
+        help="Generate the fixture/reference package only, stopping before Docker or full proof phases.",
+    )
+    reference.add_argument(
+        "--artifact-root",
+        required=True,
+        help="Required new artifact root. Existing roots are rejected by default.",
+    )
+    return parser
+
+
+def main_cli(argv: list[str] | None = None) -> int:
+    args_list = sys.argv[1:] if argv is None else argv
+    if not args_list:
+        return main()
+    parser = build_cli_parser()
+    args = parser.parse_args(args_list)
+    if args.command == REFERENCE_ONLY_COMMAND:
+        result = run_reference_only_generation(args.artifact_root)
+        print(canon({
+            "status": result.get("status"),
+            "artifact_root": result.get("artifact_root"),
+            "full_runner_execution": result.get("full_runner_execution", False),
+            "docker_or_db_execution": result.get("docker_or_db_execution", False),
+            "p3_execution": result.get("p3_execution", False),
+        }))
+        return 0 if result.get("status") == REFERENCE_ONLY_STATUS_COMPLETE else 2
+    parser.error(f"unsupported command: {args.command}")
+    return 2
+
+
 def main() -> int:
     repo_before = git_snapshot("before")
     write_json_pretty("audit/repository_before.json", repo_before)
@@ -2058,4 +2249,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main_cli())

@@ -15,6 +15,12 @@ Status: placement candidate only. It is not approved for production mutation, da
 
 The runner no longer hardcodes historical local artifact paths. Future disposable-proof lanes must provide explicit artifact roots through non-secret environment variables or prepare the `_external_artifact_inputs/` fixture directory before execution. R38 does not execute the runner.
 
+## R51 Artifact-Only Entrypoint
+
+`run_r23.py generate-fixture-reference-package --artifact-root <new-root>` is a separated fixture/reference package generation route for a future approved R51 lane. It requires an explicit new artifact root, rejects an existing root by default, preserves the `region_dim` `region_id` authority, and stops before disposable Docker/database proof phases.
+
+This placement does not approve running that command, creating R51 artifacts, connecting to any database, running P3, or modifying repository reference files.
+
 ## Review Boundary
 
 This placement is intentionally narrow: no migrations, application source, package metadata, lockfiles, authority artifacts, generated captures, or service configuration are changed.
