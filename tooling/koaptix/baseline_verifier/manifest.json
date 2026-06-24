@@ -1,0 +1,72 @@
+{
+  "execution_boundary": {
+    "db_connection_attempted": false,
+    "docker_attempted": false,
+    "network_attempted": false,
+    "source_database_access_attempted": false,
+    "sql_executed": false,
+    "stage_commit_push_deploy_attempted": false
+  },
+  "lane": "P-KOAPTIX-HISTORICAL-MOLIT-2023-WAVE-001C-REPOSITORY-VERIFIER-EXPORT-TOOLING-PLACEMENT-CANDIDATE.0",
+  "placed_files": [
+    "README.md",
+    "manifest.json",
+    "run_r23.py",
+    "verifier/queries/reference_public.region_dim.json.sql",
+    "verifier/queries/extensions.json.sql",
+    "tests/test_static_contract.py",
+    "tests/test_region_dim_order.py",
+    "tests/test_extension_owner_canonicalization.py"
+  ],
+  "placement_root": "tooling/koaptix/baseline_verifier",
+  "provenance": {
+    "R30": {
+      "artifact_index_sha256": "3218C815A26633CE787A558AB5D209720032E72ABED33636B5B4DD2ECB54348D",
+      "patch_sha256": "6CDE54BF603F16B9203FF580701E517B4A0C8C11F7B74A40CEC3C6634EA35E35",
+      "sha256sums_sha256": "510BD350791C3D28648C6298E83B2F0567C8271AE5060CC4C582BF2176E28EC3"
+    },
+    "R34": {
+      "artifact_index_sha256": "7AC270FF8FC655231C19F9DBEF9D2912B3D76A301FF75232387C826C60D4632D",
+      "sha256sums_sha256": "6246E9CF11EDE6E590D890188B7E7A2A4C164BEEE4B37CA2F5EF44F98579549C"
+    },
+    "R35": {
+      "artifact_index_sha256": "06A67B533EE193F50F28F24A743A6C71CF067DB2D3548878F5921FF415381280",
+      "sha256sums_sha256": "28F6610939C5DB9EBD6D5BB299E8C91087AE31055071DFD34DC878BFD9A53FDC",
+      "source_extensions_query_sha256": "7C6549D43E3C5F6A41A40B7741D7F231DD0722808F91C784D030CF4E19F4F206",
+      "source_region_dim_query_sha256": "CF82DBD8B97ED3B806CA659B5609F823C4BDF4A1693CC00A6DFC7C07CC9EE394",
+      "source_run_r23_sha256": "682C168A606AE551E3964982B67D9FE5E56BB8654724BFFF5CB5C7E7BFFFD259"
+    },
+    "R37": {
+      "artifact_index_sha256": "A48F17CD3ED7CB1807B78005BF6151C2C5626E4DC479BAC68ECACFDAC817946F",
+      "sha256sums_sha256": "DE387C20378ECBCAD639E5907E72FAA044331B8CF4FA08A8A360DEE830085517"
+    }
+  },
+  "run_id": "KOAPTIX-R38-REPOSITORY-VERIFIER-EXPORT-TOOLING-PLACEMENT-CANDIDATE-001",
+  "schema_version": 1,
+  "semantic_contracts": {
+    "extension_capture_semantics": {
+      "portable_root_projection_in_runner": true,
+      "query_file": "verifier/queries/extensions.json.sql",
+      "raw_owner_field_preserved": true
+    },
+    "extension_owner_canonicalization": {
+      "portable_owner_token": "__KOAPTIX_RUNTIME_EXTENSION_OWNER__",
+      "rule_id": "KOAPTIX_EXT_OWNER_RUNTIME_METADATA_V1",
+      "source": "R30 accepted patch, carried by R35 accepted disposable proof artifact",
+      "targets": [
+        "pg_cron",
+        "pg_trgm",
+        "plpgsql",
+        "supabase_vault"
+      ]
+    },
+    "region_dim_reference_order": {
+      "order_by": [
+        "region_id"
+      ],
+      "source": "R34 accepted patch, carried by R35 accepted disposable proof artifact",
+      "table": "public.region_dim"
+    }
+  },
+  "status": "PLACEMENT_CANDIDATE_CREATED"
+}
