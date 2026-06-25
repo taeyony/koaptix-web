@@ -27,9 +27,48 @@ REFERENCE_ONLY_STATUS_AUTHORITY_MISMATCH = "BLOCKED_REFERENCE_AUTHORITY_MISMATCH
 REFERENCE_ONLY_STATUS_UNSAFE_ENV = "BLOCKED_UNSAFE_ENV_OR_DB_RISK"
 REFERENCE_ONLY_STATUS_FAILED = "REFERENCE_PACKAGE_GENERATION_FAILED"
 REFERENCE_ONLY_STATUS_ACCEPTED_AUTHORITY_MISSING = "BLOCKED_ACCEPTED_REGION_ID_AUTHORITY_BYTES_MISSING"
+REFERENCE_ONLY_STATUS_GRANT_POLICY_MISSING = "BLOCKED_HIGH_PRIORITY_GRANT_POLICY_ARTIFACT_MISSING"
+REFERENCE_ONLY_STATUS_GRANT_POLICY_INVALID = "BLOCKED_HIGH_PRIORITY_GRANT_POLICY_ARTIFACT_INVALID"
 REFERENCE_SOURCE_POLICY_CAPTURE = "CAPTURE_DIR"
 REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY = "ACCEPTED_AUTHORITY_CANONICAL_JSONL"
 REJECTED_STALE_REGION_DIM_SHA256 = "6641DBFB3B1314A4A33EA282B971F8F803E0A630529BAEA21050C472AD9F9F90"
+HIGH_PRIORITY_GRANT_POLICY_ARTIFACT_CONTRACT_ID = "KOAPTIX_R51_HIGH_PRIORITY_GRANT_POLICY_OVERLAY_V1"
+HIGH_PRIORITY_GRANT_POLICY_APPLIED_RULE_ID = "KOAPTIX_R51_HIGH_PRIORITY_GRANT_POLICY_OVERLAY_APPLIED_V1"
+HIGH_PRIORITY_GRANT_POLICY_OWNER = "postgres"
+HIGH_PRIORITY_GRANT_POLICY_SERVICE_ROLE = "service_role"
+HIGH_PRIORITY_GRANT_POLICY_ACL = "{postgres=X/postgres,service_role=X/postgres}"
+DEFAULT_ROUTINE_PUBLIC_EXECUTE_POLICY_PENDING = "DEFAULT_ROUTINE_PUBLIC_EXECUTE_POLICY_PENDING"
+
+HIGH_PRIORITY_ROUTINE_KEYS = frozenset({
+    "public.append_daily_rank_history(date)",
+    "public.backfill_koaptix_complex_region_map()",
+    "public.build_koaptix_index_snapshot_stage(text, date, date, text[])",
+    "public.capture_koaptix_daily_snapshot()",
+    "public.merge_market_source_to_master(date)",
+    "public.refresh_koaptix_front_views()",
+    "public.refresh_koaptix_front_views_legacy()",
+    "public.refresh_koaptix_home_kpi()",
+    "public.refresh_koaptix_index_snapshot(date)",
+    "public.refresh_koaptix_latest_rank_board()",
+    "public.refresh_koaptix_total_market_cap_history()",
+    "public.run_daily_market_pipeline(date)",
+    "public.run_daily_market_pipeline_legacy(date)",
+    "public.run_koaptix_safe_finalize(date)",
+    "public.sync_market_daily_aggregates(date)",
+    "public.sync_rank_snapshot_from_history(date)",
+})
+CONTEXT_UTILITY_ROUTINE_KEYS = frozenset({
+    "public.koaptix_set_updated_at()",
+    "public.current_seoul_date()",
+    "public.koaptix_norm_apt_name(text)",
+    "public.koaptix_norm_text(text)",
+    "public.koaptix_normalize_text(text)",
+    "public.koaptix_build_master_source_sql()",
+    "public.koaptix_build_rank_master_sql()",
+    "public.koaptix_get_household_relation()",
+    "public.koaptix_get_master_relation()",
+    "public.koaptix_pick_column(text, text, text[])",
+})
 
 
 EXTENSION_OWNER_CANONICALIZATION_RULE_ID = "KOAPTIX_EXT_OWNER_RUNTIME_METADATA_V1"
@@ -348,6 +387,9 @@ R13 = input_artifact_root("KOAPTIX_R13_ARTIFACT_ROOT", "r13_portable_semantic_so
 R20 = input_artifact_root("KOAPTIX_R20_ARTIFACT_ROOT", "r20_comment_object_kind_finalize_fix")
 R21 = input_artifact_root("KOAPTIX_R21_ARTIFACT_ROOT", "r21_portable_freshbuild_verifier_capture")
 R22 = input_artifact_root("KOAPTIX_R22_ARTIFACT_ROOT", "r22_verifier_json_transport_fix")
+UTF8_BOM = b"\xef\xbb\xbf"
+JSON_COPY_NORMALIZATION_RULE_ID = "KOAPTIX_R51_STRICT_JSON_BOM_NORMALIZATION_V1"
+JSON_COPY_NORMALIZATION_AUDIT: list[dict[str, Any]] = []
 IMAGE_DIGEST = "docker.io/supabase/postgres@sha256:dbf675ac0d99b717843d47282f9c70c99ea2d36593aa3e3a10792d776421a6a6"
 
 EXPECTED = {
@@ -560,37 +602,74 @@ def verify_sha256sums(root: Path) -> dict[str, Any]:
     return {"verified": not mismatches and not missing, "checked": checked, "missing_sha256sums": False, "mismatches": mismatches, "missing": missing}
 
 
+def artifact_relative_path(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def copy_artifact_file(src: str | Path, dst: str | Path) -> Path:
+    source = Path(src)
+    target = Path(dst)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if source.suffix.lower() == ".json":
+        data = source.read_bytes()
+        if data.startswith(UTF8_BOM):
+            text = data.decode("utf-8-sig")
+            parse_json_strict(text)
+            target.write_bytes(text.encode("utf-8"))
+            shutil.copystat(source, target)
+            JSON_COPY_NORMALIZATION_AUDIT.append({
+                "rule_id": JSON_COPY_NORMALIZATION_RULE_ID,
+                "status": "BOM_REMOVED_STRICT_JSON_VALID",
+                "source_path": str(source),
+                "target_relative_path": artifact_relative_path(target),
+                "source_sha256": sha_bytes(data),
+                "target_sha256": sha_file(target),
+            })
+            return target
+    return Path(shutil.copy2(source, target))
+
+
 def copy_tree(src: Path, dst: Path) -> None:
     if dst.exists():
         shutil.rmtree(dst)
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, copy_function=copy_artifact_file)
 
 
 def copy_inputs() -> dict[str, Any]:
+    JSON_COPY_NORMALIZATION_AUDIT.clear()
     for sub in ["audit", "authority", "fingerprints", "freshbuild", "harness", "manifests", "sql", "tooling", "verifier", "fixture", "qualification"]:
         (ROOT / sub).mkdir(parents=True, exist_ok=True)
     copy_tree(R13 / "manifests", ROOT / "authority" / "portable")
-    shutil.copy2(R13 / "fingerprints" / "expected_portable_structural_input.txt", ROOT / "authority" / "portable" / "expected_portable_structural_input.txt")
-    shutil.copy2(R13 / "fingerprints" / "expected_portable_security_input.txt", ROOT / "authority" / "portable" / "expected_portable_security_input.txt")
-    shutil.copy2(R13 / "fingerprints" / "expected_portable_roots.json", ROOT / "authority" / "portable" / "expected_portable_roots.json")
+    copy_artifact_file(R13 / "fingerprints" / "expected_portable_structural_input.txt", ROOT / "authority" / "portable" / "expected_portable_structural_input.txt")
+    copy_artifact_file(R13 / "fingerprints" / "expected_portable_security_input.txt", ROOT / "authority" / "portable" / "expected_portable_security_input.txt")
+    copy_artifact_file(R13 / "fingerprints" / "expected_portable_roots.json", ROOT / "authority" / "portable" / "expected_portable_roots.json")
     copy_tree(R8 / "canonical", ROOT / "authority" / "reference")
-    shutil.copy2(R8 / "fingerprints" / "reference_seed_aggregate_input.txt", ROOT / "authority" / "reference" / "reference_seed_aggregate_input.txt")
-    shutil.copy2(R8 / "fingerprints" / "verified_roots.json", ROOT / "authority" / "reference" / "verified_roots.json")
+    copy_artifact_file(R8 / "fingerprints" / "reference_seed_aggregate_input.txt", ROOT / "authority" / "reference" / "reference_seed_aggregate_input.txt")
+    copy_artifact_file(R8 / "fingerprints" / "verified_roots.json", ROOT / "authority" / "reference" / "verified_roots.json")
     for rel in PACKAGE_ORDER:
         src = R20 / rel
         dst = ROOT / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
-    shutil.copy2(R20 / "fingerprints" / "production_package_aggregate_input.txt", ROOT / "fingerprints" / "production_package_aggregate_input.txt")
-    shutil.copy2(R20 / "fingerprints" / "production_package_aggregate_root.json", ROOT / "fingerprints" / "production_package_aggregate_root.json")
+        copy_artifact_file(src, dst)
+    copy_artifact_file(R20 / "fingerprints" / "production_package_aggregate_input.txt", ROOT / "fingerprints" / "production_package_aggregate_input.txt")
+    copy_artifact_file(R20 / "fingerprints" / "production_package_aggregate_root.json", ROOT / "fingerprints" / "production_package_aggregate_root.json")
     copy_tree(R22 / "freshbuild" / "qualification_1_raw_transport", ROOT / "fixture" / "r22_qualification_1_raw_transport")
     copy_tree(R22 / "freshbuild" / "qualification_1_canonical_capture", ROOT / "fixture" / "r22_qualification_1_canonical_capture")
     copy_tree(R22 / "verifier" / "queries", ROOT / "verifier" / "r22_queries_frozen")
-    shutil.copy2(R22 / "manifests" / "qualification_1_capture_validation.json", ROOT / "manifests" / "r22_qualification_1_capture_validation.json")
-    shutil.copy2(R22 / "manifests" / "verifier_query_semantic_identity.json", ROOT / "manifests" / "r22_verifier_query_semantic_identity.json")
-    shutil.copy2(R22 / "manifests" / "json_transport_contract.json", ROOT / "manifests" / "r22_json_transport_contract.json")
-    shutil.copy2(R22 / "manifests" / "qualification_manifest_construction_blocker.json", ROOT / "manifests" / "r22_manifest_failure_forensics.json")
-    return verify_inputs()
+    copy_artifact_file(R22 / "manifests" / "qualification_1_capture_validation.json", ROOT / "manifests" / "r22_qualification_1_capture_validation.json")
+    copy_artifact_file(R22 / "manifests" / "verifier_query_semantic_identity.json", ROOT / "manifests" / "r22_verifier_query_semantic_identity.json")
+    copy_artifact_file(R22 / "manifests" / "json_transport_contract.json", ROOT / "manifests" / "r22_json_transport_contract.json")
+    copy_artifact_file(R22 / "manifests" / "qualification_manifest_construction_blocker.json", ROOT / "manifests" / "r22_manifest_failure_forensics.json")
+    verification = verify_inputs()
+    write_json_pretty("audit/json_copy_normalization.json", {
+        "rule_id": JSON_COPY_NORMALIZATION_RULE_ID,
+        "normalized_file_count": len(JSON_COPY_NORMALIZATION_AUDIT),
+        "normalized_files": JSON_COPY_NORMALIZATION_AUDIT,
+    })
+    return verification
 
 
 def verify_inputs() -> dict[str, Any]:
@@ -794,6 +873,368 @@ def logical_column(row: dict[str, Any]) -> str:
 
 def logical_routine(row: dict[str, Any]) -> str:
     return f"{row['schema_name']}.{row['name']}({row.get('identity_arguments') or ''})"
+
+
+def split_signature_args(signature: Any) -> list[str]:
+    text = "" if signature is None else str(signature).strip()
+    if not text:
+        return []
+    args: list[str] = []
+    cur = ""
+    depth = 0
+    in_quote = False
+    quote = ""
+    for ch in text:
+        if in_quote:
+            cur += ch
+            if ch == quote:
+                in_quote = False
+            continue
+        if ch in {"'", '"'}:
+            in_quote = True
+            quote = ch
+            cur += ch
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")" and depth:
+            depth -= 1
+        if ch == "," and depth == 0:
+            args.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        args.append(cur.strip())
+    return args
+
+
+def normalize_signature_arg_to_type(arg: str) -> str:
+    text = re.sub(r"\s+DEFAULT\s+.*$", "", str(arg).strip(), flags=re.IGNORECASE)
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return ""
+    tokens = text.split(" ")
+    if tokens and tokens[0].lower() in {"in", "out", "inout", "variadic"}:
+        tokens = tokens[1:]
+    if len(tokens) <= 1:
+        return " ".join(tokens)
+    first = tokens[0].lower()
+    known_type_leaders = {
+        "bigint",
+        "boolean",
+        "character",
+        "date",
+        "double",
+        "integer",
+        "json",
+        "jsonb",
+        "numeric",
+        "real",
+        "smallint",
+        "text",
+        "timestamp",
+        "uuid",
+    }
+    if first in known_type_leaders or first.endswith("[]"):
+        return " ".join(tokens)
+    return " ".join(tokens[1:])
+
+
+def normalize_type_signature_text(signature: Any) -> str:
+    return ", ".join(
+        normalize_signature_arg_to_type(arg)
+        for arg in split_signature_args(signature)
+        if normalize_signature_arg_to_type(arg)
+    )
+
+
+def routine_policy_key(schema_name: Any, name: Any, signature: Any) -> str:
+    schema_text = str(schema_name or "public").strip()
+    name_text = str(name or "").strip()
+    return f"{schema_text}.{name_text}({normalize_type_signature_text(signature)})"
+
+
+def routine_policy_key_from_record(record: dict[str, Any]) -> str:
+    signature = (
+        record.get("type_signature")
+        if record.get("type_signature") is not None
+        else record.get("identity_arguments")
+        if record.get("identity_arguments") is not None
+        else record.get("full_arguments")
+    )
+    return routine_policy_key(record.get("schema") or record.get("schema_name"), record.get("name"), signature)
+
+
+def routine_policy_key_from_capture_row(row: dict[str, Any]) -> str:
+    signature = row.get("identity_arguments") or row.get("arguments") or row.get("full_arguments") or ""
+    return routine_policy_key(row.get("schema_name") or row.get("schema"), row.get("name"), signature)
+
+
+def summarize_execute_grants(grants: list[dict[str, Any]]) -> dict[str, Any]:
+    execute_grantees = sorted({
+        grant.get("grantee")
+        for grant in grants
+        if grant.get("privilege_type") == "EXECUTE" and not grant.get("grant_option")
+    })
+    return {
+        "execute_grantees": execute_grantees,
+        "public_execute": "PUBLIC" in execute_grantees,
+        "anon_execute": "anon" in execute_grantees,
+        "authenticated_execute": "authenticated" in execute_grantees,
+        "service_role_execute": HIGH_PRIORITY_GRANT_POLICY_SERVICE_ROLE in execute_grantees,
+    }
+
+
+def blocked_grant_policy_invalid(message: str) -> ReferenceOnlyGenerationBlocked:
+    return ReferenceOnlyGenerationBlocked(REFERENCE_ONLY_STATUS_GRANT_POLICY_INVALID, message)
+
+
+def validate_bool_field(record: dict[str, Any], field: str, expected: bool, *, identity: str) -> None:
+    if record.get(field) is not expected:
+        raise blocked_grant_policy_invalid(f"{identity} has {field}={record.get(field)!r}, expected {expected!r}")
+
+
+def validate_high_priority_grant_policy_summary(data: dict[str, Any]) -> None:
+    summaries = data.get("summaries")
+    if not isinstance(summaries, dict):
+        raise blocked_grant_policy_invalid("grant policy artifact is missing summaries")
+    high = summaries.get("high_priority")
+    context = summaries.get("context")
+    if not isinstance(high, dict) or not isinstance(context, dict):
+        raise blocked_grant_policy_invalid("grant policy artifact is missing high_priority/context summaries")
+    expected_high = {
+        "expected_count": 16,
+        "resolved_count": 16,
+        "public_execute_count": 0,
+        "anon_execute_count": 0,
+        "authenticated_execute_count": 0,
+        "service_role_execute_count": 16,
+        "unresolved_count": 0,
+        "exposed_to_public_roles_count": 0,
+    }
+    for field, expected in expected_high.items():
+        if high.get(field) != expected:
+            raise blocked_grant_policy_invalid(f"high_priority summary {field}={high.get(field)!r}, expected {expected!r}")
+    if high.get("unresolved_high_priority_targets") not in ([], None):
+        raise blocked_grant_policy_invalid("high_priority summary has unresolved targets")
+    if high.get("exposed_high_priority_targets") not in ([], None):
+        raise blocked_grant_policy_invalid("high_priority summary has public exposure targets")
+    if high.get("service_role_missing_targets") not in ([], None):
+        raise blocked_grant_policy_invalid("high_priority summary has service_role missing targets")
+    expected_context = {
+        "expected_count": 10,
+        "resolved_count": 10,
+        "public_execute_count": 10,
+        "anon_execute_count": 10,
+        "authenticated_execute_count": 10,
+        "service_role_execute_count": 10,
+        "unresolved_count": 0,
+    }
+    for field, expected in expected_context.items():
+        if context.get(field) != expected:
+            raise blocked_grant_policy_invalid(f"context summary {field}={context.get(field)!r}, expected {expected!r}")
+    defaults = data.get("default_privileges")
+    if not isinstance(defaults, list) or not defaults:
+        raise blocked_grant_policy_invalid("grant policy artifact is missing default_privileges")
+    postgres_default = next((row for row in defaults if isinstance(row, dict) and row.get("owner") == HIGH_PRIORITY_GRANT_POLICY_OWNER), None)
+    if postgres_default is None:
+        raise blocked_grant_policy_invalid("grant policy artifact is missing postgres default privilege row")
+    for field in (
+        "public_default_execute",
+        "anon_default_execute",
+        "authenticated_default_execute",
+        "service_role_default_execute",
+    ):
+        if postgres_default.get(field) is not True:
+            raise blocked_grant_policy_invalid(f"default privilege {field} is not visible as pending policy evidence")
+
+
+def load_high_priority_grant_policy_artifact(path: str | Path) -> dict[str, Any]:
+    policy_path = Path(path).expanduser()
+    if not policy_path.exists():
+        raise ReferenceOnlyGenerationBlocked(
+            REFERENCE_ONLY_STATUS_GRANT_POLICY_MISSING,
+            f"high-priority grant policy artifact does not exist: {policy_path}",
+        )
+    try:
+        data = parse_json_strict(policy_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise blocked_grant_policy_invalid(f"high-priority grant policy artifact is not strict JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise blocked_grant_policy_invalid("grant policy artifact root must be a JSON object")
+    validate_high_priority_grant_policy_summary(data)
+    records = data.get("routine_privileges")
+    if not isinstance(records, list):
+        raise blocked_grant_policy_invalid("grant policy artifact is missing routine_privileges")
+
+    high_targets: dict[str, dict[str, Any]] = {}
+    context_targets: dict[str, dict[str, Any]] = {}
+    for record in records:
+        if not isinstance(record, dict):
+            raise blocked_grant_policy_invalid("grant policy artifact routine_privileges contains a non-object")
+        key = routine_policy_key_from_record(record)
+        priority = record.get("priority")
+        if priority == "HIGH":
+            if key not in HIGH_PRIORITY_ROUTINE_KEYS:
+                raise blocked_grant_policy_invalid(f"unexpected high-priority routine target: {key}")
+            if key in high_targets:
+                raise blocked_grant_policy_invalid(f"duplicate high-priority routine target: {key}")
+            if record.get("schema") != "public":
+                raise blocked_grant_policy_invalid(f"{key} is not in public schema")
+            if record.get("owner") != HIGH_PRIORITY_GRANT_POLICY_OWNER:
+                raise blocked_grant_policy_invalid(f"{key} owner is not {HIGH_PRIORITY_GRANT_POLICY_OWNER}")
+            if record.get("resolved") is not True:
+                raise blocked_grant_policy_invalid(f"{key} is not resolved")
+            if record.get("resolution_classification") != "RESOLVED_EXACT_TYPE_SIGNATURE":
+                raise blocked_grant_policy_invalid(f"{key} resolution classification is not exact type signature")
+            for field in (
+                "public_execute_effective",
+                "anon_execute_effective",
+                "authenticated_execute_effective",
+            ):
+                validate_bool_field(record, field, False, identity=key)
+            for field in ("service_role_execute_effective", "owner_execute_effective", "has_explicit_acl"):
+                validate_bool_field(record, field, True, identity=key)
+            high_targets[key] = {
+                "routine_key": key,
+                "name": record.get("name"),
+                "schema": record.get("schema"),
+                "type_signature": normalize_type_signature_text(record.get("type_signature")),
+                "regprocedure": record.get("regprocedure"),
+                "owner": record.get("owner"),
+                "grant_source": record.get("grant_source"),
+            }
+        elif priority == "CONTEXT":
+            if key not in CONTEXT_UTILITY_ROUTINE_KEYS:
+                raise blocked_grant_policy_invalid(f"unexpected context routine target: {key}")
+            if key in context_targets:
+                raise blocked_grant_policy_invalid(f"duplicate context routine target: {key}")
+            if record.get("resolved") is not True:
+                raise blocked_grant_policy_invalid(f"{key} context routine is not resolved")
+            for field in (
+                "public_execute_effective",
+                "anon_execute_effective",
+                "authenticated_execute_effective",
+                "service_role_execute_effective",
+            ):
+                validate_bool_field(record, field, True, identity=key)
+            context_targets[key] = {
+                "routine_key": key,
+                "name": record.get("name"),
+                "schema": record.get("schema"),
+                "type_signature": normalize_type_signature_text(record.get("type_signature")),
+            }
+        else:
+            raise blocked_grant_policy_invalid(f"unexpected routine priority {priority!r} for {key}")
+
+    missing_high = sorted(HIGH_PRIORITY_ROUTINE_KEYS - set(high_targets))
+    missing_context = sorted(CONTEXT_UTILITY_ROUTINE_KEYS - set(context_targets))
+    if missing_high or missing_context:
+        raise blocked_grant_policy_invalid(
+            "grant policy artifact target set mismatch: "
+            f"missing_high={missing_high}, missing_context={missing_context}"
+        )
+
+    return {
+        "contract_id": HIGH_PRIORITY_GRANT_POLICY_ARTIFACT_CONTRACT_ID,
+        "source_path": str(policy_path),
+        "source_file": policy_path.name,
+        "target_count": len(high_targets),
+        "context_visible_count": len(context_targets),
+        "default_routine_public_execute_policy": DEFAULT_ROUTINE_PUBLIC_EXECUTE_POLICY_PENDING,
+        "targets": high_targets,
+        "context_targets": context_targets,
+        "summaries": data.get("summaries"),
+    }
+
+
+def high_priority_grant_policy_summary(policy: dict[str, Any] | None) -> dict[str, Any]:
+    if policy is None:
+        return {
+            "enabled": False,
+            "contract_id": HIGH_PRIORITY_GRANT_POLICY_ARTIFACT_CONTRACT_ID,
+            "target_count": 0,
+        }
+    return {
+        "enabled": True,
+        "contract_id": policy.get("contract_id"),
+        "source_file": policy.get("source_file"),
+        "target_count": policy.get("target_count"),
+        "context_visible_count": policy.get("context_visible_count"),
+        "default_routine_public_execute_policy": policy.get("default_routine_public_execute_policy"),
+        "target_keys": sorted(policy.get("targets", {})),
+        "context_target_keys": sorted(policy.get("context_targets", {})),
+    }
+
+
+def apply_high_priority_grant_policy_overlay_to_capture(capture: dict[str, Any], policy: dict[str, Any] | None) -> dict[str, Any]:
+    patched = json.loads(canon(capture))
+    if policy is None:
+        return {
+            "capture": patched,
+            "audit": {
+                "enabled": False,
+                "contract_id": HIGH_PRIORITY_GRANT_POLICY_ARTIFACT_CONTRACT_ID,
+                "patched_target_count": 0,
+            },
+        }
+
+    expected_targets = set(policy.get("targets", {}))
+    seen: dict[str, dict[str, Any]] = {}
+    patched_targets: list[dict[str, Any]] = []
+    duplicate_targets: list[str] = []
+    for row in patched.get("routines", []):
+        key = routine_policy_key_from_capture_row(row)
+        if key not in expected_targets:
+            continue
+        if key in seen:
+            duplicate_targets.append(key)
+            continue
+        seen[key] = row
+        if row.get("owner") != HIGH_PRIORITY_GRANT_POLICY_OWNER:
+            raise blocked_grant_policy_invalid(f"{key} capture owner is not {HIGH_PRIORITY_GRANT_POLICY_OWNER}")
+        identity = logical_routine(row)
+        before_acl = row.get("acl")
+        before_summary = summarize_execute_grants(acl_entries(before_acl, "routine", identity))
+        row["acl"] = HIGH_PRIORITY_GRANT_POLICY_ACL
+        after_summary = summarize_execute_grants(acl_entries(row.get("acl"), "routine", identity))
+        if after_summary["public_execute"] or after_summary["anon_execute"] or after_summary["authenticated_execute"]:
+            raise blocked_grant_policy_invalid(f"{key} overlay failed to remove public-role EXECUTE grants")
+        if not after_summary["service_role_execute"]:
+            raise blocked_grant_policy_invalid(f"{key} overlay failed to preserve service_role EXECUTE")
+        patched_targets.append({
+            "routine_key": key,
+            "routine_identity": identity,
+            "before_acl_present": before_acl not in (None, "", "{}"),
+            "before_execute_grantees": before_summary["execute_grantees"],
+            "after_execute_grantees": after_summary["execute_grantees"],
+            "public_role_execute_removed": sorted(
+                set(before_summary["execute_grantees"]).intersection({"PUBLIC", "anon", "authenticated"})
+            ),
+        })
+
+    missing_targets = sorted(expected_targets - set(seen))
+    if missing_targets or duplicate_targets:
+        raise blocked_grant_policy_invalid(
+            "high-priority grant policy overlay capture target mismatch: "
+            f"missing={missing_targets}, duplicate={sorted(duplicate_targets)}"
+        )
+
+    return {
+        "capture": patched,
+        "audit": {
+            "enabled": True,
+            "rule_id": HIGH_PRIORITY_GRANT_POLICY_APPLIED_RULE_ID,
+            "contract_id": policy.get("contract_id"),
+            "source_file": policy.get("source_file"),
+            "expected_target_count": len(expected_targets),
+            "patched_target_count": len(patched_targets),
+            "patched_targets": sorted(patched_targets, key=lambda item: item["routine_key"]),
+            "context_utility_public_execute_preserved_by_contract": sorted(CONTEXT_UTILITY_ROUTINE_KEYS),
+            "default_routine_public_execute_policy": DEFAULT_ROUTINE_PUBLIC_EXECUTE_POLICY_PENDING,
+        },
+    }
 
 
 SORT_AUDIT: dict[str, Any] = {
@@ -1092,8 +1533,10 @@ def run_transport_fixture() -> dict[str, Any]:
     return result
 
 
-def build_actual_manifests(capture: dict[str, Any]) -> dict[str, Any]:
-    capture = json.loads(canon(capture))
+def build_actual_manifests(capture: dict[str, Any], *, high_priority_grant_policy: dict[str, Any] | None = None) -> dict[str, Any]:
+    overlay_result = apply_high_priority_grant_policy_overlay_to_capture(capture, high_priority_grant_policy)
+    capture = overlay_result["capture"]
+    high_priority_grant_policy_overlay_audit = overlay_result["audit"]
     ext_set = {(r["classid"], r["objid"]) for r in capture["extension_members"]}
     for row in capture["relations"]:
         row["extension_managed"] = ("pg_class", row["oid"]) in ext_set
@@ -1191,6 +1634,11 @@ def build_actual_manifests(capture: dict[str, Any]) -> dict[str, Any]:
     structural = structural_projection["manifest"]
     security = security_projection["manifest"]
     policy_visibility = app_routine_public_execute_policy_evidence(security)
+    security_policy_visibility = {
+        "app_routine_public_execute": policy_visibility,
+    }
+    if high_priority_grant_policy_overlay_audit.get("enabled"):
+        security_policy_visibility["high_priority_grant_policy_overlay"] = high_priority_grant_policy_overlay_audit
     return {
         "structural": structural,
         "security": security,
@@ -1202,9 +1650,8 @@ def build_actual_manifests(capture: dict[str, Any]) -> dict[str, Any]:
             "security": security_projection["audit_records"],
             "warnings": structural_projection["warning_records"] + security_projection["warning_records"],
         },
-        "security_policy_visibility": {
-            "app_routine_public_execute": policy_visibility,
-        },
+        "security_policy_visibility": security_policy_visibility,
+        "high_priority_grant_policy_overlay_audit": high_priority_grant_policy_overlay_audit,
         "extension_owner_runtime_metadata_audit": [
             r for r in structural_projection["audit_records"]
             if r.get("rule_id") == EXTENSION_OWNER_CANONICALIZATION_RULE_ID
@@ -1347,8 +1794,16 @@ def table_row_counts(capture_dir: Path) -> dict[str, Any]:
     }
 
 
-def build_semantic_outputs(capture: dict[str, Any], canonical_dir: Path, prefix: str, fingerprint_prefix: str, *, reference_source_policy: str = REFERENCE_SOURCE_POLICY_CAPTURE) -> dict[str, Any]:
-    built = build_actual_manifests(capture)
+def build_semantic_outputs(
+    capture: dict[str, Any],
+    canonical_dir: Path,
+    prefix: str,
+    fingerprint_prefix: str,
+    *,
+    reference_source_policy: str = REFERENCE_SOURCE_POLICY_CAPTURE,
+    high_priority_grant_policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    built = build_actual_manifests(capture, high_priority_grant_policy=high_priority_grant_policy)
     structural_input = manifest_input(built["structural"], ["extensions", "relations", "columns", "sequences", "routines", "views", "constraints", "indexes", "triggers"])
     security_input = manifest_input(built["security"], ["relations", "routines", "types", "expanded_relation_grants", "expanded_routine_grants", "expanded_type_grants", "expanded_default_acl_grants", "policies"])
     structural_root = sha_text(structural_input)
@@ -1372,6 +1827,8 @@ def build_semantic_outputs(capture: dict[str, Any], canonical_dir: Path, prefix:
         "warnings": expected_structural_projection["warning_records"] + expected_security_projection["warning_records"] + built["portable_canonicalization_audit"]["warnings"],
         "security_policy_visibility": built["security_policy_visibility"],
     })
+    if built["high_priority_grant_policy_overlay_audit"].get("enabled"):
+        write_json_pretty(f"{prefix}_high_priority_grant_policy_overlay_audit.json", built["high_priority_grant_policy_overlay_audit"])
     write_text(f"fingerprints/{fingerprint_prefix}_portable_structural_input.txt", structural_input)
     write_text(f"fingerprints/{fingerprint_prefix}_portable_security_input.txt", security_input)
     roots = {
@@ -1397,7 +1854,7 @@ def build_semantic_outputs(capture: dict[str, Any], canonical_dir: Path, prefix:
     unexpected = sort_strings(f"{prefix}.unexpected_relations", list(actual_relation_identities - expected_relation_identities))
     missing = sort_strings(f"{prefix}.missing_relations", list(expected_relation_identities - actual_relation_identities))
     write_json_pretty(f"{prefix}_unexpected_objects.json", {"unexpected_relation_count": len(unexpected), "unexpected_relations": unexpected, "missing_relation_count": len(missing), "missing_relations": missing})
-    return {
+    result = {
         "complete_verification_captured": True,
         "verification_succeeded": True,
         "portable_structural_root": structural_root,
@@ -1423,6 +1880,9 @@ def build_semantic_outputs(capture: dict[str, Any], canonical_dir: Path, prefix:
         "structural_diff": structural_diff,
         "security_diff": security_diff,
     }
+    if built["high_priority_grant_policy_overlay_audit"].get("enabled"):
+        result["high_priority_grant_policy_overlay_audit"] = built["high_priority_grant_policy_overlay_audit"]
+    return result
 
 
 def permute_capture(capture: dict[str, Any], seed: int) -> dict[str, Any]:
@@ -1435,7 +1895,11 @@ def permute_capture(capture: dict[str, Any], seed: int) -> dict[str, Any]:
     return out
 
 
-def run_fixture_construction(*, reference_source_policy: str = REFERENCE_SOURCE_POLICY_CAPTURE) -> dict[str, Any]:
+def run_fixture_construction(
+    *,
+    reference_source_policy: str = REFERENCE_SOURCE_POLICY_CAPTURE,
+    high_priority_grant_policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     raw_dir = ROOT / "fixture" / "r22_qualification_1_raw_transport"
     canonical_dir = ROOT / "fixture" / "r22_qualification_1_canonical_capture"
     validation = parse_raw_capture_dir(raw_dir, canonical_dir, CAPTURE_QUERIES)
@@ -1459,8 +1923,22 @@ def run_fixture_construction(*, reference_source_policy: str = REFERENCE_SOURCE_
         write_json_pretty("manifests/fixture_construction_result.json", result)
         return result
     capture = validation["capture"]
-    first = build_semantic_outputs(capture, canonical_dir, "fixture/actual", "fixture", reference_source_policy=reference_source_policy)
-    second = build_semantic_outputs(json.loads(canon(capture)), canonical_dir, "fixture/replay", "fixture_replay", reference_source_policy=reference_source_policy)
+    first = build_semantic_outputs(
+        capture,
+        canonical_dir,
+        "fixture/actual",
+        "fixture",
+        reference_source_policy=reference_source_policy,
+        high_priority_grant_policy=high_priority_grant_policy,
+    )
+    second = build_semantic_outputs(
+        json.loads(canon(capture)),
+        canonical_dir,
+        "fixture/replay",
+        "fixture_replay",
+        reference_source_policy=reference_source_policy,
+        high_priority_grant_policy=high_priority_grant_policy,
+    )
     first_struct = (ROOT / "fixture" / "actual_actual_portable_structural_manifest.json").read_bytes()
     second_struct = (ROOT / "fixture" / "replay_actual_portable_structural_manifest.json").read_bytes()
     first_sec = (ROOT / "fixture" / "actual_actual_portable_security_manifest.json").read_bytes()
@@ -1468,7 +1946,14 @@ def run_fixture_construction(*, reference_source_policy: str = REFERENCE_SOURCE_
     permutation_hashes: list[dict[str, Any]] = []
     deterministic = first_struct == second_struct and first_sec == second_sec
     for seed in range(20):
-        perm = build_semantic_outputs(permute_capture(capture, seed), canonical_dir, f"fixture/permutation_{seed:02d}", f"fixture_permutation_{seed:02d}", reference_source_policy=reference_source_policy)
+        perm = build_semantic_outputs(
+            permute_capture(capture, seed),
+            canonical_dir,
+            f"fixture/permutation_{seed:02d}",
+            f"fixture_permutation_{seed:02d}",
+            reference_source_policy=reference_source_policy,
+            high_priority_grant_policy=high_priority_grant_policy,
+        )
         struct_path = ROOT / "fixture" / f"permutation_{seed:02d}_actual_portable_structural_manifest.json"
         sec_path = ROOT / "fixture" / f"permutation_{seed:02d}_actual_portable_security_manifest.json"
         struct_match = struct_path.read_bytes() == first_struct
@@ -1502,6 +1987,11 @@ def run_fixture_construction(*, reference_source_policy: str = REFERENCE_SOURCE_
         "missing_sort_key_values": len(SORT_AUDIT["missing_sort_key_values"]),
         "duplicate_logical_identities": len(SORT_AUDIT["duplicate_logical_identities"]),
     })
+    if high_priority_grant_policy is not None:
+        result.update({
+            "high_priority_grant_policy": high_priority_grant_policy_summary(high_priority_grant_policy),
+            "high_priority_grant_policy_overlay": first["high_priority_grant_policy_overlay_audit"],
+        })
     write_json_pretty("manifests/fixture_permutation_determinism.json", {"deterministic_output": deterministic, "runs": permutation_hashes})
     write_json_pretty("manifests/fixture_construction_result.json", result)
     write_json_pretty("manifests/manifest_collection_inventory.json", SORT_AUDIT)
@@ -2276,7 +2766,12 @@ def reference_only_authority_report() -> dict[str, Any]:
     }
 
 
-def prepare_reference_only_generation(artifact_root: str | Path | None, *, env: Any | None = None) -> dict[str, Any]:
+def prepare_reference_only_generation(
+    artifact_root: str | Path | None,
+    *,
+    env: Any | None = None,
+    high_priority_grant_policy_artifact: str | Path | None = None,
+) -> dict[str, Any]:
     unsafe_env_names = reference_only_unsafe_env_names(env)
     if unsafe_env_names:
         return {
@@ -2299,21 +2794,41 @@ def prepare_reference_only_generation(artifact_root: str | Path | None, *, env: 
             "artifact_root": str(root),
             "authority": authority,
         }
+    high_priority_grant_policy = None
+    if high_priority_grant_policy_artifact is not None:
+        try:
+            high_priority_grant_policy = load_high_priority_grant_policy_artifact(high_priority_grant_policy_artifact)
+        except ReferenceOnlyGenerationBlocked as exc:
+            return {
+                "status": exc.status,
+                "artifact_root": str(root),
+                "message": str(exc),
+                "high_priority_grant_policy_artifact": str(high_priority_grant_policy_artifact),
+            }
     return {
         "status": "REFERENCE_PACKAGE_GENERATION_READY",
         "artifact_root": str(root),
         "authority": authority,
+        "high_priority_grant_policy": high_priority_grant_policy,
+        "high_priority_grant_policy_summary": high_priority_grant_policy_summary(high_priority_grant_policy),
         "full_runner_execution": False,
         "docker_or_db_execution": False,
         "p3_execution": False,
     }
 
 
-def run_reference_only_generation(artifact_root: str | Path | None) -> dict[str, Any]:
-    preflight = prepare_reference_only_generation(artifact_root)
+def run_reference_only_generation(
+    artifact_root: str | Path | None,
+    high_priority_grant_policy_artifact: str | Path | None = None,
+) -> dict[str, Any]:
+    preflight = prepare_reference_only_generation(
+        artifact_root,
+        high_priority_grant_policy_artifact=high_priority_grant_policy_artifact,
+    )
     if preflight["status"] != "REFERENCE_PACKAGE_GENERATION_READY":
         return preflight
     root = Path(preflight["artifact_root"])
+    high_priority_grant_policy = preflight.get("high_priority_grant_policy")
     configure_artifact_root(root)
     try:
         verification = copy_inputs()
@@ -2323,7 +2838,10 @@ def run_reference_only_generation(artifact_root: str | Path | None) -> dict[str,
         generate_reference_sql()
         generate_row_count_sql(expected_structural)
         transport_fixture = run_transport_fixture()
-        fixture_result = run_fixture_construction(reference_source_policy=REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY)
+        fixture_result = run_fixture_construction(
+            reference_source_policy=REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY,
+            high_priority_grant_policy=high_priority_grant_policy,
+        )
         artifact = write_artifact_index()
         status = REFERENCE_ONLY_STATUS_COMPLETE
         if artifact["secret_scan_findings"]:
@@ -2336,6 +2854,7 @@ def run_reference_only_generation(artifact_root: str | Path | None) -> dict[str,
             "fixture_result": fixture_result,
             "artifact": artifact,
             "authority": preflight["authority"],
+            "high_priority_grant_policy": preflight["high_priority_grant_policy_summary"],
             "full_runner_execution": False,
             "docker_or_db_execution": False,
             "p3_execution": False,
@@ -2378,6 +2897,12 @@ def build_cli_parser() -> argparse.ArgumentParser:
         required=True,
         help="Required new artifact root. Existing roots are rejected by default.",
     )
+    reference.add_argument(
+        "--high-priority-grant-policy-artifact",
+        required=False,
+        default=None,
+        help="Optional sanitized live grant verification artifact used to patch only the high-priority routine ACL policy in the reference-only fixture.",
+    )
     return parser
 
 
@@ -2388,7 +2913,10 @@ def main_cli(argv: list[str] | None = None) -> int:
     parser = build_cli_parser()
     args = parser.parse_args(args_list)
     if args.command == REFERENCE_ONLY_COMMAND:
-        result = run_reference_only_generation(args.artifact_root)
+        result = run_reference_only_generation(
+            args.artifact_root,
+            high_priority_grant_policy_artifact=args.high_priority_grant_policy_artifact,
+        )
         print(canon({
             "status": result.get("status"),
             "artifact_root": result.get("artifact_root"),

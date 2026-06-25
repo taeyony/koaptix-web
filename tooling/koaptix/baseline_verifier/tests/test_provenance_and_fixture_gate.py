@@ -90,3 +90,19 @@ def test_failure_reporting_preserves_primary_before_reporting_blocker():
     assert reporting["primary_substantive_blocker"] == "BLOCKED_FIXTURE_REFERENCE_MISMATCH_NO_REMOTE_MUTATION"
     assert reporting["secondary_reporting_blocker"] == "LEGACY_ARTIFACT_RUNNER_HASH_INPUT_MISSING_PREVENTED"
     assert reporting["final_exit_cause"] == "BLOCKED_FIXTURE_REFERENCE_MISMATCH_NO_REMOTE_MUTATION"
+
+
+def test_missing_grant_policy_artifact_is_safe_preflight_blocker_without_root_creation(tmp_path):
+    module = load_runner()
+    target = tmp_path / "r51"
+    missing_policy = tmp_path / "missing-grant-policy.json"
+
+    result = module.prepare_reference_only_generation(
+        target,
+        env={},
+        high_priority_grant_policy_artifact=missing_policy,
+    )
+
+    assert result["status"] == module.REFERENCE_ONLY_STATUS_GRANT_POLICY_MISSING
+    assert result["artifact_root"] == str(target)
+    assert not target.exists()

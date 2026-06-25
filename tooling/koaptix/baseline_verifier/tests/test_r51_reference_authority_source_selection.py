@@ -93,6 +93,8 @@ def test_reference_only_policy_blocks_missing_region_dim_authority(tmp_path):
 def test_reference_only_entrypoint_uses_accepted_authority_policy():
     runner = RUNNER.read_text(encoding="utf-8")
 
-    assert "run_fixture_construction(reference_source_policy=REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY)" in runner
+    assert "run_fixture_construction(" in runner
+    assert "reference_source_policy=REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY" in runner
+    assert "high_priority_grant_policy=high_priority_grant_policy" in runner
     assert 'ORDER BY "region_id"' in (ROOT / "verifier" / "queries" / "reference_public.region_dim.json.sql").read_text(encoding="utf-8")
     assert "REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY" in runner

@@ -44,6 +44,26 @@ def test_reference_only_cli_routes_to_separate_command(tmp_path):
 
     assert args.command == module.REFERENCE_ONLY_COMMAND
     assert args.artifact_root == str(target)
+    assert args.high_priority_grant_policy_artifact is None
+
+
+def test_reference_only_cli_accepts_optional_high_priority_grant_policy_artifact(tmp_path):
+    module = load_runner()
+    parser = module.build_cli_parser()
+    target = tmp_path / "r51"
+    policy = tmp_path / "grant-policy.json"
+
+    args = parser.parse_args([
+        module.REFERENCE_ONLY_COMMAND,
+        "--artifact-root",
+        str(target),
+        "--high-priority-grant-policy-artifact",
+        str(policy),
+    ])
+
+    assert args.command == module.REFERENCE_ONLY_COMMAND
+    assert args.artifact_root == str(target)
+    assert args.high_priority_grant_policy_artifact == str(policy)
 
 
 def test_reference_only_preflight_rejects_existing_root(tmp_path):
@@ -82,10 +102,79 @@ def test_reference_only_preflight_rejects_db_style_environment(tmp_path):
     assert not target.exists()
 
 
+def test_reference_only_preflight_rejects_missing_high_priority_grant_policy_artifact(tmp_path):
+    module = load_runner()
+    target = tmp_path / "r51"
+    missing_policy = tmp_path / "missing-policy.json"
+
+    result = module.prepare_reference_only_generation(
+        target,
+        env={},
+        high_priority_grant_policy_artifact=missing_policy,
+    )
+
+    assert result["status"] == module.REFERENCE_ONLY_STATUS_GRANT_POLICY_MISSING
+    assert result["artifact_root"] == str(target)
+    assert not target.exists()
+
+
+def test_artifact_json_copy_normalizes_bom_without_mutating_source(tmp_path):
+    module = load_runner()
+    original_root = module.ROOT
+    original_audit = list(module.JSON_COPY_NORMALIZATION_AUDIT)
+    try:
+        root = tmp_path / "artifact"
+        module.configure_artifact_root(root)
+        module.JSON_COPY_NORMALIZATION_AUDIT.clear()
+        source = tmp_path / "source.json"
+        source.write_bytes(b'\xef\xbb\xbf{"ok":true}\n')
+        source_before = source.read_bytes()
+
+        target = root / "manifests" / "source.json"
+        module.copy_artifact_file(source, target)
+
+        assert source.read_bytes() == source_before
+        assert target.read_bytes() == b'{"ok":true}\n'
+        assert module.parse_json_strict(target.read_text(encoding="utf-8")) == {"ok": True}
+        assert module.JSON_COPY_NORMALIZATION_AUDIT == [{
+            "rule_id": module.JSON_COPY_NORMALIZATION_RULE_ID,
+            "status": "BOM_REMOVED_STRICT_JSON_VALID",
+            "source_path": str(source),
+            "target_relative_path": "manifests/source.json",
+            "source_sha256": module.sha_bytes(source_before),
+            "target_sha256": module.sha_file(target),
+        }]
+    finally:
+        module.configure_artifact_root(original_root)
+        module.JSON_COPY_NORMALIZATION_AUDIT[:] = original_audit
+
+
+def test_artifact_json_copy_keeps_non_bom_json_bytes_unchanged(tmp_path):
+    module = load_runner()
+    original_root = module.ROOT
+    original_audit = list(module.JSON_COPY_NORMALIZATION_AUDIT)
+    try:
+        root = tmp_path / "artifact"
+        module.configure_artifact_root(root)
+        module.JSON_COPY_NORMALIZATION_AUDIT.clear()
+        source = tmp_path / "source.json"
+        source.write_bytes(b'{\n  "ok": true\n}\n')
+
+        target = root / "manifests" / "source.json"
+        module.copy_artifact_file(source, target)
+
+        assert target.read_bytes() == source.read_bytes()
+        assert module.JSON_COPY_NORMALIZATION_AUDIT == []
+    finally:
+        module.configure_artifact_root(original_root)
+        module.JSON_COPY_NORMALIZATION_AUDIT[:] = original_audit
+
+
 def test_reference_only_generation_function_excludes_full_runner_and_db_calls():
     node = function_node("run_reference_only_generation")
     names = called_names(node)
 
+    assert "prepare_reference_only_generation" in names
     assert "copy_inputs" in names
     assert "generate_reference_sql" in names
     assert "run_fixture_construction" in names
