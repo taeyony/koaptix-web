@@ -1,4 +1,5 @@
 import importlib.util
+import ast
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,30 @@ def load_runner():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def runner_function(name: str) -> ast.FunctionDef:
+    tree = ast.parse(RUNNER.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return node
+    raise AssertionError(f"{name} function not found")
+
+
+def run_fixture_construction_calls(function_name: str) -> list[ast.Call]:
+    function = runner_function(function_name)
+    calls = []
+    for node in ast.walk(function):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "run_fixture_construction":
+            calls.append(node)
+    return calls
+
+
+def keyword_name(call: ast.Call, name: str) -> str | None:
+    for keyword in call.keywords:
+        if keyword.arg == name and isinstance(keyword.value, ast.Name):
+            return keyword.value.id
+    return None
 
 
 def write_authority_files(module, root: Path, *, include_region: bool = True) -> dict[str, str]:
@@ -92,9 +117,21 @@ def test_reference_only_policy_blocks_missing_region_dim_authority(tmp_path):
 
 def test_reference_only_entrypoint_uses_accepted_authority_policy():
     runner = RUNNER.read_text(encoding="utf-8")
+    calls = run_fixture_construction_calls("run_reference_only_generation")
 
-    assert "run_fixture_construction(" in runner
-    assert "reference_source_policy=REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY" in runner
-    assert "high_priority_grant_policy=high_priority_grant_policy" in runner
+    assert len(calls) == 1
+    assert keyword_name(calls[0], "reference_source_policy") == "REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY"
+    assert keyword_name(calls[0], "high_priority_grant_policy") == "high_priority_grant_policy"
     assert 'ORDER BY "region_id"' in (ROOT / "verifier" / "queries" / "reference_public.region_dim.json.sql").read_text(encoding="utf-8")
     assert "REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY" in runner
+
+
+def test_full_runner_entrypoint_uses_accepted_authority_policy():
+    runner = RUNNER.read_text(encoding="utf-8")
+    calls = run_fixture_construction_calls("main")
+
+    assert len(calls) == 1
+    assert keyword_name(calls[0], "reference_source_policy") == "REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY"
+    assert "REJECTED_STALE_REGION_DIM_SHA256" in runner
+    assert "6641DBFB3B1314A4A33EA282B971F8F803E0A630529BAEA21050C472AD9F9F90" in runner
+    assert "72C96B12990CB070965C2CE06BD27418DFDF91F63AF14024880AD811CAAA0095" in runner

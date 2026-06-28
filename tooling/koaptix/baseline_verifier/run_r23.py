@@ -3099,7 +3099,9 @@ def main() -> int:
             status = "BLOCKED_JSON_TRANSPORT_FIXTURE_FAILED_NO_REMOTE_MUTATION"
             blockers.append("NUL-framed JSON transport fixture failed")
         else:
-            fixture_result = run_fixture_construction()
+            fixture_result = run_fixture_construction(
+                reference_source_policy=REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY,
+            )
             if not fixture_result.get("construction_completed"):
                 status = "BLOCKED_VERIFIER_MANIFEST_CONSTRUCTION_STILL_INCOMPLETE_NO_REMOTE_MUTATION"
                 blockers.append("R22 fixture manifest construction did not complete")
