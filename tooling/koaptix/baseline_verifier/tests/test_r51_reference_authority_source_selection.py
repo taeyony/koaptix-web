@@ -34,6 +34,15 @@ def run_fixture_construction_calls(function_name: str) -> list[ast.Call]:
     return calls
 
 
+def function_calls(function_name: str, call_name: str) -> list[ast.Call]:
+    function = runner_function(function_name)
+    calls = []
+    for node in ast.walk(function):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == call_name:
+            calls.append(node)
+    return calls
+
+
 def keyword_name(call: ast.Call, name: str) -> str | None:
     for keyword in call.keywords:
         if keyword.arg == name and isinstance(keyword.value, ast.Name):
@@ -155,3 +164,30 @@ def test_full_runner_entrypoint_uses_accepted_authority_policy():
     assert module.EXPECTED["structural_root"] == "BCF834D27484723D3CBDF2693D77CF7840D525120DFFFC2A46C29A5A0D8B087E"
     assert module.EXPECTED["security_root"] == "8977B7518D1F5085A21FFDAD97FB536E09A530F0AFDAD908021562C70777DDF5"
     assert module.EXPECTED["reference_seed_root"] == "8D493816623014089760CFEA2278CC234FBCCD26C38C7B8FBFBC844575766C87"
+
+
+def test_qualification_build_path_receives_high_priority_grant_policy():
+    run_build = runner_function("run_build")
+    args = {arg.arg for arg in run_build.args.kwonlyargs}
+    semantic_calls = function_calls("run_build", "build_semantic_outputs")
+    main_build_calls = function_calls("main", "run_build")
+
+    assert "high_priority_grant_policy" in args
+    assert len(semantic_calls) == 1
+    assert keyword_name(semantic_calls[0], "high_priority_grant_policy") == "high_priority_grant_policy"
+
+    qualification_calls = [
+        call
+        for call in main_build_calls
+        if call.args and isinstance(call.args[0], ast.Constant) and call.args[0].value == "qualification_1"
+    ]
+    build_replay_calls = [
+        call
+        for call in main_build_calls
+        if call.args and isinstance(call.args[0], ast.Constant) and call.args[0].value in {"build_1", "build_2"}
+    ]
+
+    assert len(qualification_calls) == 1
+    assert len(build_replay_calls) == 2
+    for call in qualification_calls + build_replay_calls:
+        assert keyword_name(call, "high_priority_grant_policy") == "high_priority_grant_policy"

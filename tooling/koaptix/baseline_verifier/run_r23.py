@@ -2205,7 +2205,12 @@ def docker_inventory(label: str) -> dict[str, Any]:
     return {"label": label, "container_count": len(rows), "containers": rows}
 
 
-def run_build(label: str, *, write_prefix: str) -> dict[str, Any]:
+def run_build(
+    label: str,
+    *,
+    write_prefix: str,
+    high_priority_grant_policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     name = ""
     result: dict[str, Any] = {"label": label, "created": False, "apply_succeeded": False, "destroyed": False, "apply_steps": [], "verification_succeeded": False}
     try:
@@ -2255,7 +2260,13 @@ def run_build(label: str, *, write_prefix: str) -> dict[str, Any]:
             result["verification_failure_stderr_tail"] = json.dumps({"missing": validation["missing_capture_files"], "invalid": validation["invalid_capture_files"]}, ensure_ascii=False)
             return result
         capture = validation["capture"]
-        semantic = build_semantic_outputs(capture, canonical_dir, f"freshbuild/{write_prefix}", write_prefix)
+        semantic = build_semantic_outputs(
+            capture,
+            canonical_dir,
+            f"freshbuild/{write_prefix}",
+            write_prefix,
+            high_priority_grant_policy=high_priority_grant_policy,
+        )
         result.update(semantic)
         return result
     finally:
@@ -3193,15 +3204,27 @@ def main() -> int:
                 status = "BLOCKED_VERIFIER_QUALIFICATION_UNEXPECTED_APPLICATION_OBJECT_NO_REMOTE_MUTATION"
                 blockers.append("R22 fixture unexpected objects present")
             else:
-                qualification = run_build("qualification_1", write_prefix="qualification_1")
+                qualification = run_build(
+                    "qualification_1",
+                    write_prefix="qualification_1",
+                    high_priority_grant_policy=high_priority_grant_policy,
+                )
                 write_json_pretty("manifests/qualification_1_result.json", qualification)
                 q_status, q_blockers = choose_status(qualification, {}, {})
                 if q_status.startswith("BLOCKED_VERIFIER_QUALIFICATION") or q_status == "BLOCKED_VERIFIER_MANIFEST_CONSTRUCTION_STILL_INCOMPLETE_NO_REMOTE_MUTATION":
                     status, blockers = q_status, q_blockers
                 else:
-                    build1 = run_build("build_1", write_prefix="build_1")
+                    build1 = run_build(
+                        "build_1",
+                        write_prefix="build_1",
+                        high_priority_grant_policy=high_priority_grant_policy,
+                    )
                     write_json_pretty("freshbuild/build_1_result.json", build1)
-                    build2 = run_build("build_2", write_prefix="build_2")
+                    build2 = run_build(
+                        "build_2",
+                        write_prefix="build_2",
+                        high_priority_grant_policy=high_priority_grant_policy,
+                    )
                     write_json_pretty("freshbuild/build_2_result.json", build2)
                     status, blockers = choose_status(qualification, build1, build2)
     finally:
