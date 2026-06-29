@@ -37,6 +37,7 @@ HIGH_PRIORITY_GRANT_POLICY_APPLIED_RULE_ID = "KOAPTIX_R51_HIGH_PRIORITY_GRANT_PO
 HIGH_PRIORITY_GRANT_POLICY_OWNER = "postgres"
 HIGH_PRIORITY_GRANT_POLICY_SERVICE_ROLE = "service_role"
 HIGH_PRIORITY_GRANT_POLICY_ACL = "{postgres=X/postgres,service_role=X/postgres}"
+HIGH_PRIORITY_GRANT_POLICY_SOURCE_FILE = "live_db_public_execute_grant_verification_patch.json"
 DEFAULT_ROUTINE_PUBLIC_EXECUTE_POLICY_PENDING = "DEFAULT_ROUTINE_PUBLIC_EXECUTE_POLICY_PENDING"
 R51_006_CONTEXT_DEFAULT_POLICY_BOUNDARY = "EXPLICITLY_DEFERRED_FOR_RUNNER_MANIFEST_BINDING_PROVENANCE_ONLY_NOT_PERMANENT_SECURITY_ACCEPTANCE"
 R51_006_ACCEPTED_ARTIFACT_PROVENANCE = {
@@ -992,6 +993,71 @@ def routine_policy_key_from_record(record: dict[str, Any]) -> str:
 def routine_policy_key_from_capture_row(row: dict[str, Any]) -> str:
     signature = row.get("identity_arguments") or row.get("arguments") or row.get("full_arguments") or ""
     return routine_policy_key(row.get("schema_name") or row.get("schema"), row.get("name"), signature)
+
+
+def split_routine_policy_key(key: str) -> tuple[str, str, str]:
+    schema_name, rest = key.split(".", 1)
+    name, signature = rest.split("(", 1)
+    return schema_name, name, signature[:-1]
+
+
+def accepted_r51_high_priority_grant_policy() -> dict[str, Any]:
+    def target_from_key(key: str) -> dict[str, Any]:
+        schema_name, name, signature = split_routine_policy_key(key)
+        return {
+            "routine_key": key,
+            "name": name,
+            "schema": schema_name,
+            "type_signature": signature,
+            "regprocedure": f"{name}({signature})",
+            "owner": HIGH_PRIORITY_GRANT_POLICY_OWNER,
+            "grant_source": "explicit_acl",
+        }
+
+    def context_from_key(key: str) -> dict[str, Any]:
+        schema_name, name, signature = split_routine_policy_key(key)
+        return {
+            "routine_key": key,
+            "name": name,
+            "schema": schema_name,
+            "type_signature": signature,
+        }
+
+    high_targets = {key: target_from_key(key) for key in sorted(HIGH_PRIORITY_ROUTINE_KEYS)}
+    context_targets = {key: context_from_key(key) for key in sorted(CONTEXT_UTILITY_ROUTINE_KEYS)}
+    return {
+        "contract_id": HIGH_PRIORITY_GRANT_POLICY_ARTIFACT_CONTRACT_ID,
+        "source_file": HIGH_PRIORITY_GRANT_POLICY_SOURCE_FILE,
+        "target_count": len(high_targets),
+        "context_visible_count": len(context_targets),
+        "default_routine_public_execute_policy": DEFAULT_ROUTINE_PUBLIC_EXECUTE_POLICY_PENDING,
+        "targets": high_targets,
+        "context_targets": context_targets,
+        "summaries": {
+            "high_priority": {
+                "expected_count": len(HIGH_PRIORITY_ROUTINE_KEYS),
+                "resolved_count": len(HIGH_PRIORITY_ROUTINE_KEYS),
+                "public_execute_count": 0,
+                "anon_execute_count": 0,
+                "authenticated_execute_count": 0,
+                "service_role_execute_count": len(HIGH_PRIORITY_ROUTINE_KEYS),
+                "unresolved_count": 0,
+                "exposed_to_public_roles_count": 0,
+                "unresolved_high_priority_targets": [],
+                "exposed_high_priority_targets": [],
+                "service_role_missing_targets": [],
+            },
+            "context": {
+                "expected_count": len(CONTEXT_UTILITY_ROUTINE_KEYS),
+                "resolved_count": len(CONTEXT_UTILITY_ROUTINE_KEYS),
+                "public_execute_count": len(CONTEXT_UTILITY_ROUTINE_KEYS),
+                "anon_execute_count": len(CONTEXT_UTILITY_ROUTINE_KEYS),
+                "authenticated_execute_count": len(CONTEXT_UTILITY_ROUTINE_KEYS),
+                "service_role_execute_count": len(CONTEXT_UTILITY_ROUTINE_KEYS),
+                "unresolved_count": 0,
+            },
+        },
+    }
 
 
 def summarize_execute_grants(grants: list[dict[str, Any]]) -> dict[str, Any]:
@@ -3079,6 +3145,7 @@ def main() -> int:
     write_json_pretty("audit/authority_integrity_verification.json", {"r8": verification["r8"], "r13": verification["r13"], "r20": verification["r20"], "r21": verification["r21"], "r22": verification["r22"]})
     transport_fixture = run_transport_fixture()
     fixture_result: dict[str, Any] = {}
+    high_priority_grant_policy = accepted_r51_high_priority_grant_policy()
 
     qualification: dict[str, Any] = {}
     build1: dict[str, Any] = {}
@@ -3101,6 +3168,7 @@ def main() -> int:
         else:
             fixture_result = run_fixture_construction(
                 reference_source_policy=REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY,
+                high_priority_grant_policy=high_priority_grant_policy,
             )
             if not fixture_result.get("construction_completed"):
                 status = "BLOCKED_VERIFIER_MANIFEST_CONSTRUCTION_STILL_INCOMPLETE_NO_REMOTE_MUTATION"

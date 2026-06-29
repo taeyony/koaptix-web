@@ -126,12 +126,32 @@ def test_reference_only_entrypoint_uses_accepted_authority_policy():
     assert "REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY" in runner
 
 
+def test_accepted_r51_high_priority_grant_policy_symbol_is_contract_backed():
+    module = load_runner()
+    policy = module.accepted_r51_high_priority_grant_policy()
+
+    assert policy["contract_id"] == module.HIGH_PRIORITY_GRANT_POLICY_ARTIFACT_CONTRACT_ID
+    assert policy["source_file"] == module.HIGH_PRIORITY_GRANT_POLICY_SOURCE_FILE
+    assert policy["default_routine_public_execute_policy"] == module.DEFAULT_ROUTINE_PUBLIC_EXECUTE_POLICY_PENDING
+    assert set(policy["targets"]) == module.HIGH_PRIORITY_ROUTINE_KEYS
+    assert set(policy["context_targets"]) == module.CONTEXT_UTILITY_ROUTINE_KEYS
+    assert policy["summaries"]["high_priority"]["public_execute_count"] == 0
+    assert policy["summaries"]["high_priority"]["service_role_execute_count"] == 16
+    assert policy["summaries"]["context"]["public_execute_count"] == 10
+
+
 def test_full_runner_entrypoint_uses_accepted_authority_policy():
     runner = RUNNER.read_text(encoding="utf-8")
+    module = load_runner()
     calls = run_fixture_construction_calls("main")
 
     assert len(calls) == 1
     assert keyword_name(calls[0], "reference_source_policy") == "REFERENCE_SOURCE_POLICY_ACCEPTED_AUTHORITY"
+    assert keyword_name(calls[0], "high_priority_grant_policy") == "high_priority_grant_policy"
+    assert "high_priority_grant_policy = accepted_r51_high_priority_grant_policy()" in runner
     assert "REJECTED_STALE_REGION_DIM_SHA256" in runner
     assert "6641DBFB3B1314A4A33EA282B971F8F803E0A630529BAEA21050C472AD9F9F90" in runner
     assert "72C96B12990CB070965C2CE06BD27418DFDF91F63AF14024880AD811CAAA0095" in runner
+    assert module.EXPECTED["structural_root"] == "BCF834D27484723D3CBDF2693D77CF7840D525120DFFFC2A46C29A5A0D8B087E"
+    assert module.EXPECTED["security_root"] == "8977B7518D1F5085A21FFDAD97FB536E09A530F0AFDAD908021562C70777DDF5"
+    assert module.EXPECTED["reference_seed_root"] == "8D493816623014089760CFEA2278CC234FBCCD26C38C7B8FBFBC844575766C87"
