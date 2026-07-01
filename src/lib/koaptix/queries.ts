@@ -19,6 +19,17 @@ import type {
   DbLatestRankBoardWeeklyRow,
   DbRankHistoryRow,
 } from "./types";
+import {
+  KOAPTIX_OFFICIAL_BASE_DATE,
+  KOAPTIX_PUBLIC_EXPOSURE_BLOCKED,
+  KOAPTIX_PUBLIC_INDEX_BASELINE_MODE,
+  KOAPTIX_PUBLIC_INDEX_SOURCE_MODE,
+  KOAPTIX_PUBLIC_SERVICE_BASE_DATE,
+  KOAPTIX_PUBLIC_SERVICE_BASE_VALUE,
+  type KoaptixIndexBaselineMode,
+  type KoaptixIndexSourceMode,
+  type KoaptixPublicExposureStatus,
+} from "../../types/koaptix";
 
 const SEOUL_TIME_ZONE = "Asia/Seoul";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -935,6 +946,8 @@ type DbIndexLatestCardRow = {
   universe_code: string | null;
   index_code: string | null;
   index_name: string | null;
+  base_date?: string | null;
+  base_value?: number | string | null;
   index_value: number | string | null;
   change_1m: number | string | null;
   change_pct_1m: number | string | null;
@@ -948,6 +961,8 @@ type DbIndexTimeseriesRow = {
   universe_code: string | null;
   index_code: string | null;
   index_name: string | null;
+  base_date?: string | null;
+  base_value?: number | string | null;
   index_value: number | string | null;
   total_market_cap_krw: number | string | null;
   component_complex_count: number | string | null;
@@ -955,6 +970,11 @@ type DbIndexTimeseriesRow = {
 
 export type HomeIndexChartRow = {
   snapshotDate: string;
+  baseDate: string | null;
+  baseValue: number | null;
+  indexSourceMode: KoaptixIndexSourceMode;
+  baselineMode: KoaptixIndexBaselineMode;
+  publicExposureStatus: KoaptixPublicExposureStatus;
   value: number;
   totalMarketCapKrw: number | null;
   componentComplexCount: number | null;
@@ -968,6 +988,13 @@ export type HomeIndexChartPayload = {
 
   indexCode: string | null;
   indexName: string | null;
+  baseDate: string;
+  baseValue: number;
+  indexSourceMode: KoaptixIndexSourceMode;
+  baselineMode: KoaptixIndexBaselineMode;
+  publicExposureStatus: KoaptixPublicExposureStatus;
+  officialGenesisPublicExposureBlocked: boolean;
+  mixedBaselineGuard: "passed" | "blocked_official_genesis" | "filtered_mixed_rows";
 
   latestSnapshotDate: string | null;
   indexValue: number | null;
@@ -980,6 +1007,32 @@ export type HomeIndexChartPayload = {
   rows: HomeIndexChartRow[];
 };
 
+function toDateOnly(value: string | null | undefined): string | null {
+  return value?.slice?.(0, 10) ?? null;
+}
+
+function firstDefinedBaseDate(
+  latestCard: DbIndexLatestCardRow | null,
+  rows: DbIndexTimeseriesRow[],
+): string | null {
+  const rowBaseDate = rows
+    .map((row) => toDateOnly(row.base_date))
+    .find((baseDate): baseDate is string => Boolean(baseDate));
+
+  return toDateOnly(latestCard?.base_date) ?? rowBaseDate ?? null;
+}
+
+function firstDefinedBaseValue(
+  latestCard: DbIndexLatestCardRow | null,
+  rows: DbIndexTimeseriesRow[],
+): number | null {
+  const rowBaseValue = rows
+    .map((row) => toNullableNumber(row.base_value))
+    .find((baseValue): baseValue is number => baseValue !== null);
+
+  return toNullableNumber(latestCard?.base_value) ?? rowBaseValue ?? null;
+}
+
 async function fetchIndexChartChain(
   supabase: ReturnType<typeof createServerSupabase>,
   universeCode: string,
@@ -991,37 +1044,14 @@ async function fetchIndexChartChain(
   const [latestCardResult, rowsResult] = await Promise.all([
     supabase
       .from("v_koaptix_latest_index_card")
-      .select(
-        `
-          snapshot_date,
-          universe_code,
-          index_code,
-          index_name,
-          index_value,
-          change_1m,
-          change_pct_1m,
-          total_market_cap_krw,
-          component_complex_count,
-          movement_1m
-        `,
-      )
+      .select("*")
       .eq("universe_code", universeCode)
       .order("snapshot_date", { ascending: false })
       .limit(1)
       .maybeSingle(),
     supabase
       .from("v_koaptix_index_timeseries")
-      .select(
-        `
-          snapshot_date,
-          universe_code,
-          index_code,
-          index_name,
-          index_value,
-          total_market_cap_krw,
-          component_complex_count
-        `,
-      )
+      .select("*")
       .eq("universe_code", universeCode)
       .order("snapshot_date", { ascending: false })
       .limit(limit),
@@ -1053,21 +1083,58 @@ function buildHomeIndexChartPayload(
 ): HomeIndexChartPayload {
   const scopedLatestCard =
     latestCard?.universe_code === renderedUniverseCode ? latestCard : null;
+  const scopedRawRows = rawRows.filter(
+    (row) => row.universe_code === renderedUniverseCode,
+  );
+  const indexSourceMode = KOAPTIX_PUBLIC_INDEX_SOURCE_MODE;
+  const exposedBaseDate = firstDefinedBaseDate(scopedLatestCard, scopedRawRows);
+  const exposedBaseValue = firstDefinedBaseValue(scopedLatestCard, scopedRawRows);
+  const officialGenesisPublicExposureBlocked =
+    exposedBaseDate === KOAPTIX_OFFICIAL_BASE_DATE;
+  const unsupportedPublicBaseDate =
+    exposedBaseDate !== null && exposedBaseDate !== KOAPTIX_PUBLIC_SERVICE_BASE_DATE;
+  const baselineBlocked = unsupportedPublicBaseDate;
+  const publicServiceBaseDate = KOAPTIX_PUBLIC_SERVICE_BASE_DATE;
+  const publicServiceBaseValue =
+    exposedBaseDate === KOAPTIX_PUBLIC_SERVICE_BASE_DATE
+      ? exposedBaseValue ?? KOAPTIX_PUBLIC_SERVICE_BASE_VALUE
+      : KOAPTIX_PUBLIC_SERVICE_BASE_VALUE;
 
-  const rows = [...rawRows]
-    .filter((row) => row.universe_code === renderedUniverseCode)
+  const baselineScopedRows = scopedRawRows.filter((row) => {
+    const rowBaseDate = toDateOnly(row.base_date);
+    if (!rowBaseDate) return true;
+    return rowBaseDate === publicServiceBaseDate;
+  });
+
+  const rows = baselineScopedRows
     .filter((row) => {
       const snapshotDate = row.snapshot_date?.slice?.(0, 10) ?? "";
       const value = toNullableNumber(row.index_value);
-      return Boolean(snapshotDate) && value !== null;
+      return (
+        !baselineBlocked &&
+        Boolean(snapshotDate) &&
+        value !== null
+      );
     })
     .sort((a, b) => a.snapshot_date.slice(0, 10).localeCompare(b.snapshot_date.slice(0, 10)))
     .map((row) => ({
       snapshotDate: row.snapshot_date.slice(0, 10),
+      baseDate: toDateOnly(row.base_date) ?? publicServiceBaseDate,
+      baseValue: toNullableNumber(row.base_value) ?? publicServiceBaseValue,
+      indexSourceMode,
+      baselineMode: KOAPTIX_PUBLIC_INDEX_BASELINE_MODE,
+      publicExposureStatus: KOAPTIX_PUBLIC_EXPOSURE_BLOCKED,
       value: toNullableNumber(row.index_value) ?? 0,
       totalMarketCapKrw: toNullableNumber(row.total_market_cap_krw),
       componentComplexCount: toNullableNumber(row.component_complex_count),
     }));
+  const mixedBaselineGuard =
+    officialGenesisPublicExposureBlocked
+      ? "blocked_official_genesis"
+      : baselineBlocked || baselineScopedRows.length < scopedRawRows.length
+        ? "filtered_mixed_rows"
+        : "passed";
+  const canRenderPublicCard = !baselineBlocked;
 
   return {
     requestedUniverseCode,
@@ -1077,16 +1144,35 @@ function buildHomeIndexChartPayload(
       requestedUniverseCode !== renderedUniverseCode &&
       renderedUniverseCode === DEFAULT_UNIVERSE_CODE,
 
-    indexCode: scopedLatestCard?.index_code ?? null,
-    indexName: scopedLatestCard?.index_name ?? null,
+    indexCode: canRenderPublicCard ? scopedLatestCard?.index_code ?? null : null,
+    indexName: canRenderPublicCard ? scopedLatestCard?.index_name ?? null : null,
+    baseDate: publicServiceBaseDate,
+    baseValue: publicServiceBaseValue,
+    indexSourceMode,
+    baselineMode: KOAPTIX_PUBLIC_INDEX_BASELINE_MODE,
+    publicExposureStatus: KOAPTIX_PUBLIC_EXPOSURE_BLOCKED,
+    officialGenesisPublicExposureBlocked,
+    mixedBaselineGuard,
 
-    latestSnapshotDate: scopedLatestCard?.snapshot_date?.slice?.(0, 10) ?? null,
-    indexValue: toNullableNumber(scopedLatestCard?.index_value),
-    change1m: toNullableNumber(scopedLatestCard?.change_1m),
-    changePct1m: toNullableNumber(scopedLatestCard?.change_pct_1m),
-    totalMarketCapKrw: toNullableNumber(scopedLatestCard?.total_market_cap_krw),
-    componentComplexCount: toNullableNumber(scopedLatestCard?.component_complex_count),
-    movement1m: scopedLatestCard?.movement_1m ?? null,
+    latestSnapshotDate: canRenderPublicCard
+      ? scopedLatestCard?.snapshot_date?.slice?.(0, 10) ?? null
+      : null,
+    indexValue: canRenderPublicCard
+      ? toNullableNumber(scopedLatestCard?.index_value)
+      : null,
+    change1m: canRenderPublicCard
+      ? toNullableNumber(scopedLatestCard?.change_1m)
+      : null,
+    changePct1m: canRenderPublicCard
+      ? toNullableNumber(scopedLatestCard?.change_pct_1m)
+      : null,
+    totalMarketCapKrw: canRenderPublicCard
+      ? toNullableNumber(scopedLatestCard?.total_market_cap_krw)
+      : null,
+    componentComplexCount: canRenderPublicCard
+      ? toNullableNumber(scopedLatestCard?.component_complex_count)
+      : null,
+    movement1m: canRenderPublicCard ? scopedLatestCard?.movement_1m ?? null : null,
 
     rows,
   };

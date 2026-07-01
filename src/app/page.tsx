@@ -21,6 +21,13 @@ import { HapiPhilosophyTrigger } from "../components/home/HapiPhilosophyTrigger"
 import { ThemeToggle } from "../components/home/ThemeToggle";
 
 import {
+  KOAPTIX_PUBLIC_EXPOSURE_BLOCKED,
+  KOAPTIX_PUBLIC_INDEX_BASELINE_MODE,
+  KOAPTIX_PUBLIC_INDEX_SOURCE_MODE,
+  KOAPTIX_PUBLIC_SERVICE_BASE_DATE,
+  KOAPTIX_PUBLIC_SERVICE_BASE_VALUE,
+} from "../types/koaptix";
+import {
   getLatestRankBoard,
   getHomeKpi,
   getIndexChartPayload,
@@ -82,6 +89,13 @@ function buildEmptyIndexChartPayload(
     isFallbackToKorea: false,
     indexCode: null,
     indexName: null,
+    baseDate: KOAPTIX_PUBLIC_SERVICE_BASE_DATE,
+    baseValue: KOAPTIX_PUBLIC_SERVICE_BASE_VALUE,
+    indexSourceMode: KOAPTIX_PUBLIC_INDEX_SOURCE_MODE,
+    baselineMode: KOAPTIX_PUBLIC_INDEX_BASELINE_MODE,
+    publicExposureStatus: KOAPTIX_PUBLIC_EXPOSURE_BLOCKED,
+    officialGenesisPublicExposureBlocked: false,
+    mixedBaselineGuard: "passed",
     latestSnapshotDate: null,
     indexValue: null,
     change1m: null,

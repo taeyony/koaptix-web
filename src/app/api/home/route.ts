@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getKoaptixHomePayload } from "../../../lib/koaptix/home";
+import {
+  OfficialIndexPublicExposureBlockedError,
+  getKoaptixHomePayload,
+} from "../../../lib/koaptix/home";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +53,19 @@ export async function GET(request: NextRequest) {
           },
         },
         { status: 400 },
+      );
+    }
+
+    if (error instanceof OfficialIndexPublicExposureBlockedError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: {
+            code: "OFFICIAL_INDEX_PUBLIC_EXPOSURE_BLOCKED",
+            message: error.message,
+          },
+        },
+        { status: 503 },
       );
     }
 

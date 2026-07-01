@@ -17,6 +17,11 @@ import {
 
 type MarketChartPoint = {
   snapshotDate: string;
+  baseDate?: string | null;
+  baseValue?: number | null;
+  indexSourceMode?: "public_service" | "official_internal";
+  baselineMode?: "public_service_2024_07_31" | "official_2024_01_01";
+  publicExposureStatus?: "blocked" | "internal_only" | "public";
   value: number;
   totalMarketCapKrw: number | null;
   componentComplexCount: number | null;
@@ -30,6 +35,13 @@ type MarketChartPayload = {
 
   indexCode: string | null;
   indexName: string | null;
+  baseDate?: string | null;
+  baseValue?: number | null;
+  indexSourceMode?: "public_service" | "official_internal";
+  baselineMode?: "public_service_2024_07_31" | "official_2024_01_01";
+  publicExposureStatus?: "blocked" | "internal_only" | "public";
+  officialGenesisPublicExposureBlocked?: boolean;
+  mixedBaselineGuard?: "passed" | "blocked_official_genesis" | "filtered_mixed_rows";
 
   latestSnapshotDate: string | null;
   indexValue: number | null;
@@ -92,6 +104,8 @@ const MIN_CHART_HEIGHT = 260;
 
 type ChartPoint = {
   snapshotDate: string;
+  baseDate: string | null;
+  baseValue: number | null;
   value: number;
   shortLabel: string;
   fullLabel: string;
@@ -255,6 +269,11 @@ export default function MarketChartCard({
       .sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate))
       .map((row) => ({
         snapshotDate: row.snapshotDate.slice(0, 10),
+        baseDate: row.baseDate?.slice?.(0, 10) ?? null,
+        baseValue:
+          typeof row.baseValue === "number" && Number.isFinite(row.baseValue)
+            ? row.baseValue
+            : null,
         value: row.value,
         shortLabel: toShortLabel(row.snapshotDate),
         fullLabel: toFullLabel(row.snapshotDate),
@@ -328,6 +347,16 @@ export default function MarketChartCard({
     payload?.latestSnapshotDate ??
     selectedData[selectedData.length - 1]?.snapshotDate ??
     null;
+  const baseDate =
+    payload?.baseDate?.slice?.(0, 10) ??
+    selectedData[selectedData.length - 1]?.baseDate ??
+    null;
+  const baseValue =
+    typeof payload?.baseValue === "number" && Number.isFinite(payload.baseValue)
+      ? payload.baseValue
+      : selectedData[selectedData.length - 1]?.baseValue ?? null;
+  const baselineMode = payload?.baselineMode ?? null;
+  const publicExposureStatus = payload?.publicExposureStatus ?? null;
 
   const deltaLabel = isHistoryBuilding
     ? `시계열 ${formatCount(totalRowCount)}개 · 히스토리 축적 중`
@@ -357,6 +386,11 @@ export default function MarketChartCard({
       data-rendered-universe-code={payload?.renderedUniverseCode ?? ""}
       data-chart-scope={chartScope}
       data-chart-same-universe={isSameUniverse ? "true" : "false"}
+      data-index-source-mode={payload?.indexSourceMode ?? "public_service"}
+      data-baseline-mode={baselineMode ?? "public_service_2024_07_31"}
+      data-official-genesis-blocked={
+        payload?.officialGenesisPublicExposureBlocked ? "true" : "false"
+      }
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -393,6 +427,18 @@ export default function MarketChartCard({
             >
               {chartScopeLabel}
             </span>
+
+            {baselineMode === "public_service_2024_07_31" ? (
+              <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-cyan-300">
+                Public Service Baseline
+              </span>
+            ) : null}
+
+            {publicExposureStatus === "blocked" ? (
+              <span className="rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">
+                Official Exposure Blocked
+              </span>
+            ) : null}
 
             {isHistoryBuilding ? (
               <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-cyan-300">
@@ -442,9 +488,15 @@ export default function MarketChartCard({
             </span>
           </div>
 
-          <p className="mt-2 text-xs text-slate-500">
-            기준일 {latestSnapshotDate ? toFullLabel(latestSnapshotDate) : "-"}
-          </p>
+          <div className="mt-2 space-y-1 text-xs text-slate-500">
+            <p>
+              스냅샷 {latestSnapshotDate ? toFullLabel(latestSnapshotDate) : "-"}
+            </p>
+            <p>
+              기준일 {baseDate ? toFullLabel(baseDate) : "-"} ={" "}
+              {baseValue !== null ? formatIndexValue(baseValue) : "-"}
+            </p>
+          </div>
 
           <p className="mt-2 text-xs text-slate-500">
             총 시가총액 {formatCompactWon(payload?.totalMarketCapKrw ?? null)} · 구성 단지{" "}
