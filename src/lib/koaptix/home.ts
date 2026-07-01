@@ -25,6 +25,19 @@ export interface HomePayloadOptions {
   chartPoints?: number;
 }
 
+const KOAPTIX_KOREA_INDEX_CODE = "KOAPTIX_KOREA";
+const KOAPTIX_KOREA_UNIVERSE_CODE = "KOREA_ALL";
+const KOAPTIX_HOME_PUBLIC_SERVICE_VIEW =
+  "v_koaptix_home_public_service_payload";
+const KOAPTIX_HOME_LATEST_PAYLOAD_VIEW = "v_koaptix_home_latest_payload";
+
+type SupabaseQueryErrorLike = {
+  code?: string;
+  message?: string;
+  details?: string | null;
+  hint?: string | null;
+};
+
 function clampInt(value: number | undefined, min: number, max: number, fallback: number): number {
   if (value === undefined || Number.isNaN(value)) return fallback;
   return Math.max(min, Math.min(max, Math.trunc(value)));
@@ -38,6 +51,31 @@ function toFiniteNumber(value: number | string | null | undefined): number | nul
   if (value === null || value === undefined) return null;
   const numeric = typeof value === "number" ? value : Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function isMissingRelationError(
+  error: SupabaseQueryErrorLike,
+  relationName: string,
+): boolean {
+  if (error.code === "42P01") return true;
+
+  const haystack = [
+    error.code,
+    error.message,
+    error.details,
+    error.hint,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase();
+  const relation = relationName.toLowerCase();
+
+  return (
+    haystack.includes(relation) &&
+    (haystack.includes("could not find") ||
+      haystack.includes("does not exist") ||
+      haystack.includes("schema cache"))
+  );
 }
 
 function isOfficialGenesisMetadata(
@@ -227,6 +265,51 @@ function buildPublicHomePayload(
   };
 }
 
+async function loadPublicHomePayloadFromView(
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  viewName: string,
+  topN: number,
+  chartPoints: number,
+  options: {
+    includeIdentityFilters?: boolean;
+    ignoreMissingRelation?: boolean;
+  } = {},
+): Promise<KoaptixHomeApiData | null> {
+  let query = supabase
+    .from(viewName)
+    .select("*")
+    .eq("base_date", KOAPTIX_PUBLIC_SERVICE_BASE_DATE);
+
+  if (options.includeIdentityFilters) {
+    query = query
+      .eq("index_code", KOAPTIX_KOREA_INDEX_CODE)
+      .eq("universe_code", KOAPTIX_KOREA_UNIVERSE_CODE);
+  }
+
+  const result = await query
+    .order("snapshot_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (result.error) {
+    if (
+      options.ignoreMissingRelation &&
+      isMissingRelationError(result.error, viewName)
+    ) {
+      return null;
+    }
+    throw new Error(`Failed to load ${viewName}: ${result.error.message}`);
+  }
+
+  if (!result.data) return null;
+
+  return buildPublicHomePayload(
+    result.data as unknown as KoaptixHomePayloadViewRow,
+    topN,
+    chartPoints,
+  );
+}
+
 export async function getKoaptixHomePayload(
   options: HomePayloadOptions = {},
 ): Promise<KoaptixHomeApiData> {
@@ -235,29 +318,28 @@ export async function getKoaptixHomePayload(
 
   const supabase = getSupabaseAdminClient();
 
-  const publicResult = await supabase
-    .from("v_koaptix_home_latest_payload")
-    .select("*")
-    .eq("base_date", KOAPTIX_PUBLIC_SERVICE_BASE_DATE)
-    .order("snapshot_date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const dedicatedPublicPayload = await loadPublicHomePayloadFromView(
+    supabase,
+    KOAPTIX_HOME_PUBLIC_SERVICE_VIEW,
+    topN,
+    chartPoints,
+    {
+      includeIdentityFilters: true,
+      ignoreMissingRelation: true,
+    },
+  );
+  if (dedicatedPublicPayload) return dedicatedPublicPayload;
 
-  if (publicResult.error) {
-    throw new Error(`Failed to load KOAPTIX public home payload: ${publicResult.error.message}`);
-  }
-
-  if (publicResult.data) {
-    const publicPayload = buildPublicHomePayload(
-      publicResult.data as unknown as KoaptixHomePayloadViewRow,
-      topN,
-      chartPoints,
-    );
-    if (publicPayload) return publicPayload;
-  }
+  const publicPayload = await loadPublicHomePayloadFromView(
+    supabase,
+    KOAPTIX_HOME_LATEST_PAYLOAD_VIEW,
+    topN,
+    chartPoints,
+  );
+  if (publicPayload) return publicPayload;
 
   const { data, error } = await supabase
-    .from("v_koaptix_home_latest_payload")
+    .from(KOAPTIX_HOME_LATEST_PAYLOAD_VIEW)
     .select("*")
     .single();
 
