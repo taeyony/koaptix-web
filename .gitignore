@@ -3,3 +3,11 @@ node_modules
 .next
 dev.log
 *.tsbuildinfo
+
+# KOAPTIX local/generated artifacts
+.codex/relay/
+outputs/
+.koaptix-baseline-verifier-artifacts/
+__pycache__/
+*.pyc
+*.pid
