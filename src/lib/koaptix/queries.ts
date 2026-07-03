@@ -507,6 +507,10 @@ async function withLocalQueryTimeout<T>(
 
 const MAX_LATEST_RANK_BOARD_LIMIT = 1000;
 const HOME_KPI_LOG_WINDOW_MS = 180_000;
+const LATEST_RANK_BOARD_TIMEOUT_MS_KOREA = 1_800;
+const LATEST_RANK_BOARD_TIMEOUT_MS_REGIONAL = 900;
+const DYNAMIC_RANK_BOARD_FALLBACK_TIMEOUT_MS_KOREA = 6_500;
+const DYNAMIC_RANK_BOARD_FALLBACK_TIMEOUT_MS_REGIONAL = 5_200;
 
 const latestRankBoardCooldownUntil = new Map<string, number>();
 const LATEST_RANK_BOARD_COOLDOWN_MS = 180_000;
@@ -710,44 +714,25 @@ export async function getLatestRankBoard(
     Math.min(limit, MAX_LATEST_RANK_BOARD_LIMIT),
   );
 
-  // KOREA_ALL home SSR seed is more stable through the dynamic read layer.
-  if (safeUniverseCode === DEFAULT_UNIVERSE_CODE) {
-    const fallbackRows = await withLocalQueryTimeout<any[]>(
-      fetchLatestRankBoardFallbackFromDynamic(
-        supabase,
-        safeUniverseCode,
-        requestedLimit,
-      ),
-      6500,
-      "DYNAMIC_FALLBACK_LOCAL_TIMEOUT",
-    );
-
-    return fallbackRows.map((row: any) => ({
-      ...row,
-      universe_code: row.universe_code ?? safeUniverseCode,
-      universe_name: row.universe_name ?? null,
-      location_search_label: [
-        row.sigungu_name ?? null,
-        row.legal_dong_name ?? null,
-        row.apt_name_ko ?? null,
-      ]
-        .filter(Boolean)
-        .join(" "),
-    })) as DbLatestRankBoardWeeklyRow[];
-  }
-
   const retryLimits = buildRankBoardRetryLimits(
     requestedLimit,
     safeUniverseCode,
   );
 
-  const latestBoardAttemptTimeoutMs = 900;
-  const dynamicFallbackTimeoutMs = 5200;
+  const latestBoardAttemptTimeoutMs =
+    safeUniverseCode === DEFAULT_UNIVERSE_CODE
+      ? LATEST_RANK_BOARD_TIMEOUT_MS_KOREA
+      : LATEST_RANK_BOARD_TIMEOUT_MS_REGIONAL;
+  const dynamicFallbackTimeoutMs =
+    safeUniverseCode === DEFAULT_UNIVERSE_CODE
+      ? DYNAMIC_RANK_BOARD_FALLBACK_TIMEOUT_MS_KOREA
+      : DYNAMIC_RANK_BOARD_FALLBACK_TIMEOUT_MS_REGIONAL;
   const shouldTryLatestBoard = !isLatestRankBoardCoolingDown(safeUniverseCode);
 
   let data: any[] | null = null;
   let lastError: { code?: string | null; message?: string | null } | null =
     null;
+  let deliverySource: "live_latest" | "live_dynamic_fallback" = "live_latest";
 
   if (shouldTryLatestBoard) {
     for (const attemptLimit of retryLimits) {
@@ -847,6 +832,7 @@ export async function getLatestRankBoard(
 
     data = fallbackRows;
     lastError = null;
+    deliverySource = "live_dynamic_fallback";
   }
 
   if (lastError) {
@@ -859,6 +845,11 @@ export async function getLatestRankBoard(
 
   return liveRows.map((row: any) => ({
     ...row,
+    __koaptixBoardSource: deliverySource,
+    __koaptixFallbackMode:
+      deliverySource === "live_dynamic_fallback"
+        ? "same_universe_dynamic_degraded"
+        : "none",
     universe_code: row.universe_code ?? safeUniverseCode,
     universe_name: row.universe_name ?? null,
     location_search_label: [

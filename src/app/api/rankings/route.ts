@@ -16,7 +16,9 @@ import { createClient } from "@supabase/supabase-js";
 
 import {
   DEFAULT_UNIVERSE_CODE,
-  resolveServiceUniverseCode,
+  buildUniverseResolutionMetadata,
+  resolveUniverseRequest,
+  type UniverseRequestResolution,
 } from "../../../lib/koaptix/universes";
 import type { RankingItem } from "../../../lib/koaptix/types";
 
@@ -32,6 +34,7 @@ const BOARD_SUCCESS_CACHE_CONTROL =
   "public, max-age=15, s-maxage=60, stale-while-revalidate=600";
 const BOARD_ERROR_CACHE_CONTROL = "no-store";
 
+const LATEST_BOARD_TIMEOUT_MS_KOREA = 1_800;
 const LATEST_BOARD_TIMEOUT_MS_REGIONAL = 1_100;
 const DYNAMIC_BOARD_TIMEOUT_MS_KOREA = 7_000;
 const DYNAMIC_BOARD_TIMEOUT_MS_REGIONAL = 4_500;
@@ -46,9 +49,15 @@ type CachedBoardPayload = {
   requestedLimit: number;
   renderedLimit: number;
   resultCount: number;
-  source: "live_dynamic" | "live_latest" | "empty_degraded";
+  source: "live_dynamic_fallback" | "live_latest" | "empty_degraded";
   cacheState: "bypassed";
-  fallbackMode: "none" | "same_universe_empty_degraded";
+  fallbackMode:
+    | "none"
+    | "same_universe_dynamic_degraded"
+    | "same_universe_empty_degraded";
+  fallbackUsed: boolean;
+  degraded: boolean;
+  reason?: string | null;
   count: number;
   items: RankingItem[];
 };
@@ -306,6 +315,8 @@ function withBoardDeliveryState(
     cacheState: options.cacheState,
     fallbackMode: options.fallbackMode,
     source: options.source ?? payload.source,
+    fallbackUsed: payload.fallbackUsed || options.fallbackMode !== "none",
+    degraded: payload.degraded || options.fallbackMode !== "none",
   };
 }
 
@@ -325,10 +336,33 @@ function buildEmptyDegradedBoardPayload(
     source: "empty_degraded",
     cacheState: "miss",
     fallbackMode: "same_universe_empty_degraded",
+    fallbackUsed: true,
+    degraded: true,
+    reason: message ?? null,
     count: 0,
     items: [],
-    degraded: true,
     message,
+  };
+}
+
+function buildUnavailableBoardPayload(
+  resolution: UniverseRequestResolution,
+  requestedLimit: number,
+) {
+  return {
+    ok: true,
+    ...buildUniverseResolutionMetadata(resolution),
+    requestedLimit,
+    renderedLimit: 0,
+    resultCount: 0,
+    source: "empty_degraded",
+    cacheState: "miss",
+    fallbackMode: "none",
+    fallbackUsed: false,
+    degraded: false,
+    count: 0,
+    items: [],
+    message: resolution.reason ?? "universe_unavailable",
   };
 }
 
@@ -471,6 +505,9 @@ async function fetchBoardPayloadFromDynamic(
       source: "empty_degraded",
       cacheState: "bypassed",
       fallbackMode: "same_universe_empty_degraded",
+      fallbackUsed: true,
+      degraded: true,
+      reason: "dynamic_latest_snapshot_missing",
       count: 0,
       items: [],
     };
@@ -538,9 +575,12 @@ async function fetchBoardPayloadFromDynamic(
     requestedLimit,
     renderedLimit: effectiveLimit,
     resultCount: items.length,
-    source: "live_dynamic",
+    source: "live_dynamic_fallback",
     cacheState: "bypassed",
-    fallbackMode: "none",
+    fallbackMode: "same_universe_dynamic_degraded",
+    fallbackUsed: true,
+    degraded: true,
+    reason: "latest_board_dynamic_fallback",
     count: items.length,
     items,
   };
@@ -585,7 +625,12 @@ async function fetchBoardPayloadFromLatestBoard(
       const queryResult = await withTimeout<{
         data: any[] | null;
         error: { message: string } | null;
-      }>(queryPromise, LATEST_BOARD_TIMEOUT_MS_REGIONAL);
+      }>(
+        queryPromise,
+        universeCode === DEFAULT_UNIVERSE_CODE
+          ? LATEST_BOARD_TIMEOUT_MS_KOREA
+          : LATEST_BOARD_TIMEOUT_MS_REGIONAL,
+      );
 
       const { data, error } = queryResult;
       if (error) throw error;
@@ -595,6 +640,10 @@ async function fetchBoardPayloadFromLatestBoard(
       const items = (data ?? []).map((row: any) =>
         toRankingItem(row, universeCode),
       );
+
+      if (items.length === 0) {
+        throw new Error("LATEST_BOARD_EMPTY_DYNAMIC_FALLBACK");
+      }
 
       return {
         ok: true,
@@ -607,6 +656,9 @@ async function fetchBoardPayloadFromLatestBoard(
         source: "live_latest",
         cacheState: "bypassed",
         fallbackMode: "none",
+        fallbackUsed: false,
+        degraded: false,
+        reason: null,
         count: items.length,
         items,
       };
@@ -637,27 +689,34 @@ async function fetchBoardPayload(
   universeCode: string,
   requestedLimit: number,
 ): Promise<CachedBoardPayload> {
-  if (universeCode === DEFAULT_UNIVERSE_CODE) {
-    const payload = await withTimeout<CachedBoardPayload>(
-      fetchBoardPayloadFromDynamic(supabase, universeCode, requestedLimit),
-      DYNAMIC_BOARD_TIMEOUT_MS_KOREA,
-    );
-
-    if (process.env.KOAPTIX_VERBOSE_FALLBACK_LOGS === "1") {
-      console.info("[API /api/rankings] KOREA_ALL dynamic-only path hit", {
+  if (!isLatestBoardCoolingDown(universeCode)) {
+    try {
+      return await fetchBoardPayloadFromLatestBoard(
+        supabase,
         universeCode,
         requestedLimit,
-        count: payload.items.length,
-      });
+      );
+    } catch (error) {
+      logQuietRankingsFallback(
+        `rankings:dynamic-fallback:${universeCode}`,
+        "[API /api/rankings] using same-universe dynamic fallback",
+        {
+          universeCode,
+          requestedLimit,
+          message: getErrorMessage(error),
+        },
+      );
     }
-
-    return payload;
   }
 
-  // Regional client transitions avoid the slow latest-board cold path.
-  return await withTimeout<CachedBoardPayload>(
+  const dynamicTimeoutMs =
+    universeCode === DEFAULT_UNIVERSE_CODE
+      ? DYNAMIC_BOARD_TIMEOUT_MS_KOREA
+      : DYNAMIC_BOARD_TIMEOUT_MS_REGIONAL;
+
+  return withTimeout<CachedBoardPayload>(
     fetchBoardPayloadFromDynamic(supabase, universeCode, requestedLimit),
-    DYNAMIC_BOARD_TIMEOUT_MS_REGIONAL,
+    dynamicTimeoutMs,
   );
 }
 
@@ -667,11 +726,24 @@ export async function GET(request: NextRequest) {
   const rawUniverseCode =
     searchParams.get("universe_code") ?? searchParams.get("universe");
 
-  const universeCode = resolveServiceUniverseCode(
-    rawUniverseCode ?? DEFAULT_UNIVERSE_CODE,
-  );
-
   const limit = parseLimit(searchParams.get("limit"), HOME_DEFAULT_LIMIT);
+  const universeResolution = resolveUniverseRequest(rawUniverseCode, {
+    capability: "home",
+  });
+
+  if (universeResolution.universeUnavailable) {
+    return NextResponse.json(
+      buildUnavailableBoardPayload(universeResolution, limit),
+      {
+        headers: {
+          "Cache-Control": BOARD_ERROR_CACHE_CONTROL,
+          "X-Koaptix-Cache": "unavailable",
+        },
+      },
+    );
+  }
+
+  const universeCode = universeResolution.renderedUniverseCode;
   const cacheKey = makeCacheKey(universeCode, limit);
 
   const freshCached = readFreshBoardCache(cacheKey);

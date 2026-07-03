@@ -42,6 +42,17 @@ export type UniverseOption = {
 };
 
 export type UniverseScope = "MACRO" | "SIGUNGU" | "CUSTOM";
+export type UniverseRouteCapability = "home" | "search" | "ranking" | "map";
+export type UniverseResolutionStatus =
+  | "defaulted"
+  | "enabled"
+  | "disabled"
+  | "hold"
+  | "unexposed"
+  | "unknown";
+export type UniverseUnavailableReason =
+  | "disabled_or_unexposed_universe"
+  | "invalid_or_unknown_universe";
 
 export type UniverseRegistryItem = {
   code: KnownUniverseCode;
@@ -1318,6 +1329,45 @@ const UNIVERSE_LABEL_MAP = new Map(
   PUBLIC_UNIVERSE_REGISTRY.map((u) => [u.code, u.label]),
 );
 
+const MACRO_UNIVERSE_ALIAS_MAP: Record<string, MacroUniverseCode> = {
+  KOREA: "KOREA_ALL",
+  KOREA_ALL: "KOREA_ALL",
+  SEOUL: "SEOUL_ALL",
+  SEOUL_ALL: "SEOUL_ALL",
+  BUSAN: "BUSAN_ALL",
+  BUSAN_ALL: "BUSAN_ALL",
+  DAEGU: "DAEGU_ALL",
+  DAEGU_ALL: "DAEGU_ALL",
+  INCHEON: "INCHEON_ALL",
+  INCHEON_ALL: "INCHEON_ALL",
+  GWANGJU: "GWANGJU_ALL",
+  GWANGJU_ALL: "GWANGJU_ALL",
+  DAEJEON: "DAEJEON_ALL",
+  DAEJEON_ALL: "DAEJEON_ALL",
+  ULSAN: "ULSAN_ALL",
+  ULSAN_ALL: "ULSAN_ALL",
+  SEJONG: "SEJONG_ALL",
+  SEJONG_ALL: "SEJONG_ALL",
+  GYEONGGI: "GYEONGGI_ALL",
+  GYEONGGI_ALL: "GYEONGGI_ALL",
+  GANGWON: "GANGWON_ALL",
+  GANGWON_ALL: "GANGWON_ALL",
+  CHUNGBUK: "CHUNGBUK_ALL",
+  CHUNGBUK_ALL: "CHUNGBUK_ALL",
+  CHUNGNAM: "CHUNGNAM_ALL",
+  CHUNGNAM_ALL: "CHUNGNAM_ALL",
+  JEONBUK: "JEONBUK_ALL",
+  JEONBUK_ALL: "JEONBUK_ALL",
+  JEONNAM: "JEONNAM_ALL",
+  JEONNAM_ALL: "JEONNAM_ALL",
+  GYEONGBUK: "GYEONGBUK_ALL",
+  GYEONGBUK_ALL: "GYEONGBUK_ALL",
+  GYEONGNAM: "GYEONGNAM_ALL",
+  GYEONGNAM_ALL: "GYEONGNAM_ALL",
+  JEJU: "JEJU_ALL",
+  JEJU_ALL: "JEJU_ALL",
+};
+
 function toNormalizedUpperCode(input: string) {
   return input.trim().toUpperCase();
 }
@@ -1325,6 +1375,41 @@ function toNormalizedUpperCode(input: string) {
 function isSggUniverseCode(code: string): code is SggUniverseCode {
   return /^SGG_\d{5}$/.test(code);
 }
+
+function toUniverseCodeCandidate(input: string) {
+  const code = toNormalizedUpperCode(input);
+  return MACRO_UNIVERSE_ALIAS_MAP[code] ?? code;
+}
+
+function isCapabilityEnabled(
+  universe: UniverseRegistryItem,
+  capability?: UniverseRouteCapability,
+) {
+  if (!capability) return true;
+
+  if (capability === "home") return universe.homeEnabled;
+  if (capability === "search") return universe.searchEnabled;
+  if (capability === "ranking") return universe.rankingEnabled;
+  return universe.mapEnabled;
+}
+
+function getUnavailableStatus(universe: UniverseRegistryItem) {
+  if (universe.exposureStatus === "hold") return "hold";
+  if (universe.exposureStatus === "disabled") return "disabled";
+  return "disabled";
+}
+
+export type UniverseRequestResolution = {
+  rawInput: string | null;
+  requestedUniverseCode: string;
+  renderedUniverseCode: string;
+  universeCode: string;
+  universeResolutionStatus: UniverseResolutionStatus;
+  universeUnavailable: boolean;
+  reason: UniverseUnavailableReason | null;
+  defaulted: boolean;
+  registryItem: UniverseRegistryItem | null;
+};
 
 export function normalizeUniverseCode(
   input?: string | null,
@@ -1355,6 +1440,102 @@ export function normalizeUniverseCode(
   if (isSggUniverseCode(code)) return code;
 
   return DEFAULT_UNIVERSE_CODE;
+}
+
+export function resolveUniverseRequest(
+  input?: string | null,
+  options: { capability?: UniverseRouteCapability } = {},
+): UniverseRequestResolution {
+  const rawInput =
+    typeof input === "string"
+      ? input
+      : input === null || input === undefined
+        ? null
+        : String(input);
+  const hasExplicitInput =
+    typeof rawInput === "string" && rawInput.trim().length > 0;
+
+  if (!hasExplicitInput) {
+    const registryItem = UNIVERSE_REGISTRY_MAP.get(DEFAULT_UNIVERSE_CODE) ?? null;
+    return {
+      rawInput,
+      requestedUniverseCode: DEFAULT_UNIVERSE_CODE,
+      renderedUniverseCode: DEFAULT_UNIVERSE_CODE,
+      universeCode: DEFAULT_UNIVERSE_CODE,
+      universeResolutionStatus: "defaulted",
+      universeUnavailable: false,
+      reason: null,
+      defaulted: true,
+      registryItem,
+    };
+  }
+
+  const candidate = toUniverseCodeCandidate(rawInput);
+  const registryItem = UNIVERSE_REGISTRY_MAP.get(
+    candidate as KnownUniverseCode,
+  ) ?? null;
+
+  if (!registryItem) {
+    const isUnexposedSgg = isSggUniverseCode(candidate);
+    return {
+      rawInput,
+      requestedUniverseCode: candidate,
+      renderedUniverseCode: candidate,
+      universeCode: candidate,
+      universeResolutionStatus: isUnexposedSgg ? "unexposed" : "unknown",
+      universeUnavailable: true,
+      reason: isUnexposedSgg
+        ? "disabled_or_unexposed_universe"
+        : "invalid_or_unknown_universe",
+      defaulted: false,
+      registryItem: null,
+    };
+  }
+
+  const exposed = isServiceExposedUniverse(registryItem);
+  const capabilityEnabled = isCapabilityEnabled(
+    registryItem,
+    options.capability,
+  );
+
+  if (!exposed || !capabilityEnabled) {
+    return {
+      rawInput,
+      requestedUniverseCode: registryItem.code,
+      renderedUniverseCode: registryItem.code,
+      universeCode: registryItem.code,
+      universeResolutionStatus: getUnavailableStatus(registryItem),
+      universeUnavailable: true,
+      reason: "disabled_or_unexposed_universe",
+      defaulted: false,
+      registryItem,
+    };
+  }
+
+  return {
+    rawInput,
+    requestedUniverseCode: registryItem.code,
+    renderedUniverseCode: registryItem.code,
+    universeCode: registryItem.code,
+    universeResolutionStatus: "enabled",
+    universeUnavailable: false,
+    reason: null,
+    defaulted: false,
+    registryItem,
+  };
+}
+
+export function buildUniverseResolutionMetadata(
+  resolution: UniverseRequestResolution,
+) {
+  return {
+    universeCode: resolution.universeCode,
+    requestedUniverseCode: resolution.requestedUniverseCode,
+    renderedUniverseCode: resolution.renderedUniverseCode,
+    universeResolutionStatus: resolution.universeResolutionStatus,
+    universeUnavailable: resolution.universeUnavailable,
+    reason: resolution.reason,
+  };
 }
 
 export function getUniverseLabel(code?: string | null) {

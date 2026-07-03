@@ -8,9 +8,11 @@ import { createClient } from "@supabase/supabase-js";
 
 import {
   DEFAULT_UNIVERSE_CODE,
+  buildUniverseResolutionMetadata,
   getMapUniverseRegistry,
   getUniverseLabel,
-  resolveServiceUniverseCode,
+  resolveUniverseRequest,
+  type UniverseRequestResolution,
 } from "../../../lib/koaptix/universes";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +31,7 @@ const MAP_SUCCESS_CACHE_CONTROL =
   "public, max-age=15, s-maxage=90, stale-while-revalidate=900";
 const MAP_ERROR_CACHE_CONTROL = "no-store";
 
+const LATEST_MAP_TIMEOUT_MS_KOREA = 1_800;
 const LATEST_MAP_TIMEOUT_MS_REGIONAL = 1_100;
 const DYNAMIC_MAP_TIMEOUT_MS_KOREA = 8_500;
 const DYNAMIC_MAP_TIMEOUT_MS_REGIONAL = 5_500;
@@ -135,16 +138,20 @@ type CachedMapPayload = {
   isFallback: boolean;
   fallbackMode:
     | "none"
+    | "same_universe_dynamic_degraded"
     | "exact_same_universe_stale"
     | "same_universe_stale_any_limit"
     | "same_universe_empty_degraded";
   source:
-    | "live_dynamic"
+    | "live_dynamic_fallback"
     | "live_latest"
     | "stale_cache"
     | "stale_cache_any_limit"
     | "empty_degraded";
   cacheState: "bypassed" | "fresh" | "stale_exact" | "stale_any_limit" | "miss";
+  fallbackUsed: boolean;
+  degraded: boolean;
+  reason?: string | null;
   count: number;
   items: MapDistrictItem[];
 };
@@ -548,10 +555,35 @@ function buildEmptyMapPayload(
     fallbackMode: "same_universe_empty_degraded",
     source: "empty_degraded",
     cacheState: "miss",
+    fallbackUsed: true,
+    degraded: true,
+    reason: message ?? null,
     count: 0,
     items: [],
-    degraded: true,
     message,
+  };
+}
+
+function buildUnavailableMapPayload(
+  resolution: UniverseRequestResolution,
+  requestedLimit: number,
+) {
+  return {
+    ok: true,
+    ...buildUniverseResolutionMetadata(resolution),
+    requestedLimit,
+    renderedLimit: 0,
+    resultCount: 0,
+    mapScopeLabel: resolution.requestedUniverseCode,
+    isFallback: false,
+    fallbackMode: "none",
+    source: "empty_degraded",
+    cacheState: "miss",
+    fallbackUsed: false,
+    degraded: false,
+    count: 0,
+    items: [],
+    message: resolution.reason ?? "universe_unavailable",
   };
 }
 
@@ -575,6 +607,8 @@ function withMapDeliveryState(
     fallbackMode: options.fallbackMode,
     source: options.source ?? payload.source,
     cacheState: options.cacheState,
+    fallbackUsed: payload.fallbackUsed || options.fallbackMode !== "none",
+    degraded: payload.degraded || options.fallbackMode !== "none",
   };
 }
 
@@ -630,7 +664,11 @@ async function rowsToMapPayload(
   options: {
     requestedLimit: number;
     renderedLimit: number;
-    source: "live_dynamic" | "live_latest";
+    source: "live_dynamic_fallback" | "live_latest";
+    fallbackMode?: "none" | "same_universe_dynamic_degraded";
+    fallbackUsed?: boolean;
+    degraded?: boolean;
+    reason?: string | null;
   },
 ): Promise<CachedMapPayload> {
   const complexIds = extractComplexIds(rows);
@@ -822,9 +860,12 @@ async function rowsToMapPayload(
     resultCount: items.length,
     mapScopeLabel: getUniverseLabel(universeCode),
     isFallback: Boolean(fallbackIdentity),
-    fallbackMode: "none",
+    fallbackMode: options.fallbackMode ?? "none",
     source: options.source,
     cacheState: "bypassed",
+    fallbackUsed: options.fallbackUsed ?? false,
+    degraded: options.degraded ?? false,
+    reason: options.reason ?? null,
     count: items.length,
     items,
   };
@@ -887,6 +928,9 @@ async function fetchMapPayloadFromDynamic(
       fallbackMode: "same_universe_empty_degraded",
       source: "empty_degraded",
       cacheState: "bypassed",
+      fallbackUsed: true,
+      degraded: true,
+      reason: "dynamic_latest_snapshot_missing",
       count: 0,
       items: [],
     };
@@ -929,7 +973,11 @@ async function fetchMapPayloadFromDynamic(
   return rowsToMapPayload(supabase, normalizedRows, universeCode, {
     requestedLimit,
     renderedLimit: effectiveLimit,
-    source: "live_dynamic",
+    source: "live_dynamic_fallback",
+    fallbackMode: "same_universe_dynamic_degraded",
+    fallbackUsed: true,
+    degraded: true,
+    reason: "latest_board_dynamic_fallback",
   });
 }
 
@@ -964,10 +1012,18 @@ async function fetchMapPayloadFromLatestBoard(
       const queryResult = await withTimeout<{
         data: any[] | null;
         error: { message: string } | null;
-      }>(queryPromise, LATEST_MAP_TIMEOUT_MS_REGIONAL);
+      }>(
+        queryPromise,
+        universeCode === DEFAULT_UNIVERSE_CODE
+          ? LATEST_MAP_TIMEOUT_MS_KOREA
+          : LATEST_MAP_TIMEOUT_MS_REGIONAL,
+      );
 
       const { data, error } = queryResult;
       if (error) throw error;
+      if ((data ?? []).length === 0) {
+        throw new Error("LATEST_MAP_EMPTY_DYNAMIC_FALLBACK");
+      }
 
       latestMapCooldownUntil.delete(universeCode);
 
@@ -1003,27 +1059,34 @@ async function fetchMapPayload(
   universeCode: string,
   requestedLimit: number,
 ): Promise<CachedMapPayload> {
-  if (universeCode === DEFAULT_UNIVERSE_CODE) {
-    const payload = await withTimeout(
-      fetchMapPayloadFromDynamic(supabase, universeCode, requestedLimit),
-      DYNAMIC_MAP_TIMEOUT_MS_KOREA,
-    );
-
-    if (process.env.KOAPTIX_VERBOSE_FALLBACK_LOGS === "1") {
-      console.info("[API /api/map] KOREA_ALL dynamic-only path hit", {
+  if (!isLatestMapCoolingDown(universeCode)) {
+    try {
+      return await fetchMapPayloadFromLatestBoard(
+        supabase,
         universeCode,
         requestedLimit,
-        count: payload.items.length,
-      });
+      );
+    } catch (error) {
+      logQuietMapFallback(
+        `map:dynamic-fallback:${universeCode}`,
+        "[API /api/map] using same-universe dynamic fallback",
+        {
+          universeCode,
+          requestedLimit,
+          message: getErrorMessage(error),
+        },
+      );
     }
-
-    return payload;
   }
 
-  // Regional client transitions avoid the slow latest-board cold path.
+  const dynamicTimeoutMs =
+    universeCode === DEFAULT_UNIVERSE_CODE
+      ? DYNAMIC_MAP_TIMEOUT_MS_KOREA
+      : DYNAMIC_MAP_TIMEOUT_MS_REGIONAL;
+
   return withTimeout(
     fetchMapPayloadFromDynamic(supabase, universeCode, requestedLimit),
-    DYNAMIC_MAP_TIMEOUT_MS_REGIONAL,
+    dynamicTimeoutMs,
   );
 }
 
@@ -1033,9 +1096,30 @@ export async function GET(request: NextRequest) {
   const rawUniverseCode =
     searchParams.get("universe_code") ?? searchParams.get("universe");
 
-  const universeCode = resolveServiceUniverseCode(
-    rawUniverseCode ?? DEFAULT_UNIVERSE_CODE,
-  );
+  const universeResolution = resolveUniverseRequest(rawUniverseCode, {
+    capability: "map",
+  });
+
+  if (universeResolution.universeUnavailable) {
+    const unavailableLimit = parseLimit(
+      searchParams.get("limit"),
+      MAP_DEFAULT_LIMIT_REGIONAL,
+      20,
+      MAP_MAX_LIMIT,
+    );
+
+    return NextResponse.json(
+      buildUnavailableMapPayload(universeResolution, unavailableLimit),
+      {
+        headers: {
+          "Cache-Control": MAP_ERROR_CACHE_CONTROL,
+          "X-Koaptix-Map-Cache": "unavailable",
+        },
+      },
+    );
+  }
+
+  const universeCode = universeResolution.renderedUniverseCode;
 
   const limit = parseLimit(
     searchParams.get("limit"),

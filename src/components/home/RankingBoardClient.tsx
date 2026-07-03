@@ -12,7 +12,7 @@ import UniverseSelector from "./UniverseSelector";
 import {
   DEFAULT_UNIVERSE_CODE,
   getUniverseLabel,
-  resolveServiceUniverseCode,
+  resolveUniverseRequest,
   RANKING_UNIVERSE_OPTIONS,
 } from "../../lib/koaptix/universes";
 
@@ -32,7 +32,7 @@ interface RankingBoardClientProps {
 }
 
 type ApiEnvelope<T> = T | { data?: T | null } | null;
-type UniverseCodeValue = ReturnType<typeof resolveServiceUniverseCode>;
+type UniverseCodeValue = string;
 
 type RankingsApiResponse = {
   ok?: boolean;
@@ -45,6 +45,9 @@ type RankingsApiResponse = {
   source?: string;
   cacheState?: string;
   fallbackMode?: string;
+  fallbackUsed?: boolean;
+  degraded?: boolean;
+  reason?: string | null;
   count?: number;
   items?: RankingItem[];
   message?: string;
@@ -59,6 +62,9 @@ type RankingBoardDeliveryMeta = {
   source: string;
   cacheState: string;
   fallbackMode: string;
+  fallbackUsed: boolean;
+  degraded: boolean;
+  reason: string | null;
 };
 
 type RankingBoardPayload = {
@@ -156,6 +162,9 @@ function buildLocalRankingPayload(
       source: delivery?.source ?? "client_state",
       cacheState: delivery?.cacheState ?? "client_state",
       fallbackMode: delivery?.fallbackMode ?? "none",
+      fallbackUsed: delivery?.fallbackUsed ?? false,
+      degraded: delivery?.degraded ?? false,
+      reason: delivery?.reason ?? null,
     },
   };
 }
@@ -174,6 +183,13 @@ function buildRankingPayload(
     toFiniteNumberOrNull(json.resultCount) ??
     toFiniteNumberOrNull(json.count) ??
     items.length;
+  const fallbackMode = json.fallbackMode ?? "unknown";
+  const fallbackUsed =
+    typeof json.fallbackUsed === "boolean"
+      ? json.fallbackUsed
+      : fallbackMode !== "none" && fallbackMode !== "unknown";
+  const degraded =
+    typeof json.degraded === "boolean" ? json.degraded : fallbackUsed;
 
   return {
     items,
@@ -189,7 +205,10 @@ function buildRankingPayload(
       resultCount,
       source: json.source ?? "unknown",
       cacheState: json.cacheState ?? "unknown",
-      fallbackMode: json.fallbackMode ?? "unknown",
+      fallbackMode,
+      fallbackUsed,
+      degraded,
+      reason: json.reason ?? json.message ?? null,
     },
   };
 }
@@ -219,6 +238,10 @@ const RANKINGS_API = (
   // Canonical contract: both tactical (/api/rankings) and TOP1000
   // (/api/ranking) use universe_code in API requests.
   `${apiBasePath}?universe_code=${encodeURIComponent(universeCode)}&limit=${limit}`;
+
+function resolveBoardUniverseCode(input?: string | null) {
+  return resolveUniverseRequest(input).requestedUniverseCode;
+}
 
 async function readApiData<T>(
   input: string,
@@ -272,10 +295,11 @@ async function readRankingPayload(
 
   if (
     strictUniverseIdentity &&
-    payload.delivery.renderedUniverseCode !== expectedUniverseCode
+    (payload.delivery.requestedUniverseCode !== expectedUniverseCode ||
+      payload.delivery.renderedUniverseCode !== expectedUniverseCode)
   ) {
     throw new Error(
-      `Ranking universe mismatch: requested ${expectedUniverseCode}, rendered ${payload.delivery.renderedUniverseCode}`,
+      `Ranking universe mismatch: requested ${expectedUniverseCode}, api-requested ${payload.delivery.requestedUniverseCode}, rendered ${payload.delivery.renderedUniverseCode}`,
     );
   }
 
@@ -304,7 +328,7 @@ export function RankingBoardClient({
   const initialSearchQuery = searchParams?.get("q") ?? "";
   const initialSelectedTierFilter = parseTierFilter(searchParams?.get("tier"));
 
-  const urlUniverseCode = resolveServiceUniverseCode(
+  const urlUniverseCode = resolveBoardUniverseCode(
     searchParams?.get("universe") ?? initialUniverseCode,
   );
 
@@ -383,7 +407,7 @@ export function RankingBoardClient({
     const params = new URLSearchParams(window.location.search);
 
     setBoardUniverseCode(
-      resolveServiceUniverseCode(params.get("universe") ?? initialUniverseCode),
+      resolveBoardUniverseCode(params.get("universe") ?? initialUniverseCode),
     );
     setDistrictQueryLocal(params.get("district") ?? "");
     setSelectedComplexId(params.get("complexId"));
@@ -489,7 +513,8 @@ export function RankingBoardClient({
 
       const localController = signal ? null : new AbortController();
       const nextSignal = signal ?? localController!.signal;
-      const strictUniverseIdentity = apiBasePath === "/api/rankings";
+      const strictUniverseIdentity =
+        apiBasePath === "/api/rankings" || apiBasePath === "/api/ranking";
       const requestLimit = getHomeBoardRequestLimit(
         apiBasePath,
         universeCode,
@@ -540,6 +565,9 @@ export function RankingBoardClient({
             source: "server_seed",
             cacheState: "server_seed",
             fallbackMode: "none",
+            fallbackUsed: false,
+            degraded: false,
+            reason: null,
           },
         );
 
@@ -557,6 +585,9 @@ export function RankingBoardClient({
           source: "client_pending",
           cacheState: "miss",
           fallbackMode: boardError ? "server_seed_degraded" : "none",
+          fallbackUsed: Boolean(boardError),
+          degraded: Boolean(boardError),
+          reason: boardError ?? null,
         }).delivery,
       );
       setIsBoardLoading(true);
@@ -617,6 +648,9 @@ export function RankingBoardClient({
           fallbackMode: timedOut
             ? "client_timeout_preserve_previous"
             : "client_error_preserve_previous",
+          fallbackUsed: true,
+          degraded: true,
+          reason: message,
         }));
         setLiveBoardError(message);
 
@@ -658,7 +692,7 @@ export function RankingBoardClient({
 
   const handleUniverseChange = useCallback(
     (nextUniverseCode: string) => {
-      const normalizedNext = resolveServiceUniverseCode(nextUniverseCode);
+      const normalizedNext = resolveBoardUniverseCode(nextUniverseCode);
 
       if (normalizedNext === boardUniverseCode) {
         return;
@@ -687,6 +721,9 @@ export function RankingBoardClient({
           source: boardDeliveryMeta.source,
           cacheState: "client_stale",
           fallbackMode: "stale_while_syncing",
+          fallbackUsed: true,
+          degraded: true,
+          reason: "stale_while_syncing",
         },
       );
       setLiveBoardError(null);
@@ -867,6 +904,8 @@ export function RankingBoardClient({
         data-board-source={boardDeliveryMeta.source}
         data-board-cache-state={boardDeliveryMeta.cacheState}
         data-board-fallback-mode={boardDeliveryMeta.fallbackMode}
+        data-board-fallback-used={boardDeliveryMeta.fallbackUsed ? "true" : "false"}
+        data-board-degraded={boardDeliveryMeta.degraded ? "true" : "false"}
         data-board-stale-universe-code={staleBoardUniverseCode ?? ""}
       >
         <div className="shrink-0 flex flex-col gap-3 border-b border-slate-800/80 p-4 lg:p-5">
@@ -963,6 +1002,8 @@ export function RankingBoardClient({
               data-requested-universe-code={boardDeliveryMeta.requestedUniverseCode}
               data-rendered-universe-code={boardDeliveryMeta.renderedUniverseCode}
               data-board-fallback-mode={boardDeliveryMeta.fallbackMode}
+              data-board-fallback-used={boardDeliveryMeta.fallbackUsed ? "true" : "false"}
+              data-board-degraded={boardDeliveryMeta.degraded ? "true" : "false"}
               data-board-stale-universe-code={staleBoardUniverseCode ?? ""}
             >
               Syncing {getUniverseLabel(boardUniverseCode)}. Keeping the last

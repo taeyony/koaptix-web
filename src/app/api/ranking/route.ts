@@ -8,8 +8,9 @@ import { NextRequest, NextResponse } from "next/server";
  */
 
 import {
-  DEFAULT_UNIVERSE_CODE,
-  resolveServiceUniverseCode,
+  buildUniverseResolutionMetadata,
+  resolveUniverseRequest,
+  type UniverseRequestResolution,
 } from "../../../lib/koaptix/universes";
 import {
   getLatestRankBoard,
@@ -30,6 +31,19 @@ const FULL_MAX_LIMIT = 1000;
 type RankingApiResponse = {
   ok: boolean;
   universeCode: string;
+  requestedUniverseCode: string;
+  renderedUniverseCode: string;
+  requestedLimit: number;
+  renderedLimit: number;
+  resultCount: number;
+  source: "live_latest" | "live_dynamic_fallback" | "empty_degraded";
+  cacheState: "bypassed" | "miss";
+  fallbackMode:
+    | "none"
+    | "same_universe_dynamic_degraded"
+    | "same_universe_empty_degraded";
+  fallbackUsed: boolean;
+  degraded: boolean;
   latestBoardDate: string | null;
   filters: {
     q: string;
@@ -60,6 +74,8 @@ type RankingBoardRow = DbLatestRankBoardWeeklyRow & {
   market_cap_delta_7d?: NullableNumberLike;
   market_cap_delta_pct_7d?: NullableNumberLike;
   rank_movement?: string | null;
+  __koaptixBoardSource?: string | null;
+  __koaptixFallbackMode?: string | null;
 };
 
 function parseLimit(
@@ -110,6 +126,72 @@ function deriveLatestBoardDate(rows: RankingBoardRow[]): string | null {
   );
 
   return dates.size === 1 ? Array.from(dates)[0] : null;
+}
+
+function deriveBoardSource(rows: RankingBoardRow[]): RankingApiResponse["source"] {
+  const firstSource = rows
+    .map((row) => row.__koaptixBoardSource)
+    .find((value): value is string => Boolean(value));
+
+  if (firstSource === "live_dynamic_fallback") {
+    return "live_dynamic_fallback";
+  }
+
+  if (firstSource === "live_latest") {
+    return "live_latest";
+  }
+
+  return rows.length > 0 ? "live_latest" : "empty_degraded";
+}
+
+function deriveFallbackMode(
+  source: RankingApiResponse["source"],
+): RankingApiResponse["fallbackMode"] {
+  if (source === "live_dynamic_fallback") {
+    return "same_universe_dynamic_degraded";
+  }
+
+  if (source === "empty_degraded") {
+    return "same_universe_empty_degraded";
+  }
+
+  return "none";
+}
+
+function buildUnavailableRankingPayload(
+  resolution: UniverseRequestResolution,
+  options: {
+    limit: number;
+    q: string;
+    tier: TierFilterKey;
+    complexId: string | null;
+  },
+) {
+  return {
+    ok: true,
+    ...buildUniverseResolutionMetadata(resolution),
+    requestedLimit: options.limit,
+    renderedLimit: 0,
+    resultCount: 0,
+    source: "empty_degraded",
+    cacheState: "miss",
+    fallbackMode: "none",
+    fallbackUsed: false,
+    degraded: false,
+    latestBoardDate: null,
+    filters: {
+      q: options.q,
+      tier: options.tier,
+      complexId: options.complexId,
+    },
+    count: 0,
+    items: [],
+    message: resolution.reason ?? "universe_unavailable",
+  } satisfies RankingApiResponse & {
+    universeResolutionStatus: string;
+    universeUnavailable: boolean;
+    reason: string | null;
+  };
 }
 
 function getRankValue(item: RankingItem): number | null {
@@ -252,10 +334,6 @@ export async function GET(request: NextRequest) {
   const rawUniverseCode =
     searchParams.get("universe_code") ?? searchParams.get("universe");
 
-  const universeCode = resolveServiceUniverseCode(
-    rawUniverseCode ?? DEFAULT_UNIVERSE_CODE,
-  );
-
   const limit = parseLimit(
     searchParams.get("limit"),
     FULL_DEFAULT_LIMIT,
@@ -265,10 +343,32 @@ export async function GET(request: NextRequest) {
   const q = normalizeQuery(searchParams.get("q"));
   const tier = parseTier(searchParams.get("tier"));
   const complexId = searchParams.get("complexId")?.trim() || null;
+  const universeResolution = resolveUniverseRequest(rawUniverseCode, {
+    capability: "ranking",
+  });
+
+  if (universeResolution.universeUnavailable) {
+    return NextResponse.json(
+      buildUnavailableRankingPayload(universeResolution, {
+        limit,
+        q,
+        tier,
+        complexId,
+      }),
+      {
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
+  }
+
+  const universeCode = universeResolution.renderedUniverseCode;
 
   try {
     const rows = (await getLatestRankBoard(universeCode, limit)) as RankingBoardRow[];
     const latestBoardDate = deriveLatestBoardDate(rows);
+    const source = deriveBoardSource(rows);
+    const fallbackMode = deriveFallbackMode(source);
+    const fallbackUsed = fallbackMode !== "none";
     const items = rows
       .map((row) => toRankingItem(row, universeCode))
       .filter((item) => matchesTier(item, tier))
@@ -277,6 +377,16 @@ export async function GET(request: NextRequest) {
     const payload: RankingApiResponse = {
       ok: true,
       universeCode,
+      requestedUniverseCode: universeCode,
+      renderedUniverseCode: universeCode,
+      requestedLimit: limit,
+      renderedLimit: rows.length,
+      resultCount: items.length,
+      source,
+      cacheState: "bypassed",
+      fallbackMode,
+      fallbackUsed,
+      degraded: fallbackUsed,
       latestBoardDate,
       filters: {
         q,
@@ -298,6 +408,16 @@ export async function GET(request: NextRequest) {
       {
         ok: false,
         universeCode,
+        requestedUniverseCode: universeCode,
+        renderedUniverseCode: universeCode,
+        requestedLimit: limit,
+        renderedLimit: 0,
+        resultCount: 0,
+        source: "empty_degraded",
+        cacheState: "miss",
+        fallbackMode: "same_universe_empty_degraded",
+        fallbackUsed: true,
+        degraded: true,
         latestBoardDate: null,
         filters: {
           q,

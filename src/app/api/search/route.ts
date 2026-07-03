@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   DEFAULT_UNIVERSE_CODE,
-  resolveServiceUniverseCode,
+  buildUniverseResolutionMetadata,
+  resolveUniverseRequest,
+  type UniverseRequestResolution,
 } from "../../../lib/koaptix/universes";
 import { getLatestRankBoard } from "../../../lib/koaptix/queries";
 import type { RankingItem } from "../../../lib/koaptix/types";
@@ -226,6 +228,26 @@ function excludeAlreadyShownItems(
   return items.filter((item) => !shownIds.has(item.complexId));
 }
 
+function buildUnavailableSearchPayload(
+  resolution: UniverseRequestResolution,
+  limit: number,
+) {
+  return {
+    ok: true,
+    ...buildUniverseResolutionMetadata(resolution),
+    requestedLimit: limit,
+    resultCount: 0,
+    source: "empty_degraded",
+    cacheState: "miss",
+    fallbackMode: "none",
+    fallbackUsed: false,
+    degraded: false,
+    localItems: [],
+    globalItems: [],
+    message: resolution.reason ?? "universe_unavailable",
+  };
+}
+
 async function fetchSourceItems(
   universeCode: string,
   sourceLimit: number,
@@ -370,11 +392,21 @@ export async function GET(request: NextRequest) {
   const rawUniverseCode =
     searchParams.get("universe_code") ?? searchParams.get("universe");
 
-  const requestedUniverseCode = resolveServiceUniverseCode(
-    rawUniverseCode ?? DEFAULT_UNIVERSE_CODE,
-  );
-
   const limit = parseLimit(searchParams.get("limit"), 12, 5, 20);
+  const universeResolution = resolveUniverseRequest(rawUniverseCode, {
+    capability: "search",
+  });
+
+  if (universeResolution.universeUnavailable) {
+    return NextResponse.json(
+      buildUnavailableSearchPayload(universeResolution, limit),
+      {
+        headers: { "Cache-Control": SEARCH_ERROR_CACHE_CONTROL },
+      },
+    );
+  }
+
+  const requestedUniverseCode = universeResolution.renderedUniverseCode;
 
   if (q.length < 1) {
     return NextResponse.json(
