@@ -8,8 +8,7 @@ import Link from "next/link";
 
 import {
   DEFAULT_UNIVERSE_CODE,
-  resolveServiceUniverseCode,
-  getUniverseLabel,
+  resolveUniverseRequest,
 } from "../../lib/koaptix/universes";
 import type { RankingItem } from "../../lib/koaptix/types";
 
@@ -46,6 +45,12 @@ async function resolveSearchParams(
   return input ? await input : undefined;
 }
 
+function getUniverseResolutionLabel(
+  resolution: ReturnType<typeof resolveUniverseRequest>,
+) {
+  return resolution.registryItem?.label ?? resolution.requestedUniverseCode;
+}
+
 export default async function RankingPage({
   searchParams,
 }: {
@@ -54,9 +59,11 @@ export default async function RankingPage({
   const resolvedSearchParams = await resolveSearchParams(searchParams);
 
   const rawUniverseParam = pickSingleParam(resolvedSearchParams?.universe);
-  const universeCode = resolveServiceUniverseCode(
-    rawUniverseParam ?? DEFAULT_UNIVERSE_CODE,
-  );
+  const universeResolution = resolveUniverseRequest(rawUniverseParam, {
+    capability: "ranking",
+  });
+  const universeCode = universeResolution.requestedUniverseCode;
+  const universeUnavailable = universeResolution.universeUnavailable;
   const initialTier = parseRankingTier(
     pickSingleParam(resolvedSearchParams?.tier),
   );
@@ -66,7 +73,7 @@ export default async function RankingPage({
     pickSingleParam(resolvedSearchParams?.complexId)?.trim() || null;
 
   // 🚨 지차장 지시 B: Label 추출 및 홈으로 돌아갈 경로(현재 유니버스 유지) 생성
-  const universeLabel = getUniverseLabel(universeCode);
+  const universeLabel = getUniverseResolutionLabel(universeResolution);
 
   const homeHref =
     universeCode === DEFAULT_UNIVERSE_CODE
@@ -82,6 +89,11 @@ export default async function RankingPage({
       className="min-h-screen bg-[#06090f] px-2 py-4 sm:p-4 lg:p-6"
       data-testid="ranking-page"
       data-universe-code={universeCode}
+      data-universe-unavailable={universeUnavailable ? "true" : "false"}
+      data-universe-resolution-status={
+        universeResolution.universeResolutionStatus
+      }
+      data-universe-unavailable-reason={universeResolution.reason ?? ""}
       data-tier-filter={initialTier}
       data-has-query={initialSearchQuery ? "true" : "false"}
       data-selected-complex-id={initialComplexId ?? ""}

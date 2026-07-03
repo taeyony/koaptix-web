@@ -9,7 +9,7 @@ import Link from "next/link";
 import {
   DEFAULT_UNIVERSE_CODE,
   getUniverseLabel,
-  resolveServiceUniverseCode,
+  resolveUniverseRequest,
 } from "../lib/koaptix/universes";
 
 import { CommandPalette } from "../components/home/CommandPalette";
@@ -81,11 +81,12 @@ function withTimeoutFallback<T>(
 
 function buildEmptyIndexChartPayload(
   universeCode: string,
+  renderedUniverseLabel = getUniverseLabel(universeCode),
 ): HomeIndexChartPayload {
   return {
     requestedUniverseCode: universeCode,
     renderedUniverseCode: universeCode,
-    renderedUniverseLabel: getUniverseLabel(universeCode),
+    renderedUniverseLabel,
     isFallbackToKorea: false,
     indexCode: null,
     indexName: null,
@@ -110,6 +111,7 @@ function buildEmptyIndexChartPayload(
 function buildSafeChartFallback(
   universeCode: string,
   cache: Map<string, HomeIndexChartPayload>,
+  renderedUniverseLabel = getUniverseLabel(universeCode),
 ): HomeIndexChartPayload {
   const exact = cache.get(universeCode) ?? null;
 
@@ -122,7 +124,13 @@ function buildSafeChartFallback(
     return exact;
   }
 
-  return buildEmptyIndexChartPayload(universeCode);
+  return buildEmptyIndexChartPayload(universeCode, renderedUniverseLabel);
+}
+
+function getUniverseResolutionLabel(
+  resolution: ReturnType<typeof resolveUniverseRequest>,
+) {
+  return resolution.registryItem?.label ?? resolution.requestedUniverseCode;
 }
 
 export default async function Home({
@@ -133,9 +141,12 @@ export default async function Home({
   const resolvedSearchParams = await resolveSearchParams(searchParams);
 
   const rawUniverseParam = pickSingleParam(resolvedSearchParams?.universe);
-  const universeCode = resolveServiceUniverseCode(
-    rawUniverseParam ?? DEFAULT_UNIVERSE_CODE,
-  );
+  const universeResolution = resolveUniverseRequest(rawUniverseParam, {
+    capability: "home",
+  });
+  const universeCode = universeResolution.requestedUniverseCode;
+  const universeUnavailable = universeResolution.universeUnavailable;
+  const universeLabel = getUniverseResolutionLabel(universeResolution);
 
   const rankingHref =
     universeCode === DEFAULT_UNIVERSE_CODE
@@ -153,13 +164,14 @@ export default async function Home({
   const chartFallback = buildSafeChartFallback(
     universeCode,
     lastGoodIndexChartPayloadByUniverse,
+    universeLabel,
   );
 
   // KOREA_ALL intentionally skips a DB-backed SSR board seed. The home board
   // stays lightweight and lets /api/rankings deliver the tactical payload on
   // the client path with its own timeout/cache contract.
   const boardSeedPromise =
-    universeCode === DEFAULT_UNIVERSE_CODE
+    universeCode === DEFAULT_UNIVERSE_CODE || universeUnavailable
       ? Promise.resolve({
           items: [] as any[],
           boardError: null as string | null,
@@ -208,31 +220,33 @@ export default async function Home({
       2500,
       lastGoodHomeKpi,
     ),
-    withTimeoutFallback(
-      getIndexChartPayload(universeCode, 24)
-        .then((payload) => {
-          // Cache only exact-scope payloads for the same requested universe.
-          if (
-            payload.rows.length > 0 &&
-            payload.requestedUniverseCode === universeCode &&
-            payload.renderedUniverseCode === universeCode
-          ) {
-            lastGoodIndexChartPayloadByUniverse.set(universeCode, {
-              ...payload,
-              requestedUniverseCode: universeCode,
-              renderedUniverseCode: universeCode,
-              isFallbackToKorea: false,
-            });
-          }
-          return payload;
-        })
-        .catch((error) => {
-          console.warn("[HOME] getIndexChartPayload failed:", error);
-          return chartFallback;
-        }),
-      4500,
-      chartFallback,
-    ),
+    universeUnavailable
+      ? Promise.resolve(chartFallback)
+      : withTimeoutFallback(
+          getIndexChartPayload(universeCode, 24)
+            .then((payload) => {
+              // Cache only exact-scope payloads for the same requested universe.
+              if (
+                payload.rows.length > 0 &&
+                payload.requestedUniverseCode === universeCode &&
+                payload.renderedUniverseCode === universeCode
+              ) {
+                lastGoodIndexChartPayloadByUniverse.set(universeCode, {
+                  ...payload,
+                  requestedUniverseCode: universeCode,
+                  renderedUniverseCode: universeCode,
+                  isFallbackToKorea: false,
+                });
+              }
+              return payload;
+            })
+            .catch((error) => {
+              console.warn("[HOME] getIndexChartPayload failed:", error);
+              return chartFallback;
+            }),
+          4500,
+          chartFallback,
+        ),
   ]);
 
   const rawItems = boardSeed.items;
@@ -314,7 +328,15 @@ export default async function Home({
         initialUniverseCode={universeCode}
       />
 
-      <main className="min-h-screen overflow-x-hidden bg-[#06090f] px-2 py-4 sm:p-4 lg:p-6">
+      <main
+        className="min-h-screen overflow-x-hidden bg-[#06090f] px-2 py-4 sm:p-4 lg:p-6"
+        data-universe-code={universeCode}
+        data-universe-unavailable={universeUnavailable ? "true" : "false"}
+        data-universe-resolution-status={
+          universeResolution.universeResolutionStatus
+        }
+        data-universe-unavailable-reason={universeResolution.reason ?? ""}
+      >
         <div className="mx-auto w-full max-w-[1600px] space-y-4 overflow-x-hidden">
           <section className="overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_rgba(0,0,0,0.4)]">
             <div className="border-b border-slate-800/80 px-4 py-3 lg:px-5 lg:py-4">

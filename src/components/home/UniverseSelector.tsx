@@ -204,16 +204,18 @@ export default function UniverseSelector({
   }, [options]);
 
   const currentOption = useMemo(() => {
-    return (
-      sortedOptions.find((option) => option.code === value) ??
-      sortedOptions[0] ??
-      null
-    );
+    return sortedOptions.find((option) => option.code === value) ?? null;
   }, [sortedOptions, value]);
 
+  const currentDisplayCode = currentOption?.code ?? value ?? "";
+  const currentValueUnavailable = Boolean(value && !currentOption);
+  const currentDisplayLabel =
+    currentOption?.label ??
+    (value ? `Unavailable universe: ${value}` : "대한민국 전체");
+
   const currentMacroCode = useMemo(() => {
-    return getParentMacroCode(currentOption?.code ?? value ?? null);
-  }, [currentOption, value]);
+    return getParentMacroCode(currentDisplayCode || null);
+  }, [currentDisplayCode]);
 
   const macroOptions = useMemo(() => {
     return sortedOptions.filter((option) => isMacroUniverseCode(option.code));
@@ -443,10 +445,10 @@ export default function UniverseSelector({
     return macroOption?.label ?? "현재 권역";
   }, [currentMacroCode, macroOptions]);
 
-  const currentIsSgg = isSggUniverseCode(currentOption?.code ?? value ?? null);
-  const currentKindLabel = getUniverseKindLabel(
-    currentOption?.code ?? value ?? null,
-  );
+  const currentIsSgg = isSggUniverseCode(currentDisplayCode || null);
+  const currentKindLabel = currentValueUnavailable
+    ? "unavailable"
+    : getUniverseKindLabel(currentDisplayCode || null);
   const finderScopeLabel = query.trim()
     ? "전체 지역 검색"
     : `${currentRegionLabel} 시군구`;
@@ -486,12 +488,25 @@ export default function UniverseSelector({
               현재 선택 지역
             </p>
             <p
-              className="truncate text-sm font-semibold text-slate-100"
+              className={`truncate text-sm font-semibold ${
+                currentValueUnavailable ? "text-amber-200" : "text-slate-100"
+              }`}
               data-testid="current-universe-label"
-              data-universe-code={currentOption?.code ?? value ?? ""}
+              data-universe-code={currentDisplayCode}
+              data-universe-unavailable={
+                currentValueUnavailable ? "true" : "false"
+              }
             >
-              {currentOption?.label ?? "대한민국 전체"}
+              {currentDisplayLabel}
             </p>
+            {currentValueUnavailable && (
+              <p
+                className="mt-1 text-[11px] text-amber-300/80"
+                data-testid="current-universe-unavailable"
+              >
+                Not selectable from the public universe list.
+              </p>
+            )}
           </div>
 
           <button
