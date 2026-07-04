@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 /**
  * Route role marker:
@@ -27,6 +28,7 @@ export const revalidate = 0;
 
 const FULL_DEFAULT_LIMIT = 1000;
 const FULL_MAX_LIMIT = 1000;
+const ROUTE_LATEST_BOARD_TIMEOUT_MS = 6_000;
 
 type RankingApiResponse = {
   ok: boolean;
@@ -77,6 +79,114 @@ type RankingBoardRow = DbLatestRankBoardWeeklyRow & {
   __koaptixBoardSource?: string | null;
   __koaptixFallbackMode?: string | null;
 };
+
+function createRankingRouteSupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    );
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+async function withRouteQueryTimeout<T>(
+  promise: PromiseLike<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([Promise.resolve(promise), timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function fetchRankingLatestBoardForRoute(
+  universeCode: string,
+  limit: number,
+): Promise<RankingBoardRow[]> {
+  const supabase = createRankingRouteSupabase();
+
+  const { data, error } = await withRouteQueryTimeout(
+    supabase
+      .from("v_koaptix_latest_universe_rank_board_u")
+      .select(
+        `
+          snapshot_date,
+          universe_code,
+          universe_name,
+          universe_scope,
+          complex_id,
+          apt_name_ko,
+          sigungu_name,
+          legal_dong_name,
+          build_year,
+          household_count,
+          total_household_count,
+          recovery_52w,
+          rank_all,
+          previous_rank_all,
+          rank_delta_w,
+          rank_movement,
+          market_cap_krw,
+          market_cap_trillion_krw,
+          market_cap_share,
+          market_cap_share_pct,
+          tier_code,
+          tier_label,
+          tier_sort,
+          is_top1000
+        `,
+      )
+      .eq("universe_code", universeCode)
+      .order("rank_all", { ascending: true })
+      .limit(limit),
+    ROUTE_LATEST_BOARD_TIMEOUT_MS,
+    "RANKING_ROUTE_LATEST_BOARD_LOCAL_TIMEOUT",
+  );
+
+  if (error) {
+    throw new Error(
+      `Failed to fetch v_koaptix_latest_universe_rank_board_u: ${error.message}`,
+    );
+  }
+
+  const rows = (data ?? []) as unknown as RankingBoardRow[];
+
+  return rows.map((row) => ({
+    ...row,
+    history_snapshot_date: row.history_snapshot_date ?? null,
+    rank_delta_7d: row.rank_delta_7d ?? null,
+    market_cap_delta_7d: row.market_cap_delta_7d ?? null,
+    market_cap_delta_pct_7d: row.market_cap_delta_pct_7d ?? null,
+    __koaptixBoardSource: "live_latest",
+    __koaptixFallbackMode: "none",
+    universe_code: row.universe_code ?? universeCode,
+    universe_name: row.universe_name ?? null,
+    location_search_label: [
+      row.sigungu_name ?? null,
+      row.legal_dong_name ?? null,
+      row.apt_name_ko ?? null,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  }));
+}
 
 function parseLimit(
   value: string | null,
@@ -364,7 +474,18 @@ export async function GET(request: NextRequest) {
   const universeCode = universeResolution.renderedUniverseCode;
 
   try {
-    const rows = (await getLatestRankBoard(universeCode, limit)) as RankingBoardRow[];
+    let rows: RankingBoardRow[];
+
+    try {
+      rows = await fetchRankingLatestBoardForRoute(universeCode, limit);
+    } catch {
+      rows = (await getLatestRankBoard(universeCode, limit)) as RankingBoardRow[];
+    }
+
+    if (rows.length === 0) {
+      rows = (await getLatestRankBoard(universeCode, limit)) as RankingBoardRow[];
+    }
+
     const latestBoardDate = deriveLatestBoardDate(rows);
     const source = deriveBoardSource(rows);
     const fallbackMode = deriveFallbackMode(source);
