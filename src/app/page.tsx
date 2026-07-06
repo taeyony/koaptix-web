@@ -17,7 +17,7 @@ import { TopMovers } from "../components/home/TopMovers";
 import { NeonMap } from "../components/home/NeonMap";
 import MarketChartCard from "../components/home/MarketChartCard";
 import { RankingBoardClient } from "../components/home/RankingBoardClient";
-import { HapiPhilosophyTrigger } from "../components/home/HapiPhilosophyTrigger";
+import FormulaExplainer from "../components/home/FormulaExplainer";
 import { ThemeToggle } from "../components/home/ThemeToggle";
 import {
   BetaDisclosure,
@@ -390,7 +390,7 @@ export default async function Home({
                   </div>
 
                   <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                    <HapiPhilosophyTrigger />
+                    <FormulaExplainer triggerLabel="산출 기준 보기" />
 
                     <Link
                       href={rankingHref}

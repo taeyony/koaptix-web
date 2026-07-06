@@ -710,8 +710,13 @@ export function CommandPalette({
               ) : regionSearchResults.length > 0 ? (
                 null
               ) : (
-                <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
-                  검색 결과가 없습니다. 단지명, 구, 동 이름을 바꿔 다시 입력해보세요.
+                <div className="space-y-2 rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
+                  <p>현재 공개 랭킹/지역 보드에서는 검색 결과가 없습니다.</p>
+                  <p>
+                    단지가 존재하더라도 KOAPTIX 산정 조건 또는 공개 검증 상태에
+                    따라 아직 표시되지 않을 수 있습니다.
+                  </p>
+                  <p>단지명, 구, 동 이름을 바꿔 다시 검색해보세요.</p>
                 </div>
               )}
             </div>

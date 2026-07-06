@@ -938,7 +938,6 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     pushDistrictToUrl(data.name);
   }, []);
 
-  const isMapFallback = mapDelivery.fallbackMode !== "none";
   const mapScopeLabel =
     mapDelivery.mapScopeLabel || getUniverseLabel(mapDelivery.renderedUniverseCode);
   const requestedUniverseLabel = getUniverseLabel(
@@ -1066,28 +1065,10 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
           <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-cyan-300">
-            홈 보드 연동 {actionableCount}
+            표시 단지 {actionableCount}개
           </span>
           <span className="rounded-full border border-slate-700 bg-slate-800/30 px-2.5 py-1 text-slate-400">
-            레이더 전용 {Math.max(visualizedMapData.length - actionableCount, 0)}
-          </span>
-          <span
-            className="rounded-full border border-slate-700 bg-slate-800/30 px-2.5 py-1 text-slate-400"
-            data-testid="neon-map-cache-state"
-            data-map-cache-state={mapDelivery.cacheState}
-          >
-            Cache {mapDelivery.cacheState}
-          </span>
-          <span
-            className={`rounded-full border px-2.5 py-1 ${
-              isMapFallback
-                ? "border-amber-500/20 bg-amber-500/10 text-amber-300"
-                : "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
-            }`}
-            data-testid="neon-map-fallback-state"
-            data-map-fallback-mode={mapDelivery.fallbackMode}
-          >
-            {isMapFallback ? `Fallback ${mapDelivery.fallbackMode}` : "Same-universe live"}
+            참고 레이어 {Math.max(visualizedMapData.length - actionableCount, 0)}개
           </span>
           {mapItemsError && (
             <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-rose-300">
@@ -1297,8 +1278,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                     : `주간 흐름 ▼${Math.abs(data.averageDelta).toFixed(1)}`,
                   data.primaryComplexName ? `대표 ${data.primaryComplexName}` : "",
                   isActionable
-                    ? `홈 보드 ${data.boardCount ?? 0}개 연동`
-                    : "레이더 전용",
+                    ? `표시 단지 ${data.boardCount ?? 0}개`
+                    : "참고 레이어",
                 ].filter(Boolean);
 
                 return (
