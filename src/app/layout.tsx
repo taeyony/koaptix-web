@@ -3,11 +3,11 @@ import "./globals.css";
 
 export const metadata = {
   metadataBase: new URL('https://www.koaptix.com'),
-  title: "KOAPTIX | 아파트 시가총액 지수",
-  description: "당신의 아파트 모멘텀은 안전합니까? 서울 주요 단지의 실시간 시가총액 흐름과 하락 압력을 즉시 스캔하십시오.",
+  title: "KOAPTIX | 전국 아파트 자본 흐름 랭킹",
+  description: "KOAPTIX는 단지별 추정 시가총액과 순위 변화를 기준으로 전국·지역·시군구 아파트 흐름을 관측하는 랭킹 터미널입니다. 투자 추천이나 공식 가격지수가 아닙니다.",
   openGraph: {
-    title: "KOAPTIX 500 | 실시간 아파트 자본 흐름 레이더",
-    description: "자본의 흐름을 읽는 자가 살아남는다. HAPI가 제공하는 서울 아파트 시총지수.",
+    title: "KOAPTIX | 전국 아파트 랭킹 관측소",
+    description: "관측자 Y가 전국 아파트 자본 흐름을 기록합니다. KOAPTIX는 추천하지 않고, 추정 시가총액과 순위 변화를 관측하고 비교합니다.",
     url: "https://www.koaptix.com", // 의장님의 본섭 주소!
     siteName: "KOAPTIX",
     locale: "ko_KR",

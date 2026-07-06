@@ -8,11 +8,11 @@ type BetaDisclosureProps = {
 export const LAUNCH_COPY = {
   softPublicBetaEn: "SOFT PUBLIC BETA",
   softPublicBetaKo: "소프트 공개 베타",
-  heroHeadline: "한국 아파트 자본 흐름을 단지 랭킹으로 읽다",
+  heroHeadline: "우리 아파트, 전국에서 어디쯤일까요?",
   heroSubheadline:
-    "KOAPTIX는 아파트 단지의 추정 주거자산 가치를 기준으로 전국, 지역, 시군구 흐름을 비교하는 랭킹-first 터미널입니다.",
+    "KOAPTIX는 전국 아파트 단지의 추정 주거자산 가치와 순위 변화를 관측하는 랭킹 터미널입니다.",
   homeExplainer:
-    "KOAPTIX 500은 대표 랭킹 보드이고, KOAPTIX Index는 시장 전체 온도를 보는 집계 신호입니다. 지역을 선택하거나 단지명을 검색해 우리 동네의 위치를 확인해보세요.",
+    "관측자 Y가 KOAPTIX 500, TOP1000, 지역 보드를 통해 우리 동네의 상대 위치를 차분하게 정리합니다. 검색은 현재 공개 랭킹/지역 보드 기준으로 안내합니다.",
   compactBeta:
     "현재 KOAPTIX는 소프트 공개 베타입니다. 추정 시가총액과 주간 변화는 참고용이며, 공식 가격지수나 투자자문이 아닙니다.",
   estimatedMarketCap:
@@ -26,17 +26,17 @@ export const LAUNCH_COPY = {
   detailCompact:
     "이 상세 정보는 추정 시가총액과 공개 가능한 랭킹 데이터를 요약한 베타 지표입니다.",
   boardIntro:
-    "선택한 지역의 단지를 추정 시가총액과 순위 변화로 비교하는 전술 보드입니다.",
+    "선택한 지역의 단지를 추정 시가총액과 순위 변화로 비교하는 관측 보드입니다.",
   rankingSubtitle:
     "현재 유니버스 내부 재랭킹 기준 상위 1000개 단지를 탐색하는 full board입니다.",
   koaptix500Card:
-    "한국 아파트 자본 흐름을 대표하는 메인 랭킹 보드",
+    "전국 자본 흐름을 대표하는 메인 단지 랭킹 보드",
   koaptixIndexCard:
-    "시장 전체 온도를 보는 집계 신호",
+    "개별 단지가 아니라 시장 전체 온도를 보는 집계 신호",
   top1000SearchCard:
-    "더 넓은 상위권 보드와 단지 탐색으로 이어지는 경로",
-  top1000Cta: "TOP1000 보드에서 더 보기",
-  representativeMetric: "실거래 기반 대표가격과 세대수 구조를 활용한 추정 지표",
+    "더 넓은 공개 랭킹 보드와 단지·지역 탐색으로 이어지는 경로",
+  top1000Cta: "TOP1000 보드 열기",
+  representativeMetric: "추정 시가총액과 순위는 참고용 관측 신호",
 } as const;
 
 const variantMessages: Record<BetaDisclosureVariant, string[]> = {

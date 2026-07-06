@@ -600,7 +600,7 @@ export function CommandPalette({
           <div className="mx-auto mt-24 w-[92%] max-w-[820px] rounded-[28px] border border-cyan-500/20 bg-[#0b1118]/95 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_24px_80px_rgba(0,0,0,0.55)]">
             <div className="border-b border-slate-800/80 px-6 py-5">
               <p className="text-[12px] uppercase tracking-[0.24em] text-cyan-300/80">
-                KOAPTIX COMMAND PALETTE
+                KOAPTIX 관측 검색
               </p>
 
               <div className="mt-4 flex items-center gap-3">
@@ -613,7 +613,7 @@ export function CommandPalette({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   data-testid="command-palette-input"
-                  placeholder="단지명, 구, 동으로 바로 검색..."
+                  placeholder="아파트명, 동네명, 시군구를 입력하세요."
                   className="h-12 w-full rounded-2xl border border-slate-700 bg-black/30 px-4 text-lg text-white outline-none transition focus:border-cyan-400/50"
                 />
 
@@ -639,7 +639,7 @@ export function CommandPalette({
             <div className="px-6 py-4">
               {(query.trim().length < 2) && (
                 <div className="mb-4 rounded-2xl border border-slate-800 bg-black/20 px-4 py-3 text-sm text-slate-400">
-                  두 글자 이상 입력하면 현재 유니버스 결과를 먼저 보여주고, 부족하면 전국 결과까지 자동으로 이어서 보여준다.
+                  두 글자 이상 입력하면 현재 공개 보드에서 먼저 찾고, 필요하면 전국 공개 결과까지 이어서 확인합니다.
                 </div>
               )}
 
@@ -677,7 +677,7 @@ export function CommandPalette({
                     </>
                   ) : (
                     <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
-                      두 글자 이상 입력하면 단지와 지역을 검색할 수 있습니다.
+                      아파트명이나 지역명을 두 글자 이상 입력해 관측 기록을 찾아보세요.
                     </div>
                   )}
                 </div>
