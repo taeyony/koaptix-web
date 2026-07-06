@@ -15,6 +15,8 @@ export const revalidate = 0;
 const SEARCH_CACHE_TTL_MS = 30_000;
 const SEARCH_STALE_CACHE_TTL_MS = 600_000;
 const SEARCH_REGIONAL_RETRY_LIMIT = 40;
+const SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT = 1_000;
+const SEARCH_EXACT_NAME_FALLBACK_RESULT_LIMIT = 5;
 const SEARCH_SUCCESS_CACHE_CONTROL =
   "public, max-age=10, s-maxage=30, stale-while-revalidate=300";
 const SEARCH_ERROR_CACHE_CONTROL = "no-store";
@@ -31,6 +33,33 @@ type SearchSourceResult = {
     | "none"
     | "exact_same_universe_stale"
     | "same_universe_stale_any_limit";
+};
+
+type SearchBoardRow = {
+  complex_id?: number | string | null;
+  id?: number | string | null;
+  apt_name_ko?: string | null;
+  name?: string | null;
+  rank_all?: number | string | null;
+  rank?: number | string | null;
+  sigungu_name?: string | null;
+  legal_dong_name?: string | null;
+  build_year?: number | string | null;
+  approval_year?: number | string | null;
+  household_count?: number | string | null;
+  total_household_count?: number | string | null;
+  households?: number | string | null;
+  recovery_52w?: number | string | null;
+  recovery_rate_52w?: number | string | null;
+  rank_delta_w?: number | string | null;
+  rank_delta_7d?: number | string | null;
+  rank_movement?: string | null;
+  previous_rank_all?: number | string | null;
+  market_cap_krw?: number | string | null;
+  market_cap_trillion_krw?: number | string | null;
+  universe_code?: string | null;
+  universe_name?: string | null;
+  is_top1000?: boolean | null;
 };
 
 const searchSourceCache = new Map<
@@ -68,7 +97,10 @@ function toNullableNumber(value: unknown): number | null {
   return null;
 }
 
-function toRankingItem(row: any, fallbackUniverseCode: string): RankingItem {
+function toRankingItem(
+  row: SearchBoardRow,
+  fallbackUniverseCode: string,
+): RankingItem {
   const buildYear = toNullableNumber(row.build_year ?? row.approval_year);
   const households = toNullableNumber(
     row.household_count ?? row.total_household_count ?? row.households,
@@ -220,6 +252,46 @@ function filterItemsByQuery(items: RankingItem[], q: string) {
   });
 }
 
+function normalizeExactName(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function getItemExactName(item: RankingItem) {
+  return normalizeExactName(item.apt_name_ko ?? item.name);
+}
+
+function hasExactNameMatch(items: RankingItem[], q: string) {
+  const normalizedQ = normalizeExactName(q);
+  if (!normalizedQ) return false;
+  return items.some((item) => getItemExactName(item) === normalizedQ);
+}
+
+function isRankingVisibleTop1000(row: SearchBoardRow) {
+  if (typeof row?.is_top1000 === "boolean") {
+    return row.is_top1000;
+  }
+
+  const rankAll = toNullableNumber(row?.rank_all ?? row?.rank);
+  return (
+    rankAll !== null &&
+    rankAll >= 1 &&
+    rankAll <= SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT
+  );
+}
+
+function mergeUniqueByComplexId(items: RankingItem[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = String(item.complexId ?? "");
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function excludeAlreadyShownItems(
   items: RankingItem[],
   alreadyShownItems: RankingItem[],
@@ -252,12 +324,48 @@ async function fetchSourceItems(
   universeCode: string,
   sourceLimit: number,
 ) {
-  const rows = await getLatestRankBoard(universeCode, sourceLimit);
-  const items = rows.map((row: any) =>
+  const rows: SearchBoardRow[] = await getLatestRankBoard(
+    universeCode,
+    sourceLimit,
+  );
+  const items = rows.map((row) =>
     toRankingItem(row, universeCode),
   );
 
   return items;
+}
+
+async function fetchExactNameFallbackItems(
+  universeCode: string,
+  q: string,
+): Promise<RankingItem[]> {
+  const normalizedQ = normalizeExactName(q);
+  if (!normalizedQ) return [];
+
+  const rows: SearchBoardRow[] = await getLatestRankBoard(
+    universeCode,
+    SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT,
+  );
+
+  return rows
+    .filter((row) => {
+      return (
+        isRankingVisibleTop1000(row) &&
+        normalizeExactName(row.apt_name_ko ?? row.name) === normalizedQ
+      );
+    })
+    .sort((a, b) => {
+      const rankA =
+        toNullableNumber(a.rank_all ?? a.rank) ?? Number.MAX_SAFE_INTEGER;
+      const rankB =
+        toNullableNumber(b.rank_all ?? b.rank) ?? Number.MAX_SAFE_INTEGER;
+      if (rankA !== rankB) return rankA - rankB;
+      return String(a.complex_id ?? a.id ?? "").localeCompare(
+        String(b.complex_id ?? b.id ?? ""),
+      );
+    })
+    .slice(0, SEARCH_EXACT_NAME_FALLBACK_RESULT_LIMIT)
+    .map((row) => toRankingItem(row, universeCode));
 }
 
 async function loadSourceItems(
@@ -431,7 +539,28 @@ export async function GET(request: NextRequest) {
 
   try {
     const localSource = await loadSourceItems(requestedUniverseCode);
-    const localItems = filterItemsByQuery(localSource.items, q).slice(0, limit);
+    const matchedLocalItems = filterItemsByQuery(localSource.items, q);
+    let exactFallbackItems: RankingItem[] = [];
+
+    if (!hasExactNameMatch(matchedLocalItems, q)) {
+      try {
+        exactFallbackItems = await fetchExactNameFallbackItems(
+          requestedUniverseCode,
+          q,
+        );
+      } catch (fallbackError) {
+        console.info("[API /api/search] exact-name fallback skipped", {
+          universeCode: requestedUniverseCode,
+          queryLength: q.length,
+          message: getErrorMessage(fallbackError),
+        });
+      }
+    }
+
+    const localItems = mergeUniqueByComplexId([
+      ...exactFallbackItems,
+      ...matchedLocalItems,
+    ]).slice(0, limit);
     const globalItems = await loadGlobalAuxiliaryItems(
       q,
       requestedUniverseCode,
