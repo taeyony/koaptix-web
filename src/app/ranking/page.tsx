@@ -13,6 +13,10 @@ import {
 import type { RankingItem } from "../../lib/koaptix/types";
 
 import { RankingBoardClient } from "../../components/home/RankingBoardClient";
+import {
+  BetaDisclosure,
+  LAUNCH_COPY,
+} from "../../components/home/BetaDisclosure";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -86,7 +90,7 @@ export default async function RankingPage({
 
   return (
     <main
-      className="min-h-screen bg-[#06090f] px-2 py-4 sm:p-4 lg:p-6"
+      className="min-h-screen overflow-x-hidden bg-[#06090f] px-2 py-4 sm:p-4 lg:p-6"
       data-testid="ranking-page"
       data-universe-code={universeCode}
       data-universe-unavailable={universeUnavailable ? "true" : "false"}
@@ -98,27 +102,29 @@ export default async function RankingPage({
       data-has-query={initialSearchQuery ? "true" : "false"}
       data-selected-complex-id={initialComplexId ?? ""}
     >
-      <div className="mx-auto w-full max-w-[1600px] space-y-4">
-        <section className="overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_rgba(0,0,0,0.4)]">
-          <div className="border-b border-slate-800/80 px-4 py-3 lg:px-5 lg:py-4">
+      <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-4 overflow-x-hidden">
+        <section className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_rgba(0,0,0,0.4)]">
+          <div className="min-w-0 max-w-full border-b border-slate-800/80 px-4 py-3 lg:px-5 lg:py-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div className="min-w-0">
+              <div className="w-full min-w-0 max-w-full">
                 <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">
                   KOAPTIX RANKING OPERATIONS ROOM
                 </p>
-                <h1 className="mt-1 truncate text-lg font-semibold tracking-tight text-white sm:text-xl lg:text-2xl">
+                <h1 className="mt-1 break-words text-lg font-semibold tracking-tight text-white [overflow-wrap:anywhere] sm:text-xl lg:text-2xl">
                   KOAPTIX TOP1000
                 </h1>
 
                 {/* 🚨 지차장 지시 C: 헤더 설명에 현재 유니버스 배지 추가 */}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <p className="text-xs text-slate-300 sm:text-sm">
-                    현재 유니버스 내부 재랭킹 기준 상위 1000개 단지를 탐색하는 full board.
+                  <p className="min-w-0 max-w-full break-words text-xs text-slate-300 [overflow-wrap:anywhere] sm:text-sm">
+                    {LAUNCH_COPY.rankingSubtitle}
                   </p>
-                  <span className="rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-300">
+                  <span className="max-w-full break-words rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-300 [overflow-wrap:anywhere]">
                     {universeLabel}
                   </span>
                 </div>
+
+                <BetaDisclosure variant="ranking" className="mt-3 max-w-4xl" />
               </div>
 
               <div className="flex items-center gap-2">

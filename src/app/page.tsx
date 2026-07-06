@@ -19,6 +19,10 @@ import MarketChartCard from "../components/home/MarketChartCard";
 import { RankingBoardClient } from "../components/home/RankingBoardClient";
 import { HapiPhilosophyTrigger } from "../components/home/HapiPhilosophyTrigger";
 import { ThemeToggle } from "../components/home/ThemeToggle";
+import {
+  BetaDisclosure,
+  LAUNCH_COPY,
+} from "../components/home/BetaDisclosure";
 
 import {
   KOAPTIX_PUBLIC_EXPOSURE_BLOCKED,
@@ -337,50 +341,51 @@ export default async function Home({
         }
         data-universe-unavailable-reason={universeResolution.reason ?? ""}
       >
-        <div className="mx-auto w-full max-w-[1600px] space-y-4 overflow-x-hidden">
-          <section className="overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_rgba(0,0,0,0.4)]">
-            <div className="border-b border-slate-800/80 px-4 py-3 lg:px-5 lg:py-4">
+        <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-4 overflow-x-hidden">
+          <section className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_rgba(0,0,0,0.4)]">
+            <div className="min-w-0 max-w-full border-b border-slate-800/80 px-4 py-3 lg:px-5 lg:py-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">
-                    KOAPTIX LIVE BOARD
-                  </p>
-                  <h1 className="mt-1 max-w-3xl text-base font-semibold leading-6 tracking-tight text-white sm:text-xl sm:leading-7 lg:text-2xl lg:leading-8">
-                    <span className="block sm:inline">
-                      전국 아파트를 시가총액 관점으로
-                    </span>{" "}
-                    <span className="block sm:inline">보는 랭킹 터미널</span>
+                <div className="w-full min-w-0 max-w-full">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">
+                      KOAPTIX LIVE BOARD
+                    </p>
+                    <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200">
+                      {LAUNCH_COPY.softPublicBetaEn}
+                    </span>
+                  </div>
+                  <h1 className="mt-1 max-w-3xl break-words text-base font-semibold leading-6 tracking-tight text-white [overflow-wrap:anywhere] sm:text-xl sm:leading-7 lg:text-2xl lg:leading-8">
+                    {LAUNCH_COPY.heroHeadline}
                   </h1>
-                  <div className="mt-2 max-w-3xl space-y-1">
+                  <div className="mt-2 max-w-3xl space-y-1 overflow-hidden">
                     <p className="break-words text-xs leading-5 text-slate-300 [overflow-wrap:anywhere] sm:text-sm">
-                      KOAPTIX는 단지별 추정 시가총액과 주간 변화를 기준으로,
-                      전국·지역·시군구 아파트 흐름을 한눈에 보여줍니다.
+                      {LAUNCH_COPY.heroSubheadline}
                     </p>
                     <p className="break-words text-[11px] leading-5 text-slate-500 [overflow-wrap:anywhere] sm:text-xs">
-                      KOAPTIX 500은 대표 랭킹 보드이고, 지수는 시장 전체 온도를 보는
-                      숫자입니다. 지역을 선택하거나 단지명을 검색해 우리 동네의 위치를
-                      확인해보세요.
+                      {LAUNCH_COPY.homeExplainer}
                     </p>
                   </div>
+
+                  <BetaDisclosure variant="hero" className="mt-3 max-w-3xl" />
 
                   <div className="mt-3 grid gap-2 text-[11px] text-slate-300 sm:grid-cols-3">
                     <div className="min-w-0 break-words rounded-xl border border-slate-700/60 bg-slate-900/45 px-3 py-2 [overflow-wrap:anywhere]">
                       <span className="block font-semibold text-cyan-300">
                         KOAPTIX 500
                       </span>
-                      한국 아파트 자본 흐름을 대표하는 메인 랭킹 보드
+                      {LAUNCH_COPY.koaptix500Card}
                     </div>
                     <div className="min-w-0 break-words rounded-xl border border-slate-700/60 bg-slate-900/45 px-3 py-2 [overflow-wrap:anywhere]">
                       <span className="block font-semibold text-emerald-300">
-                        KOAPTIX 지수
+                        KOAPTIX Index
                       </span>
-                      시장 전체 온도를 보는 브랜드 숫자
+                      {LAUNCH_COPY.koaptixIndexCard}
                     </div>
                     <div className="min-w-0 break-words rounded-xl border border-slate-700/60 bg-slate-900/45 px-3 py-2 [overflow-wrap:anywhere]">
                       <span className="block font-semibold text-slate-100">
                         TOP1000 / 검색
                       </span>
-                      더 넓은 순위와 단지 탐색으로 이어지는 경로
+                      {LAUNCH_COPY.top1000SearchCard}
                     </div>
                   </div>
 
@@ -391,11 +396,11 @@ export default async function Home({
                       href={rankingHref}
                       className="max-w-full break-words rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300 transition-all [overflow-wrap:anywhere] hover:border-cyan-400/50 hover:bg-cyan-500/20 hover:text-cyan-200"
                     >
-                      TOP1000 보드에서 더 보기
+                      {LAUNCH_COPY.top1000Cta}
                     </Link>
 
                     <span className="max-w-full break-words rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.18em] text-slate-300 transition-all [overflow-wrap:anywhere] hover:bg-slate-700 hover:text-white">
-                      실거래 기반 대표가격과 세대수 구조를 활용한 추정 지표
+                      {LAUNCH_COPY.representativeMetric}
                     </span>
                   </div>
                 </div>

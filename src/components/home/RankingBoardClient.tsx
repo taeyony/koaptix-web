@@ -10,6 +10,10 @@ import ComparisonSheet from "./ComparisonSheet";
 import { ComplexDetailSheet } from "./ComplexDetailSheet";
 import UniverseSelector from "./UniverseSelector";
 import {
+  BetaDisclosure,
+  LAUNCH_COPY,
+} from "./BetaDisclosure";
+import {
   DEFAULT_UNIVERSE_CODE,
   getUniverseLabel,
   resolveUniverseRequest,
@@ -893,7 +897,7 @@ export function RankingBoardClient({
   return (
     <>
       <div
-        className={`flex min-h-0 flex-col rounded-2xl border border-slate-700/50 bg-[#0b1118]/90 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)] backdrop-blur-sm ${useInternalScroll ? "h-full overflow-hidden" : "overflow-visible"
+        className={`flex w-full min-w-0 max-w-full min-h-0 flex-col rounded-2xl border border-slate-700/50 bg-[#0b1118]/90 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)] backdrop-blur-sm ${useInternalScroll ? "h-full overflow-hidden" : "overflow-visible"
           }`}
         data-testid="ranking-board"
         data-universe-code={boardUniverseCode}
@@ -908,22 +912,26 @@ export function RankingBoardClient({
         data-board-degraded={boardDeliveryMeta.degraded ? "true" : "false"}
         data-board-stale-universe-code={staleBoardUniverseCode ?? ""}
       >
-        <div className="shrink-0 flex flex-col gap-3 border-b border-slate-800/80 p-4 lg:p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold tracking-tight text-slate-100 sm:text-lg">
-              {title}
-            </h2>
+        <div className="flex min-w-0 max-w-full shrink-0 flex-col gap-3 border-b border-slate-800/80 p-4 lg:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="w-full min-w-0 max-w-full">
+              <h2 className="break-words text-base font-bold tracking-tight text-slate-100 [overflow-wrap:anywhere] sm:text-lg">
+                {title}
+              </h2>
 
-            <p className="mt-1 max-w-[280px] text-[11px] leading-5 text-slate-500">
-              선택한 지역의 단지를 추정 시가총액과 순위 변화로 비교하는 전술 보드입니다.
-            </p>
+              <p className="mt-1 max-w-xl break-words text-[11px] leading-5 text-slate-500 [overflow-wrap:anywhere]">
+                {LAUNCH_COPY.boardIntro}
+              </p>
+            </div>
 
             {isBoardLoading && (
-              <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
+              <span className="w-fit rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
                 Syncing...
               </span>
             )}
           </div>
+
+          <BetaDisclosure variant="compact" />
 
           <div className="mt-3">
             <UniverseSelector

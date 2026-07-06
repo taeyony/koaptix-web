@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { RecoveryGauge } from "./RecoveryGauge";
 import { TierBadge } from "./TierBadge";
+import { BetaDisclosure } from "./BetaDisclosure";
 import type {
   ComplexDetail,
   HistoryChartPoint,
@@ -436,6 +437,8 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
                 }
               />
             </div>
+
+            <BetaDisclosure variant="detail" className="mt-3" />
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">
               <div className="border-b border-white/5 px-4 py-3">

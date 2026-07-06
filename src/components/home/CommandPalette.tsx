@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { RankingItem } from "../../lib/koaptix/types";
+import { BetaDisclosure } from "./BetaDisclosure";
 import {
   DEFAULT_UNIVERSE_CODE,
   getSearchUniverseRegistry,
@@ -715,8 +716,11 @@ export function CommandPalette({
               )}
             </div>
 
-            <div className="border-t border-slate-800/80 px-6 py-3 text-[12px] uppercase tracking-[0.18em] text-slate-500">
-              ↑ ↓ NAVIGATE · ENTER OPEN DETAIL · ESC CLOSE · CMD/CTRL + K REOPEN
+            <div className="border-t border-slate-800/80 px-6 py-3">
+              <BetaDisclosure variant="search" />
+              <p className="mt-3 break-words text-[11px] uppercase tracking-[0.14em] text-slate-500 [overflow-wrap:anywhere] sm:text-[12px]">
+                ↑ ↓ NAVIGATE · ENTER OPEN DETAIL · ESC CLOSE · CMD/CTRL + K REOPEN
+              </p>
             </div>
           </div>
         </div>

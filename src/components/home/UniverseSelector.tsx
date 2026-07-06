@@ -410,8 +410,8 @@ export default function UniverseSelector({
 
       const baseClass =
         variant === "macro"
-          ? "rounded-xl border px-3 py-2 text-sm font-semibold transition-all"
-          : "rounded-lg border px-3 py-1.5 text-sm transition-all";
+          ? "min-w-0 max-w-full break-words rounded-xl border px-3 py-2 text-sm font-semibold transition-all [overflow-wrap:anywhere]"
+          : "min-w-0 max-w-full break-words rounded-lg border px-3 py-1.5 text-sm transition-all [overflow-wrap:anywhere]";
 
       const activeClass =
         variant === "macro"
@@ -454,15 +454,18 @@ export default function UniverseSelector({
     : `${currentRegionLabel} 시군구`;
 
   return (
-    <div ref={rootRef} className="relative flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div
+      ref={rootRef}
+      className="relative flex w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden"
+    >
+      <div className="flex max-w-full flex-wrap items-center gap-2">
         {macroOptions.map((option) => renderChip(option, "macro"))}
 
         <button
           type="button"
           onClick={() => setIsOpen((prev) => !prev)}
           data-testid="universe-finder-toggle"
-          className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
+          className={`min-w-0 max-w-full break-words rounded-xl border px-3 py-2 text-sm font-semibold transition-all [overflow-wrap:anywhere] ${
             isOpen
               ? "border-cyan-400/50 bg-cyan-500/15 text-cyan-300"
               : "border-slate-700 bg-slate-900/70 text-slate-200 hover:border-slate-500 hover:text-white"
@@ -473,7 +476,7 @@ export default function UniverseSelector({
       </div>
 
       {contextualRecentOptions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex max-w-full flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
             Recent
           </span>
@@ -481,7 +484,7 @@ export default function UniverseSelector({
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 px-3 py-2">
+      <div className="min-w-0 max-w-full rounded-xl border border-slate-700/60 bg-slate-900/50 px-3 py-2">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
@@ -520,7 +523,7 @@ export default function UniverseSelector({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+      <div className="flex max-w-full flex-wrap items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-slate-500">
         <span
           data-testid="universe-kind-chip"
           data-universe-kind={currentKindLabel}
