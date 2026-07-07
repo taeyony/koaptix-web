@@ -383,6 +383,9 @@ export function RankingBoardClient({
     null,
   );
   const [isComplexDetailLoading, setIsComplexDetailLoading] = useState(false);
+  const [complexDetailError, setComplexDetailError] = useState<string | null>(
+    null,
+  );
 
   const initializedFromServerRef = useRef(false);
   const boardCacheRef = useRef<Partial<Record<string, RankingBoardPayload>>>(
@@ -707,6 +710,7 @@ export function RankingBoardClient({
 
       setComparisonItems([]);
       setComplexDetail(null);
+      setComplexDetailError(null);
       setSelectedComplexId(null);
       setDistrictQueryLocal("");
 
@@ -779,6 +783,7 @@ export function RankingBoardClient({
     if (!selectedComplexId) {
       setComplexDetail(null);
       setIsComplexDetailLoading(false);
+      setComplexDetailError(null);
       return;
     }
 
@@ -786,6 +791,8 @@ export function RankingBoardClient({
     let cancelled = false;
 
     const loadComplexDetail = async () => {
+      setComplexDetail(null);
+      setComplexDetailError(null);
       setIsComplexDetailLoading(true);
 
       try {
@@ -798,13 +805,18 @@ export function RankingBoardClient({
 
         if (!detailPayload) {
           setComplexDetail(null);
+          setComplexDetailError("Detail unavailable");
           return;
         }
 
         setComplexDetail(detailPayload);
+        setComplexDetailError(null);
       } catch (error) {
         if (controller.signal.aborted) return;
-        if (!cancelled) setComplexDetail(null);
+        if (!cancelled) {
+          setComplexDetail(null);
+          setComplexDetailError("Detail unavailable");
+        }
         console.warn("[RankingBoardClient] detail fetch warn", error);
       } finally {
         if (!cancelled) setIsComplexDetailLoading(false);
@@ -884,6 +896,8 @@ export function RankingBoardClient({
     boardItems.find((i) => i.complexId === selectedComplexId) ??
     items.find((i) => i.complexId === selectedComplexId) ??
     null;
+  const selectedDetail =
+    complexDetail?.complexId === selectedComplexId ? complexDetail : null;
   const isShowingStaleBoard =
     isBoardLoading && staleBoardUniverseCode !== null && boardItems.length > 0;
   const boardDeliveryState = isShowingStaleBoard
@@ -1144,16 +1158,18 @@ export function RankingBoardClient({
 
       <ComplexDetailSheet
         open={!!selectedComplexId}
+        complexId={selectedComplexId}
         item={selectedItem}
-        detail={complexDetail}
+        detail={selectedDetail}
         loading={isComplexDetailLoading}
-        error={null}
+        error={complexDetailError}
         onClose={() => {
           replaceUrlParams((params) => {
             params.delete("complexId");
           }, "replace");
 
           setSelectedComplexId(null);
+          setComplexDetailError(null);
         }}
       />
 

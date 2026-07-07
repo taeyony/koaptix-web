@@ -28,6 +28,7 @@ const ComplexHistoryMiniChart = dynamic(
 
 type ComplexDetailSheetProps = {
   open: boolean;
+  complexId?: string | null;
   item: RankingItem | null;
   detail: ComplexDetail | null;
   loading: boolean;
@@ -177,7 +178,15 @@ function ShareIcon() {
   );
 }
 
-export function ComplexDetailSheet({ open, item, detail, loading, error, onClose }: ComplexDetailSheetProps) {
+export function ComplexDetailSheet({
+  open,
+  complexId: fallbackComplexId,
+  item,
+  detail,
+  loading,
+  error,
+  onClose,
+}: ComplexDetailSheetProps) {
   // 🚨 순간이동을 위한 마운트 상태를 추가합니다!
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => { setIsMounted(true); }, []);
@@ -192,6 +201,9 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
 
   const chartAbortRef = useRef<AbortController | null>(null);
   const chartCacheRef = useRef<Record<string, HistoryChartPoint[]>>({});
+  const activeComplexId =
+    item?.complexId ?? detail?.complexId ?? fallbackComplexId ?? null;
+  const chartComplexId = item?.complexId ?? detail?.complexId ?? null;
 
   useEffect(() => {
     if (!open) return;
@@ -223,9 +235,12 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
   }
 
   useEffect(() => {
-    if (!open || !item?.complexId) return;
+    if (!open || !chartComplexId) {
+      chartAbortRef.current?.abort();
+      return;
+    }
 
-    const complexId = item.complexId;
+    const complexId = chartComplexId;
     const cached = chartCacheRef.current[complexId];
 
     if (cached) {
@@ -267,11 +282,11 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
       });
 
     return () => controller.abort();
-  }, [open, item?.complexId]);
+  }, [open, chartComplexId]);
 
   async function handleShare() {
-    if (!item || typeof window === "undefined") return;
-    const shareTitle = detail?.name ?? item.name;
+    if (!activeComplexId || typeof window === "undefined") return;
+    const shareTitle = detail?.name ?? item?.name ?? "KOAPTIX detail";
     const shareUrl = window.location.href;
 
     if (!shareUrl) {
@@ -303,19 +318,84 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
   }
 
   // 🚨 마운트가 완료되었는지, 그리고 open과 item이 있는지 확인! (없으면 렌더링 X)
-  if (!isMounted || !open || !item) return null;
+  if (!isMounted || !open) return null;
 
-  const title = detail?.name ?? item.name;
-  const location = (detail?.locationLabel ?? item.locationLabel) || "위치 정보 없음";
-  const rank = detail?.rank ?? item.rank;
-  const marketCap = detail?.marketCapKrw ?? item.marketCapKrw;
-  const rankDelta7d = detail?.rankDelta7d ?? item.rankDelta7d;
-  const marketCapDelta7d = detail?.marketCapDelta7d ?? item.marketCapDelta7d;
-  const marketCapDeltaPct7d = detail?.marketCapDeltaPct7d ?? item.marketCapDeltaPct7d;
-  const historySnapshotDate = detail?.historySnapshotDate ?? item.historySnapshotDate;
-  const highMarketCap52w = detail?.highMarketCap52w ?? item.highMarketCap52w;
-  const recoveryRate52w = detail?.recoveryRate52w ?? item.recoveryRate52w;
-  const tierBadges = item.tierBadges?.slice(0, 2) ?? [];
+  if (!item && !detail) {
+    if (!loading && !error) return null;
+
+    const emptyContent = (
+      <>
+        <div className="fixed inset-0 z-[1000] isolate">
+          <div
+            className="absolute inset-0 z-[1000] bg-[#06090f]/90 backdrop-blur-lg"
+            onClick={onClose}
+          />
+
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="complex-detail-title"
+            data-testid="complex-detail-sheet"
+            data-complex-id={activeComplexId ?? ""}
+            className="absolute inset-x-0 bottom-0 z-[1001] max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
+          >
+            <div className="border-b border-white/5 bg-[#0b1118] px-4 pb-4 pt-3 md:px-5 md:pt-4">
+              <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/10 md:hidden" />
+
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/70 sm:text-xs">
+                    COMPLEX DETAIL
+                  </p>
+                  <h3 id="complex-detail-title" className="mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl">
+                    {error ? "Detail unavailable" : "Loading detail"}
+                  </h3>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  data-testid="complex-detail-close"
+                  className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/70 transition hover:bg-white/[0.06]"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="max-h-[calc(85vh-100px)] overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
+              {error ? (
+                <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-sm text-rose-200">
+                  {error}
+                </div>
+              ) : (
+                <div className="space-y-3 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                  <div className="h-4 w-28 animate-pulse rounded bg-white/10" />
+                  <div className="h-4 w-full animate-pulse rounded bg-white/10" />
+                  <div className="h-4 w-4/5 animate-pulse rounded bg-white/10" />
+                  <div className="h-4 w-3/5 animate-pulse rounded bg-white/10" />
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      </>
+    );
+
+    return createPortal(emptyContent, document.body);
+  }
+
+  const title = detail?.name ?? item?.name ?? "Complex detail";
+  const location = (detail?.locationLabel ?? item?.locationLabel) || "위치 정보 없음";
+  const rank = detail?.rank ?? item?.rank ?? null;
+  const marketCap = detail?.marketCapKrw ?? item?.marketCapKrw ?? 0;
+  const rankDelta7d = detail?.rankDelta7d ?? item?.rankDelta7d;
+  const marketCapDelta7d = detail?.marketCapDelta7d ?? item?.marketCapDelta7d;
+  const marketCapDeltaPct7d = detail?.marketCapDeltaPct7d ?? item?.marketCapDeltaPct7d;
+  const historySnapshotDate = detail?.historySnapshotDate ?? item?.historySnapshotDate;
+  const highMarketCap52w = detail?.highMarketCap52w ?? item?.highMarketCap52w;
+  const recoveryRate52w = detail?.recoveryRate52w ?? item?.recoveryRate52w;
+  const tierBadges = item?.tierBadges?.slice(0, 2) ?? [];
   const weeklyComparisonAvailable =
     detail?.weeklyComparisonAvailable ??
     (historySnapshotDate != null &&
@@ -349,7 +429,7 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
           aria-modal="true"
           aria-labelledby="complex-detail-title"
           data-testid="complex-detail-sheet"
-          data-complex-id={item.complexId}
+          data-complex-id={activeComplexId ?? ""}
           className="absolute inset-x-0 bottom-0 z-[1001] max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
         >
           <div className="border-b border-white/5 bg-[#0b1118] px-4 pb-4 pt-3 md:px-5 md:pt-4">
@@ -370,7 +450,7 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
                 {tierBadges.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {tierBadges.map((badge) => (
-                      <TierBadge key={`${item.complexId}-${badge.key}-${badge.label}`} badge={badge} />
+                      <TierBadge key={`${activeComplexId ?? "detail"}-${badge.key}-${badge.label}`} badge={badge} />
                     ))}
                   </div>
                 ) : null}
@@ -408,7 +488,10 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
             ) : null}
 
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
-              <Metric label="현재 순위" value={`#${formatPlainNumber(rank)}`} />
+              <Metric
+                label="현재 순위"
+                value={rank != null ? `#${formatPlainNumber(rank)}` : "-"}
+              />
               <Metric label="시가총액" value={formatMarketCapKrw(marketCap)} />
               <Metric
                 label="주간 순위 변동"
