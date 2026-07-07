@@ -1416,7 +1416,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
             </p>
 
             <div
-              className="relative z-40 mt-3 max-w-xl"
+              className="relative z-40 mt-4 w-full"
               data-testid="neon-map-local-search"
             >
               <label
@@ -1425,8 +1425,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               >
                 지도 검색
               </label>
-              <div className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[12px] shadow-[0_10px_30px_rgba(0,0,0,0.24)]">
-                <span className="shrink-0 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+              <div className="flex min-h-16 w-full min-w-0 items-center gap-3 rounded-2xl border border-cyan-400/35 bg-slate-950/90 px-4 py-3 text-sm shadow-[0_16px_42px_rgba(0,0,0,0.34)] ring-1 ring-cyan-400/10">
+                <span className="shrink-0 rounded-full border border-cyan-400/35 bg-cyan-400/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-100">
                   Map
                 </span>
                 <input
@@ -1444,7 +1444,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   }}
                   onKeyDown={handleMapSearchKeyDown}
                   placeholder="궁금한 단지·지역을 검색해보세요"
-                  className="min-w-0 flex-1 bg-transparent text-[12px] font-medium text-slate-100 outline-none placeholder:text-slate-500"
+                  className="min-w-0 flex-1 bg-transparent text-[15px] font-semibold text-slate-100 outline-none placeholder:text-slate-400 sm:text-base"
                 />
                 {mapSearchQuery && (
                   <button
@@ -1455,7 +1455,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                       setMapSearchQuery("");
                       setIsMapSearchOpen(true);
                     }}
-                    className="shrink-0 rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] font-semibold text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-200"
+                    className="shrink-0 rounded-full border border-slate-700 bg-slate-900/85 px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-200"
                   >
                     지우기
                   </button>
@@ -1466,7 +1466,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                 <div
                   id="neon-map-local-search-suggestions"
                   data-testid="neon-map-local-search-suggestions"
-                  className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-700/80 bg-[#101720] p-2 text-[12px] shadow-2xl"
+                  className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-700/80 bg-[#101720] p-2 text-sm shadow-2xl"
                 >
                   {hasMapSearchSuggestions ? (
                     <div className="space-y-2">
@@ -1625,7 +1625,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       data-map-item-count={mapDelivery.itemCount}
     >
       <div className="shrink-0 flex flex-col gap-4 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-col justify-between gap-4">
           <div>
             <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
               TACTICAL RADAR
@@ -1638,7 +1638,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
             </p>
 
             <div
-              className="relative z-40 mt-3 max-w-xl"
+              className="relative z-40 mt-4 w-full"
               data-testid="neon-map-local-search"
             >
               <label
@@ -1647,8 +1647,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               >
                 지도 검색
               </label>
-              <div className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[12px] shadow-[0_10px_30px_rgba(0,0,0,0.24)]">
-                <span className="shrink-0 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+              <div className="flex min-h-16 w-full min-w-0 items-center gap-3 rounded-2xl border border-cyan-400/35 bg-slate-950/90 px-4 py-3 text-sm shadow-[0_16px_42px_rgba(0,0,0,0.34)] ring-1 ring-cyan-400/10">
+                <span className="shrink-0 rounded-full border border-cyan-400/35 bg-cyan-400/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-100">
                   Map
                 </span>
                 <input
@@ -1666,7 +1666,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   }}
                   onKeyDown={handleMapSearchKeyDown}
                   placeholder="궁금한 단지·지역을 검색해보세요"
-                  className="min-w-0 flex-1 bg-transparent text-[12px] font-medium text-slate-100 outline-none placeholder:text-slate-500"
+                  className="min-w-0 flex-1 bg-transparent text-[15px] font-semibold text-slate-100 outline-none placeholder:text-slate-400 sm:text-base"
                 />
                 {mapSearchQuery && (
                   <button
@@ -1677,7 +1677,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                       setMapSearchQuery("");
                       setIsMapSearchOpen(true);
                     }}
-                    className="shrink-0 rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] font-semibold text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-200"
+                    className="shrink-0 rounded-full border border-slate-700 bg-slate-900/85 px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-200"
                   >
                     지우기
                   </button>
@@ -1688,7 +1688,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                 <div
                   id="neon-map-local-search-suggestions"
                   data-testid="neon-map-local-search-suggestions"
-                  className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-700/80 bg-[#101720] p-2 text-[12px] shadow-2xl"
+                  className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-700/80 bg-[#101720] p-2 text-sm shadow-2xl"
                 >
                   {hasMapSearchSuggestions ? (
                     <div className="space-y-2">

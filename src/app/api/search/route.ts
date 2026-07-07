@@ -85,6 +85,147 @@ function getSearchSourceLimit() {
   return 80;
 }
 
+type RegionAuxiliaryCandidate = {
+  universeCode: string;
+  aliases: string[];
+  broadAliases?: string[];
+};
+
+const REGION_AUXILIARY_CANDIDATES: RegionAuxiliaryCandidate[] = [
+  {
+    universeCode: "SEOUL_ALL",
+    aliases: ["\uC11C\uC6B8", "\uC11C\uC6B8\uD2B9\uBCC4\uC2DC", "seoul"],
+    broadAliases: ["\uC11C\uC6B8", "\uC11C\uC6B8\uD2B9\uBCC4\uC2DC", "seoul"],
+  },
+  {
+    universeCode: "BUSAN_ALL",
+    aliases: [
+      "\uBD80\uC0B0",
+      "\uBD80\uC0B0\uAD11\uC5ED\uC2DC",
+      "\uD574\uC6B4\uB300",
+      "\uD574\uC6B4\uB300\uAD6C",
+      "\uBD80\uC0B0\uC9C4",
+      "\uBD80\uC0B0\uC9C4\uAD6C",
+      "\uC218\uC601",
+      "\uC218\uC601\uAD6C",
+      "\uB3D9\uB798",
+      "\uB3D9\uB798\uAD6C",
+      "busan",
+      "haeundae",
+    ],
+    broadAliases: ["\uBD80\uC0B0", "\uBD80\uC0B0\uAD11\uC5ED\uC2DC", "busan"],
+  },
+  {
+    universeCode: "DAEGU_ALL",
+    aliases: [
+      "\uB300\uAD6C",
+      "\uB300\uAD6C\uAD11\uC5ED\uC2DC",
+      "\uC218\uC131",
+      "\uC218\uC131\uAD6C",
+      "\uB2EC\uC11C",
+      "\uB2EC\uC11C\uAD6C",
+      "daegu",
+    ],
+    broadAliases: ["\uB300\uAD6C", "\uB300\uAD6C\uAD11\uC5ED\uC2DC", "daegu"],
+  },
+  {
+    universeCode: "INCHEON_ALL",
+    aliases: [
+      "\uC778\uCC9C",
+      "\uC778\uCC9C\uAD11\uC5ED\uC2DC",
+      "\uBBF8\uCD94\uD640",
+      "\uBBF8\uCD94\uD640\uAD6C",
+      "\uC5F0\uC218",
+      "\uC5F0\uC218\uAD6C",
+      "\uBD80\uD3C9",
+      "\uBD80\uD3C9\uAD6C",
+      "\uC1A1\uB3C4",
+      "\uCCAD\uB77C",
+      "incheon",
+    ],
+    broadAliases: ["\uC778\uCC9C", "\uC778\uCC9C\uAD11\uC5ED\uC2DC", "incheon"],
+  },
+  {
+    universeCode: "GWANGJU_ALL",
+    aliases: [
+      "\uAD11\uC8FC",
+      "\uAD11\uC8FC\uAD11\uC5ED\uC2DC",
+      "\uBD09\uC120",
+      "\uBD09\uC120\uB3D9",
+      "gwangju",
+    ],
+    broadAliases: ["\uAD11\uC8FC", "\uAD11\uC8FC\uAD11\uC5ED\uC2DC", "gwangju"],
+  },
+  {
+    universeCode: "DAEJEON_ALL",
+    aliases: [
+      "\uB300\uC804",
+      "\uB300\uC804\uAD11\uC5ED\uC2DC",
+      "\uB454\uC0B0",
+      "\uB454\uC0B0\uB3D9",
+      "\uC720\uC131",
+      "\uC720\uC131\uAD6C",
+      "daejeon",
+    ],
+    broadAliases: ["\uB300\uC804", "\uB300\uC804\uAD11\uC5ED\uC2DC", "daejeon"],
+  },
+  {
+    universeCode: "SEJONG_ALL",
+    aliases: [
+      "\uC138\uC885",
+      "\uC138\uC885\uC2DC",
+      "\uC138\uC885\uD2B9\uBCC4\uC790\uCE58\uC2DC",
+      "sejong",
+    ],
+    broadAliases: [
+      "\uC138\uC885",
+      "\uC138\uC885\uC2DC",
+      "\uC138\uC885\uD2B9\uBCC4\uC790\uCE58\uC2DC",
+      "sejong",
+    ],
+  },
+  {
+    universeCode: "GYEONGGI_ALL",
+    aliases: [
+      "\uACBD\uAE30",
+      "\uACBD\uAE30\uB3C4",
+      "\uC218\uC6D0",
+      "\uC218\uC6D0\uC2DC",
+      "\uACE0\uC591",
+      "\uACE0\uC591\uC2DC",
+      "\uC131\uB0A8",
+      "\uC131\uB0A8\uC2DC",
+      "\uC6A9\uC778",
+      "\uC6A9\uC778\uC2DC",
+      "\uD654\uC131",
+      "\uD654\uC131\uC2DC",
+      "\uBD80\uCC9C",
+      "\uBD80\uCC9C\uC2DC",
+      "\uC548\uC591",
+      "\uC548\uC591\uC2DC",
+      "\uB0A8\uC591\uC8FC",
+      "\uB0A8\uC591\uC8FC\uC2DC",
+      "\uAE40\uD3EC",
+      "\uAE40\uD3EC\uC2DC",
+      "\uD30C\uC8FC",
+      "\uD30C\uC8FC\uC2DC",
+      "\uAD11\uC8FC",
+      "\uAD11\uC8FC\uC2DC",
+      "\uACBD\uAE30\uAD11\uC8FC",
+      "gyeonggi",
+      "suwon",
+      "goyang",
+    ],
+    broadAliases: ["\uACBD\uAE30", "\uACBD\uAE30\uB3C4", "gyeonggi"],
+  },
+];
+
+const STRICT_REGION_QUERY_ALIASES = new Set(
+  REGION_AUXILIARY_CANDIDATES.flatMap((candidate) =>
+    candidate.aliases.map(normalizeSearchToken),
+  ),
+);
+
 function toNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -238,18 +379,108 @@ function writeSearchSourceCache(cacheKey: string, payload: SearchCachePayload) {
   });
 }
 
-function filterItemsByQuery(items: RankingItem[], q: string) {
-  const lowerQ = q.trim().toLowerCase();
-  if (!lowerQ) return [];
+function normalizeSearchToken(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
 
-  return items.filter((item) => {
-    return (
-      String(item.name ?? "").toLowerCase().includes(lowerQ) ||
-      String(item.sigunguName ?? "").toLowerCase().includes(lowerQ) ||
-      String(item.legalDongName ?? "").toLowerCase().includes(lowerQ) ||
-      String(item.locationLabel ?? "").toLowerCase().includes(lowerQ)
-    );
-  });
+function getSearchTextFields(item: RankingItem) {
+  return {
+    name: [item.name, item.apt_name_ko],
+    region: [item.sigunguName, item.sigungu_name],
+    district: [item.legalDongName, item.legal_dong_name],
+    location: [item.locationLabel],
+  };
+}
+
+function isStrictRegionIntentQuery(normalizedQuery: string) {
+  return STRICT_REGION_QUERY_ALIASES.has(normalizedQuery);
+}
+
+function scoreFieldMatch(
+  values: unknown[],
+  normalizedQuery: string,
+  scores: { exact: number; startsWith: number; includes: number },
+  allowContains: boolean,
+) {
+  const normalizedValues = values
+    .map(normalizeSearchToken)
+    .filter(Boolean);
+
+  if (normalizedValues.some((value) => value === normalizedQuery)) {
+    return scores.exact;
+  }
+
+  if (normalizedValues.some((value) => value.startsWith(normalizedQuery))) {
+    return scores.startsWith;
+  }
+
+  if (
+    allowContains &&
+    normalizedValues.some((value) => value.includes(normalizedQuery))
+  ) {
+    return scores.includes;
+  }
+
+  return null;
+}
+
+function scoreItemSearchMatch(item: RankingItem, q: string) {
+  const normalizedQuery = normalizeSearchToken(q);
+  if (!normalizedQuery) return null;
+
+  const fields = getSearchTextFields(item);
+  const strictRegionIntent = isStrictRegionIntentQuery(normalizedQuery);
+  const nameScore = scoreFieldMatch(
+    fields.name,
+    normalizedQuery,
+    { exact: 1000, startsWith: 900, includes: 800 },
+    true,
+  );
+
+  if (nameScore !== null) return nameScore;
+
+  const regionScore = scoreFieldMatch(
+    fields.region,
+    normalizedQuery,
+    { exact: 760, startsWith: 720, includes: 520 },
+    !strictRegionIntent,
+  );
+
+  if (regionScore !== null) return regionScore;
+
+  const districtScore = scoreFieldMatch(
+    fields.district,
+    normalizedQuery,
+    { exact: 700, startsWith: 660, includes: 460 },
+    !strictRegionIntent,
+  );
+
+  if (districtScore !== null) return districtScore;
+
+  return scoreFieldMatch(
+    fields.location,
+    normalizedQuery,
+    { exact: 640, startsWith: 600, includes: 400 },
+    !strictRegionIntent,
+  );
+}
+
+function filterItemsByQuery(items: RankingItem[], q: string) {
+  return items
+    .map((item, index) => ({
+      item,
+      index,
+      score: scoreItemSearchMatch(item, q),
+    }))
+    .filter(
+      (entry): entry is { item: RankingItem; index: number; score: number } =>
+        entry.score !== null,
+    )
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.item);
 }
 
 function normalizeExactName(value: unknown) {
@@ -298,6 +529,87 @@ function excludeAlreadyShownItems(
 ) {
   const shownIds = new Set(alreadyShownItems.map((item) => item.complexId));
   return items.filter((item) => !shownIds.has(item.complexId));
+}
+
+function getRegionAuxiliaryUniverseCodes(q: string) {
+  const normalizedQuery = normalizeSearchToken(q);
+  if (normalizedQuery.length < 2) return [];
+
+  const candidateCodes = REGION_AUXILIARY_CANDIDATES.filter((candidate) =>
+    candidate.aliases.some((alias) => {
+      const normalizedAlias = normalizeSearchToken(alias);
+      return (
+        normalizedQuery === normalizedAlias ||
+        normalizedAlias.startsWith(normalizedQuery)
+      );
+    }),
+  ).map((candidate) => candidate.universeCode);
+
+  return Array.from(new Set(candidateCodes));
+}
+
+function isBroadRegionUniverseQuery(q: string, universeCode: string) {
+  const normalizedQuery = normalizeSearchToken(q);
+  const candidate = REGION_AUXILIARY_CANDIDATES.find(
+    (entry) => entry.universeCode === universeCode,
+  );
+
+  return Boolean(
+    candidate?.broadAliases?.some(
+      (alias) => normalizeSearchToken(alias) === normalizedQuery,
+    ),
+  );
+}
+
+async function loadRegionAuxiliaryItems(
+  q: string,
+  localItems: RankingItem[],
+  limit: number,
+) {
+  const auxiliaryLimit = Math.max(0, Math.min(8, limit));
+  if (auxiliaryLimit <= 0) return [];
+
+  const candidateCodes = getRegionAuxiliaryUniverseCodes(q);
+  if (candidateCodes.length === 0) return [];
+
+  const candidateResults = await Promise.all(
+    candidateCodes.map(async (candidateCode) => {
+      const resolution = resolveUniverseRequest(candidateCode, {
+        capability: "search",
+      });
+
+      if (resolution.universeUnavailable) {
+        return [] as RankingItem[];
+      }
+
+      try {
+        const source = await loadSourceItems(resolution.renderedUniverseCode);
+        const matchedItems = filterItemsByQuery(source.items, q);
+
+        if (
+          matchedItems.length === 0 &&
+          isBroadRegionUniverseQuery(q, resolution.renderedUniverseCode)
+        ) {
+          return source.items;
+        }
+
+        return matchedItems;
+      } catch (error) {
+        console.info("[API /api/search] regional auxiliary skipped", {
+          candidateCode,
+          queryLength: q.length,
+          message: getErrorMessage(error),
+        });
+
+        return [] as RankingItem[];
+      }
+    }),
+  );
+
+  return excludeAlreadyShownItems(
+    mergeUniqueByComplexId(candidateResults.flat()),
+    localItems,
+  ).slice(0, auxiliaryLimit);
 }
 
 function buildUnavailableSearchPayload(
@@ -467,7 +779,7 @@ async function loadGlobalAuxiliaryItems(
   limit: number,
 ) {
   if (requestedUniverseCode === DEFAULT_UNIVERSE_CODE) {
-    return [];
+    return loadRegionAuxiliaryItems(q, localItems, limit);
   }
 
   const globalLimit = Math.max(0, Math.min(4, limit));
