@@ -17,6 +17,7 @@ const SEARCH_STALE_CACHE_TTL_MS = 600_000;
 const SEARCH_REGIONAL_RETRY_LIMIT = 40;
 const SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT = 1_000;
 const SEARCH_RANK_VISIBLE_FALLBACK_RESULT_LIMIT = 8;
+const SEARCH_KOREA_ALL_DONG_AUXILIARY_RESULT_LIMIT = 10;
 const SEARCH_SUCCESS_CACHE_CONTROL =
   "public, max-age=10, s-maxage=30, stale-while-revalidate=300";
 const SEARCH_ERROR_CACHE_CONTROL = "no-store";
@@ -249,6 +250,12 @@ const REGION_AUXILIARY_CANDIDATES: RegionAuxiliaryCandidate[] = [
   },
 ];
 
+const SUPPORTED_MACRO_AUXILIARY_UNIVERSE_CODES = Array.from(
+  new Set(
+    REGION_AUXILIARY_CANDIDATES.map((candidate) => candidate.universeCode),
+  ),
+).filter((universeCode) => universeCode !== DEFAULT_UNIVERSE_CODE);
+
 const STRICT_REGION_QUERY_ALIASES = new Set(
   REGION_AUXILIARY_CANDIDATES.flatMap((candidate) =>
     candidate.aliases.map(normalizeSearchToken),
@@ -422,6 +429,16 @@ function stripKoreanLocationSuffix(value: unknown) {
   return normalized.replace(/(\uB3D9|\uAC00)$/, "");
 }
 
+function hasHangul(value: string) {
+  return /[\uAC00-\uD7A3]/.test(value);
+}
+
+function isKoreanLocationToken(value: string) {
+  return /[\uB3D9\uAC00\uC74D\uBA74\uB9AC\uAD6C\uAD70\uC2DC]$/.test(
+    value.trim(),
+  );
+}
+
 function getSearchTextFields(item: RankingItem) {
   const names = [item.name, item.apt_name_ko].filter(Boolean);
   const regions = [item.sigunguName, item.sigungu_name].filter(Boolean);
@@ -429,6 +446,14 @@ function getSearchTextFields(item: RankingItem) {
   const districtBases = districts
     .map(stripKoreanLocationSuffix)
     .filter((value) => value.length >= 2);
+  const regionDistrictCombos = [
+    ...regions.flatMap((region) =>
+      districts.map((district) => `${region} ${district}`),
+    ),
+    ...regions.flatMap((region) =>
+      districtBases.map((district) => `${region} ${district}`),
+    ),
+  ];
   const locationCombos = [
     ...districts.flatMap((district) =>
       names.map((name) => `${district} ${name}`),
@@ -443,7 +468,7 @@ function getSearchTextFields(item: RankingItem) {
     name: names,
     region: regions,
     district: districts,
-    location: [item.locationLabel, ...locationCombos],
+    location: [item.locationLabel, ...regionDistrictCombos, ...locationCombos],
   };
 }
 
@@ -535,6 +560,64 @@ function filterItemsByQuery(items: RankingItem[], q: string) {
     .map((entry) => entry.item);
 }
 
+function scoreItemRegionalAuxiliaryMatch(item: RankingItem, terms: string[]) {
+  const normalizedTerms = terms.map(normalizeSearchToken).filter(Boolean);
+  if (normalizedTerms.length === 0) return null;
+
+  const fields = getSearchTextFields(item);
+  let bestScore: number | null = null;
+
+  for (const normalizedTerm of normalizedTerms) {
+    const regionScore = scoreFieldMatch(
+      fields.region,
+      normalizedTerm,
+      { exact: 760, startsWith: 720, includes: 0 },
+      false,
+    );
+    const districtScore = scoreFieldMatch(
+      fields.district,
+      normalizedTerm,
+      { exact: 800, startsWith: 760, includes: 0 },
+      false,
+    );
+    const locationScore = scoreFieldMatch(
+      fields.location,
+      normalizedTerm,
+      { exact: 740, startsWith: 700, includes: 560 },
+      normalizedTerm.length >= 3,
+    );
+    const score = Math.max(
+      regionScore ?? -1,
+      districtScore ?? -1,
+      locationScore ?? -1,
+    );
+
+    if (score >= 0) {
+      bestScore = Math.max(bestScore ?? 0, score);
+    }
+  }
+
+  return bestScore;
+}
+
+function filterItemsByRegionalAuxiliaryTerms(
+  items: RankingItem[],
+  terms: string[],
+) {
+  return items
+    .map((item, index) => ({
+      item,
+      index,
+      score: scoreItemRegionalAuxiliaryMatch(item, terms),
+    }))
+    .filter(
+      (entry): entry is { item: RankingItem; index: number; score: number } =>
+        entry.score !== null,
+    )
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.item);
+}
+
 function normalizeExactName(value: unknown) {
   return String(value ?? "")
     .trim()
@@ -608,6 +691,36 @@ function getRegionAuxiliaryFallbackSearchTerms(q: string, universeCode: string) 
   );
 }
 
+function getKoreaAllDongAuxiliarySearchTerms(q: string) {
+  const trimmed = q.trim();
+  const normalizedQuery = normalizeSearchToken(trimmed);
+  if (normalizedQuery.length < 2 || !hasHangul(trimmed)) return [];
+
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  const lastToken = tokens[tokens.length - 1] ?? trimmed;
+  const looksLocationLike =
+    isKoreanLocationToken(lastToken) ||
+    tokens.some(isKoreanLocationToken) ||
+    normalizedQuery.length <= 3;
+
+  if (!looksLocationLike) return [];
+
+  const terms = new Set<string>([trimmed]);
+
+  if (tokens.length >= 2) {
+    terms.add(tokens.slice(-2).join(" "));
+  }
+
+  terms.add(lastToken);
+
+  const lastTokenBase = stripKoreanLocationSuffix(lastToken);
+  if (lastTokenBase.length >= 2 && lastTokenBase !== lastToken) {
+    terms.add(lastTokenBase);
+  }
+
+  return Array.from(terms);
+}
+
 function isBroadRegionUniverseQuery(q: string, universeCode: string) {
   const normalizedQuery = normalizeSearchToken(q);
   const candidate = REGION_AUXILIARY_CANDIDATES.find(
@@ -626,10 +739,28 @@ async function loadRegionAuxiliaryItems(
   localItems: RankingItem[],
   limit: number,
 ) {
-  const auxiliaryLimit = Math.max(0, Math.min(8, limit));
+  let candidateCodes = getRegionAuxiliaryUniverseCodes(q);
+  const dongAuxiliarySearchTerms =
+    candidateCodes.length === 0 && localItems.length === 0
+      ? getKoreaAllDongAuxiliarySearchTerms(q)
+      : [];
+  const auxiliaryLimit = Math.max(
+    0,
+    Math.min(
+      dongAuxiliarySearchTerms.length > 0
+        ? SEARCH_KOREA_ALL_DONG_AUXILIARY_RESULT_LIMIT
+        : 8,
+      limit,
+    ),
+  );
   if (auxiliaryLimit <= 0) return [];
 
-  const candidateCodes = getRegionAuxiliaryUniverseCodes(q);
+  if (candidateCodes.length === 0 && dongAuxiliarySearchTerms.length > 0) {
+    // V2.1 bounded dong fallback: only for KOREA_ALL misses and only across
+    // macro universes already proven usable by the current search route.
+    candidateCodes = SUPPORTED_MACRO_AUXILIARY_UNIVERSE_CODES;
+  }
+
   if (candidateCodes.length === 0) return [];
 
   const candidateResults = await Promise.all(
@@ -644,15 +775,34 @@ async function loadRegionAuxiliaryItems(
 
       try {
         const source = await loadSourceItems(resolution.renderedUniverseCode);
-        let matchedItems = filterItemsByQuery(source.items, q);
+        let matchedItems =
+          dongAuxiliarySearchTerms.length > 0
+            ? filterItemsByRegionalAuxiliaryTerms(
+                source.items,
+                dongAuxiliarySearchTerms,
+              )
+            : filterItemsByQuery(source.items, q);
 
-        if (matchedItems.length === 0) {
+        if (
+          matchedItems.length === 0 &&
+          dongAuxiliarySearchTerms.length === 0
+        ) {
           const fallbackTerms = getRegionAuxiliaryFallbackSearchTerms(
             q,
             resolution.renderedUniverseCode,
           );
           matchedItems = mergeUniqueByComplexId(
             fallbackTerms.flatMap((term) => filterItemsByQuery(source.items, term)),
+          );
+        }
+
+        if (
+          matchedItems.length === 0 &&
+          dongAuxiliarySearchTerms.length > 0
+        ) {
+          matchedItems = await fetchRankVisibleRegionalAuxiliaryItems(
+            resolution.renderedUniverseCode,
+            dongAuxiliarySearchTerms,
           );
         }
 
@@ -738,6 +888,25 @@ async function fetchRankVisibleFallbackItems(
       .map((row) => toRankingItem(row, universeCode)),
     q,
   ).slice(0, SEARCH_RANK_VISIBLE_FALLBACK_RESULT_LIMIT);
+}
+
+async function fetchRankVisibleRegionalAuxiliaryItems(
+  universeCode: string,
+  terms: string[],
+): Promise<RankingItem[]> {
+  if (terms.length === 0) return [];
+
+  const rows: SearchBoardRow[] = await getLatestRankBoard(
+    universeCode,
+    SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT,
+  );
+
+  return filterItemsByRegionalAuxiliaryTerms(
+    rows
+      .filter(isRankingVisibleTop1000)
+      .map((row) => toRankingItem(row, universeCode)),
+    terms,
+  ).slice(0, SEARCH_KOREA_ALL_DONG_AUXILIARY_RESULT_LIMIT);
 }
 
 async function loadSourceItems(

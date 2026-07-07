@@ -210,8 +210,8 @@ const TOP_N_OPTIONS: TopNOption[] = [
 ];
 const MAP_LOCAL_SEARCH_COMPLEX_LIMIT = 3;
 const MAP_LOCAL_SEARCH_DISTRICT_LIMIT = 3;
-const MAP_LOCAL_SEARCH_REMOTE_LIMIT = 6;
-const MAP_LOCAL_SEARCH_TOTAL_COMPLEX_LIMIT = 6;
+const MAP_LOCAL_SEARCH_REMOTE_LIMIT = 10;
+const MAP_LOCAL_SEARCH_TOTAL_COMPLEX_LIMIT = 10;
 const MAP_LOCAL_SEARCH_REMOTE_MIN_QUERY_LENGTH = 2;
 const MAP_LOCAL_SEARCH_REMOTE_DEBOUNCE_MS = 300;
 const MAP_LOCAL_SEARCH_REMOTE_TIMEOUT_MS = 4500;
@@ -1537,7 +1537,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                     </div>
                   ) : (
                     <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-3 text-[12px] leading-relaxed text-slate-400">
-                      관측자 Y가 현재 지도 범위에서 찾지 못했어요. 검색어를 조금 줄여보세요.
+                      관측자 Y가 공개 랭킹/지역 보드 기준에서 신호를 찾지 못했어요. 검색어를 줄이거나 지역을 바꿔보세요.
                     </div>
                   )}
 
@@ -1551,7 +1551,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   )}
 
                   <p className="mt-2 border-t border-slate-800 px-2 pt-2 text-[10px] leading-relaxed text-slate-500">
-                    현재 지도와 홈 보드에서 관측 중인 단지·지역만 표시합니다.
+                    공개 랭킹 기준 상위 결과를 보여드려요.
                   </p>
                 </div>
               )}
@@ -1759,7 +1759,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                     </div>
                   ) : (
                     <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-3 text-[12px] leading-relaxed text-slate-400">
-                      관측자 Y가 현재 지도 범위에서 찾지 못했어요. 검색어를 조금 줄여보세요.
+                      관측자 Y가 공개 랭킹/지역 보드 기준에서 신호를 찾지 못했어요. 검색어를 줄이거나 지역을 바꿔보세요.
                     </div>
                   )}
 
@@ -1773,7 +1773,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   )}
 
                   <p className="mt-2 border-t border-slate-800 px-2 pt-2 text-[10px] leading-relaxed text-slate-500">
-                    현재 지도와 홈 보드에서 관측 중인 단지·지역만 표시합니다.
+                    공개 랭킹 기준 상위 결과를 보여드려요.
                   </p>
                 </div>
               )}
