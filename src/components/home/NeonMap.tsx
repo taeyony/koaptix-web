@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Map, CustomOverlayMap, useKakaoLoader } from "react-kakao-maps-sdk";
 import type { RankingItem } from "../../lib/koaptix/types";
@@ -65,6 +65,22 @@ type MapDeliveryState = {
   source: string;
   itemCount: number;
 };
+
+type MapLocalSearchSuggestion =
+  | {
+      kind: "complex";
+      key: string;
+      label: string;
+      meta: string;
+      item: RankingItem;
+    }
+  | {
+      kind: "district";
+      key: string;
+      label: string;
+      meta: string;
+      district: DistrictAggregate;
+    };
 
 const SEOUL_DISTRICT_COORDS: Record<string, Coord> = {
   강남구: { lat: 37.5172, lng: 127.0473 },
@@ -183,6 +199,8 @@ const TOP_N_OPTIONS: TopNOption[] = [
   { label: "40", value: 40 },
   { label: "80", value: 80 },
 ];
+const MAP_LOCAL_SEARCH_COMPLEX_LIMIT = 3;
+const MAP_LOCAL_SEARCH_DISTRICT_LIMIT = 3;
 
 function getDesiredMapSourceLimit(topN: number, universeCode: string) {
   if (universeCode === DEFAULT_UNIVERSE_CODE) {
@@ -297,6 +315,121 @@ function pushDistrictToUrl(districtName: string) {
     window.history.pushState(null, "", nextUrl);
     window.dispatchEvent(new PopStateEvent("popstate"));
   }
+}
+
+function getRankingItemRankLabel(item: RankingItem) {
+  const rankAll =
+    typeof item.rank_all === "number"
+      ? item.rank_all
+      : typeof item.rank === "number"
+        ? item.rank
+        : null;
+
+  return rankAll !== null ? `#${rankAll}` : "현재 보드";
+}
+
+function getRankingItemLocationLabel(item: RankingItem) {
+  return (
+    item.locationLabel ||
+    `${item.sigungu_name ?? ""} ${item.legal_dong_name ?? ""}`.trim() ||
+    item.sigunguName ||
+    "현재 지도"
+  );
+}
+
+function getRankingItemUniverseCode(item: RankingItem, fallbackUniverseCode: string) {
+  const universeItem = item as RankingItem & {
+    universeCode?: string | null;
+    universe_code?: string | null;
+  };
+
+  return resolveServiceUniverseCode(
+    universeItem.universeCode ?? universeItem.universe_code ?? fallbackUniverseCode,
+  );
+}
+
+function buildRepresentativeComplexItem(
+  district: DistrictAggregate,
+  fallbackUniverseCode: string,
+): RankingItem | null {
+  const complexId = district.primaryComplexId?.trim();
+  const name = district.primaryComplexName?.trim();
+
+  if (!complexId || !name) return null;
+
+  const rank = district.primaryRank ?? 0;
+  const marketCapKrw = district.peakComplexMarketCap ?? 0;
+
+  return {
+    complexId,
+    name,
+    apt_name_ko: name,
+    rank,
+    rank_all: rank,
+    sigunguName: district.name,
+    sigungu_name: district.name,
+    legalDongName: "",
+    legal_dong_name: "",
+    marketCapKrw,
+    market_cap_krw: marketCapKrw,
+    marketCapTrillionKrw: marketCapKrw ? marketCapKrw / 1_000_000_000_000 : null,
+    market_cap_trillion_krw: marketCapKrw
+      ? marketCapKrw / 1_000_000_000_000
+      : null,
+    rankDelta7d: null,
+    rank_delta_w: null,
+    rankMovement: null,
+    rank_movement: null,
+    previousRankAll: null,
+    previous_rank_all: null,
+    recoveryRate52w: null,
+    recovery_52w: null,
+    locationLabel: district.name,
+    universeCode: fallbackUniverseCode,
+    universe_code: fallbackUniverseCode,
+    universeName: null,
+    universe_name: null,
+  } as RankingItem;
+}
+
+function buildUrlWithComplex(item: RankingItem, fallbackUniverseCode: string) {
+  const params = new URLSearchParams(window.location.search);
+  const universeCode = getRankingItemUniverseCode(item, fallbackUniverseCode);
+
+  params.delete("district");
+  params.set("complexId", item.complexId);
+
+  if (universeCode === DEFAULT_UNIVERSE_CODE) {
+    params.delete("universe");
+  } else {
+    params.set("universe", universeCode);
+  }
+
+  const nextQuery = params.toString();
+  return nextQuery
+    ? `${window.location.pathname}?${nextQuery}${window.location.hash}`
+    : `${window.location.pathname}${window.location.hash}`;
+}
+
+function pushComplexToUrl(item: RankingItem, fallbackUniverseCode: string) {
+  const nextUrl = buildUrlWithComplex(item, fallbackUniverseCode);
+
+  if (`${window.location.pathname}${window.location.search}` !== nextUrl) {
+    window.history.pushState(null, "", nextUrl);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+}
+
+function normalizeMapSearchText(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+function includesMapSearchText(value: unknown, normalizedQuery: string) {
+  if (!normalizedQuery) return false;
+  return normalizeMapSearchText(value).includes(normalizedQuery);
 }
 
 function buildFallbackAggregate(items: RankingItem[]): DistrictAggregate[] {
@@ -489,6 +622,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
   const [editingMin, setEditingMin] = useState<string | null>(null);
   const [editingMax, setEditingMax] = useState<string | null>(null);
+  const [mapSearchQuery, setMapSearchQuery] = useState("");
+  const [isMapSearchOpen, setIsMapSearchOpen] = useState(false);
 
   const fallbackMapItems = useMemo(
     () => buildFallbackAggregate(items),
@@ -886,6 +1021,126 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     ).length;
   }, [visualizedMapData]);
 
+  const mapSearchSuggestions = useMemo(() => {
+    const normalizedQuery = normalizeMapSearchText(mapSearchQuery);
+
+    if (!normalizedQuery) {
+      return {
+        complexes: [] as MapLocalSearchSuggestion[],
+        districts: [] as MapLocalSearchSuggestion[],
+      };
+    }
+
+    const seenComplexIds = new Set<string>();
+    const itemComplexes = items
+      .filter((item) => {
+        if (!item.complexId || seenComplexIds.has(item.complexId)) return false;
+
+        const matched =
+          includesMapSearchText(item.name, normalizedQuery) ||
+          includesMapSearchText(item.locationLabel, normalizedQuery) ||
+          includesMapSearchText(item.sigunguName, normalizedQuery) ||
+          includesMapSearchText(item.sigungu_name, normalizedQuery) ||
+          includesMapSearchText(item.legal_dong_name, normalizedQuery);
+
+        if (matched) {
+          seenComplexIds.add(item.complexId);
+        }
+
+        return matched;
+      })
+      .slice(0, MAP_LOCAL_SEARCH_COMPLEX_LIMIT)
+      .map<MapLocalSearchSuggestion>((item) => ({
+        kind: "complex",
+        key: `complex-${item.complexId}`,
+        label: item.name,
+        meta: [getRankingItemLocationLabel(item), getRankingItemRankLabel(item)]
+          .filter(Boolean)
+          .join(" · "),
+        item,
+      }));
+
+    const mapRepresentativeComplexes = mapItems
+      .filter((district) => {
+        const isActionable =
+          district.isBoardBacked === true || (district.boardCount ?? 0) > 0;
+        if (!isActionable || !district.primaryComplexId || !district.primaryComplexName) {
+          return false;
+        }
+
+        if (seenComplexIds.has(district.primaryComplexId)) return false;
+
+        const matched =
+          includesMapSearchText(district.primaryComplexName, normalizedQuery) ||
+          includesMapSearchText(district.name, normalizedQuery) ||
+          includesMapSearchText(district.query, normalizedQuery);
+
+        if (matched) {
+          seenComplexIds.add(district.primaryComplexId);
+        }
+
+        return matched;
+      })
+      .slice(0, Math.max(MAP_LOCAL_SEARCH_COMPLEX_LIMIT - itemComplexes.length, 0))
+      .map<MapLocalSearchSuggestion | null>((district) => {
+        const item = buildRepresentativeComplexItem(district, currentUniverseCode);
+        if (!item) return null;
+
+        return {
+          kind: "complex",
+          key: `map-primary-complex-${item.complexId}`,
+          label: item.name,
+          meta: [
+            district.name,
+            "지도 관측 대표 단지",
+            district.primaryRank ? `#${district.primaryRank}` : "현재 지도 데이터 기준",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          item,
+        };
+      })
+      .filter((suggestion): suggestion is MapLocalSearchSuggestion => suggestion !== null);
+
+    const complexes = [...itemComplexes, ...mapRepresentativeComplexes];
+
+    const districts = mapItems
+      .filter((district) => {
+        const isActionable =
+          district.isBoardBacked === true || (district.boardCount ?? 0) > 0;
+        if (!isActionable) return false;
+
+        return (
+          includesMapSearchText(district.name, normalizedQuery) ||
+          includesMapSearchText(district.query, normalizedQuery) ||
+          includesMapSearchText(district.primaryComplexName, normalizedQuery) ||
+          includesMapSearchText(district.peakComplexName, normalizedQuery)
+        );
+      })
+      .slice(0, MAP_LOCAL_SEARCH_DISTRICT_LIMIT)
+      .map<MapLocalSearchSuggestion>((district) => ({
+        kind: "district",
+        key: `district-${district.name}`,
+        label: district.name,
+        meta: `지도 관측 ${district.boardCount ?? district.count}개 · ${formatCompactCap(
+          district.totalMarketCap,
+        )}`,
+        district,
+      }));
+
+    return {
+      complexes,
+      districts,
+    };
+  }, [items, mapItems, mapSearchQuery, currentUniverseCode]);
+
+  const hasMapSearchQuery = mapSearchQuery.trim().length > 0;
+  const hasMapSearchSuggestions =
+    mapSearchSuggestions.complexes.length > 0 ||
+    mapSearchSuggestions.districts.length > 0;
+  const firstMapSearchSuggestion =
+    mapSearchSuggestions.complexes[0] ?? mapSearchSuggestions.districts[0] ?? null;
+
   const sliderRange = Math.max(
     maxMapMarketCapTrillion - RANGE_MIN_TRILLION,
     RANGE_STEP_TRILLION,
@@ -938,6 +1193,35 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     pushDistrictToUrl(data.name);
   }, []);
 
+  const handleMapSearchSelect = useCallback(
+    (suggestion: MapLocalSearchSuggestion) => {
+      if (suggestion.kind === "complex") {
+        pushComplexToUrl(suggestion.item, currentUniverseCode);
+      } else {
+        pushDistrictToUrl(suggestion.district.name);
+      }
+
+      setMapSearchQuery(suggestion.label);
+      setIsMapSearchOpen(false);
+    },
+    [currentUniverseCode],
+  );
+
+  const handleMapSearchKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Escape") {
+        setIsMapSearchOpen(false);
+        return;
+      }
+
+      if (event.key === "Enter" && firstMapSearchSuggestion) {
+        event.preventDefault();
+        handleMapSearchSelect(firstMapSearchSuggestion);
+      }
+    },
+    [firstMapSearchSuggestion, handleMapSearchSelect],
+  );
+
   const mapScopeLabel =
     mapDelivery.mapScopeLabel || getUniverseLabel(mapDelivery.renderedUniverseCode);
   const requestedUniverseLabel = getUniverseLabel(
@@ -948,18 +1232,198 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
   if (error) {
     return (
-      <div
-        className="p-4 text-sm text-rose-400"
+      <section
+        className="flex h-full min-h-[360px] flex-col overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)]"
         data-testid="neon-map"
         data-universe-code={currentUniverseCode}
-        data-requested-universe-code={currentUniverseCode}
-        data-rendered-universe-code={currentUniverseCode}
-        data-map-scope={getUniverseLabel(currentUniverseCode)}
+        data-requested-universe-code={mapDelivery.requestedUniverseCode}
+        data-rendered-universe-code={mapDelivery.renderedUniverseCode}
+        data-map-scope={mapScopeLabel}
         data-map-fallback-mode="loader-error"
         data-map-cache-state="client"
+        data-map-source={mapDelivery.source}
+        data-map-item-count={mapDelivery.itemCount}
       >
-        지도 로딩 에러
-      </div>
+        <div className="shrink-0 flex flex-col gap-4 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
+              TACTICAL RADAR
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-100">
+              전국 자본 흐름 맵
+            </h2>
+            <p className="mt-2 text-[11px] text-slate-500">
+              지도 제공자가 잠시 응답하지 않아도 검색은 현재 관측 데이터 기준으로 계속 사용할 수 있어요.
+            </p>
+
+            <div
+              className="relative z-40 mt-3 max-w-xl"
+              data-testid="neon-map-local-search"
+            >
+              <label
+                htmlFor="neon-map-local-search-input"
+                className="sr-only"
+              >
+                지도 검색
+              </label>
+              <div className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[12px] shadow-[0_10px_30px_rgba(0,0,0,0.24)]">
+                <span className="shrink-0 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+                  Map
+                </span>
+                <input
+                  id="neon-map-local-search-input"
+                  data-testid="neon-map-local-search-input"
+                  type="search"
+                  value={mapSearchQuery}
+                  onChange={(event) => {
+                    setMapSearchQuery(event.target.value);
+                    setIsMapSearchOpen(true);
+                  }}
+                  onFocus={() => setIsMapSearchOpen(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => setIsMapSearchOpen(false), 120);
+                  }}
+                  onKeyDown={handleMapSearchKeyDown}
+                  placeholder="궁금한 단지·지역을 검색해보세요"
+                  className="min-w-0 flex-1 bg-transparent text-[12px] font-medium text-slate-100 outline-none placeholder:text-slate-500"
+                />
+                {mapSearchQuery && (
+                  <button
+                    type="button"
+                    data-testid="neon-map-local-search-clear"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setMapSearchQuery("");
+                      setIsMapSearchOpen(true);
+                    }}
+                    className="shrink-0 rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] font-semibold text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-200"
+                  >
+                    지우기
+                  </button>
+                )}
+              </div>
+
+              {isMapSearchOpen && hasMapSearchQuery && (
+                <div
+                  id="neon-map-local-search-suggestions"
+                  data-testid="neon-map-local-search-suggestions"
+                  className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-700/80 bg-[#101720] p-2 text-[12px] shadow-2xl"
+                >
+                  {hasMapSearchSuggestions ? (
+                    <div className="space-y-2">
+                      {mapSearchSuggestions.complexes.length > 0 && (
+                        <div>
+                          <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                            단지
+                          </p>
+                          <div className="space-y-1">
+                            {mapSearchSuggestions.complexes.map((suggestion) => (
+                              <button
+                                key={suggestion.key}
+                                type="button"
+                                data-testid="neon-map-local-search-complex-result"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => handleMapSearchSelect(suggestion)}
+                                className="flex w-full min-w-0 items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-cyan-400/10 focus:bg-cyan-400/10 focus:outline-none"
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate font-semibold text-slate-100">
+                                    {suggestion.label}
+                                  </span>
+                                  <span className="block truncate text-[11px] text-slate-500">
+                                    {suggestion.meta}
+                                  </span>
+                                </span>
+                                <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-200">
+                                  보기
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {mapSearchSuggestions.districts.length > 0 && (
+                        <div>
+                          <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                            지역
+                          </p>
+                          <div className="space-y-1">
+                            {mapSearchSuggestions.districts.map((suggestion) => (
+                              <button
+                                key={suggestion.key}
+                                type="button"
+                                data-testid="neon-map-local-search-district-result"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => handleMapSearchSelect(suggestion)}
+                                className="flex w-full min-w-0 items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-cyan-400/10 focus:bg-cyan-400/10 focus:outline-none"
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate font-semibold text-slate-100">
+                                    {suggestion.label}
+                                  </span>
+                                  <span className="block truncate text-[11px] text-slate-500">
+                                    {suggestion.meta}
+                                  </span>
+                                </span>
+                                <span className="shrink-0 rounded-full bg-slate-700/60 px-2 py-0.5 text-[10px] font-semibold text-slate-200">
+                                  지도
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-3 text-[12px] leading-relaxed text-slate-400">
+                      관측자 Y가 현재 지도 범위에서 찾지 못했어요. 검색어를 조금 줄여보세요.
+                    </div>
+                  )}
+
+                  <p className="mt-2 border-t border-slate-800 px-2 pt-2 text-[10px] leading-relaxed text-slate-500">
+                    현재 지도와 홈 보드에서 관측 중인 단지·지역만 표시합니다.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 lg:max-w-xl">
+              <div
+                className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
+                data-testid="neon-map-requested-universe"
+                data-universe-code={mapDelivery.requestedUniverseCode}
+              >
+                <span className="block uppercase tracking-[0.16em] text-slate-500">
+                  Requested
+                </span>
+                <span className="mt-1 block truncate font-semibold text-slate-300">
+                  {requestedUniverseLabel}
+                </span>
+              </div>
+
+              <div
+                className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
+                data-testid="neon-map-rendered-universe"
+                data-universe-code={mapDelivery.renderedUniverseCode}
+              >
+                <span className="block uppercase tracking-[0.16em] text-slate-500">
+                  Map scope
+                </span>
+                <span className="mt-1 block truncate font-semibold text-slate-300">
+                  {renderedUniverseLabel}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex min-h-[220px] flex-1 items-center justify-center bg-[#0b1118] px-5 py-8 text-center">
+          <div className="max-w-sm rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-4 text-sm leading-relaxed text-rose-200">
+            지도 제공자가 잠시 응답하지 않습니다. 검색은 현재 관측 데이터 기준으로 계속 사용할 수 있어요.
+          </div>
+        </div>
+      </section>
     );
   }
 
@@ -1003,6 +1467,138 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
             <p className="mt-2 text-[11px] text-slate-500">
               원 안 큰 숫자는 해당 구의 총 시가총액이다. 레인지와 TOP N을 바꿔도 지도 위치는 유지된다.
             </p>
+
+            <div
+              className="relative z-40 mt-3 max-w-xl"
+              data-testid="neon-map-local-search"
+            >
+              <label
+                htmlFor="neon-map-local-search-input"
+                className="sr-only"
+              >
+                지도 검색
+              </label>
+              <div className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-700/70 bg-slate-950/70 px-3 py-2 text-[12px] shadow-[0_10px_30px_rgba(0,0,0,0.24)]">
+                <span className="shrink-0 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+                  Map
+                </span>
+                <input
+                  id="neon-map-local-search-input"
+                  data-testid="neon-map-local-search-input"
+                  type="search"
+                  value={mapSearchQuery}
+                  onChange={(event) => {
+                    setMapSearchQuery(event.target.value);
+                    setIsMapSearchOpen(true);
+                  }}
+                  onFocus={() => setIsMapSearchOpen(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => setIsMapSearchOpen(false), 120);
+                  }}
+                  onKeyDown={handleMapSearchKeyDown}
+                  placeholder="궁금한 단지·지역을 검색해보세요"
+                  className="min-w-0 flex-1 bg-transparent text-[12px] font-medium text-slate-100 outline-none placeholder:text-slate-500"
+                />
+                {mapSearchQuery && (
+                  <button
+                    type="button"
+                    data-testid="neon-map-local-search-clear"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setMapSearchQuery("");
+                      setIsMapSearchOpen(true);
+                    }}
+                    className="shrink-0 rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] font-semibold text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-200"
+                  >
+                    지우기
+                  </button>
+                )}
+              </div>
+
+              {isMapSearchOpen && hasMapSearchQuery && (
+                <div
+                  id="neon-map-local-search-suggestions"
+                  data-testid="neon-map-local-search-suggestions"
+                  className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-700/80 bg-[#101720] p-2 text-[12px] shadow-2xl"
+                >
+                  {hasMapSearchSuggestions ? (
+                    <div className="space-y-2">
+                      {mapSearchSuggestions.complexes.length > 0 && (
+                        <div>
+                          <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                            단지
+                          </p>
+                          <div className="space-y-1">
+                            {mapSearchSuggestions.complexes.map((suggestion) => (
+                              <button
+                                key={suggestion.key}
+                                type="button"
+                                data-testid="neon-map-local-search-complex-result"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => handleMapSearchSelect(suggestion)}
+                                className="flex w-full min-w-0 items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-cyan-400/10 focus:bg-cyan-400/10 focus:outline-none"
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate font-semibold text-slate-100">
+                                    {suggestion.label}
+                                  </span>
+                                  <span className="block truncate text-[11px] text-slate-500">
+                                    {suggestion.meta}
+                                  </span>
+                                </span>
+                                <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-200">
+                                  보기
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {mapSearchSuggestions.districts.length > 0 && (
+                        <div>
+                          <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                            지역
+                          </p>
+                          <div className="space-y-1">
+                            {mapSearchSuggestions.districts.map((suggestion) => (
+                              <button
+                                key={suggestion.key}
+                                type="button"
+                                data-testid="neon-map-local-search-district-result"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => handleMapSearchSelect(suggestion)}
+                                className="flex w-full min-w-0 items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-cyan-400/10 focus:bg-cyan-400/10 focus:outline-none"
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate font-semibold text-slate-100">
+                                    {suggestion.label}
+                                  </span>
+                                  <span className="block truncate text-[11px] text-slate-500">
+                                    {suggestion.meta}
+                                  </span>
+                                </span>
+                                <span className="shrink-0 rounded-full bg-slate-700/60 px-2 py-0.5 text-[10px] font-semibold text-slate-200">
+                                  지도
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-3 text-[12px] leading-relaxed text-slate-400">
+                      관측자 Y가 현재 지도 범위에서 찾지 못했어요. 검색어를 조금 줄여보세요.
+                    </div>
+                  )}
+
+                  <p className="mt-2 border-t border-slate-800 px-2 pt-2 text-[10px] leading-relaxed text-slate-500">
+                    현재 지도와 홈 보드에서 관측 중인 단지·지역만 표시합니다.
+                  </p>
+                </div>
+              )}
+            </div>
 
             <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 lg:max-w-xl">
               <div
