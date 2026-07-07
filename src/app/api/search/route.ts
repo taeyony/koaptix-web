@@ -16,7 +16,7 @@ const SEARCH_CACHE_TTL_MS = 30_000;
 const SEARCH_STALE_CACHE_TTL_MS = 600_000;
 const SEARCH_REGIONAL_RETRY_LIMIT = 40;
 const SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT = 1_000;
-const SEARCH_EXACT_NAME_FALLBACK_RESULT_LIMIT = 5;
+const SEARCH_RANK_VISIBLE_FALLBACK_RESULT_LIMIT = 8;
 const SEARCH_SUCCESS_CACHE_CONTROL =
   "public, max-age=10, s-maxage=30, stale-while-revalidate=300";
 const SEARCH_ERROR_CACHE_CONTROL = "no-store";
@@ -89,6 +89,7 @@ type RegionAuxiliaryCandidate = {
   universeCode: string;
   aliases: string[];
   broadAliases?: string[];
+  fallbackSearchTerms?: string[];
 };
 
 const REGION_AUXILIARY_CANDIDATES: RegionAuxiliaryCandidate[] = [
@@ -110,10 +111,18 @@ const REGION_AUXILIARY_CANDIDATES: RegionAuxiliaryCandidate[] = [
       "\uC218\uC601\uAD6C",
       "\uB3D9\uB798",
       "\uB3D9\uB798\uAD6C",
+      "\uC6B0\uB3D9",
+      "\uC911\uB3D9",
+      "\uC7A5\uC804\uB3D9",
       "busan",
       "haeundae",
     ],
     broadAliases: ["\uBD80\uC0B0", "\uBD80\uC0B0\uAD11\uC5ED\uC2DC", "busan"],
+  },
+  {
+    universeCode: "BUSAN_ALL",
+    aliases: ["\uB9C8\uB9B0\uC2DC\uD2F0"],
+    fallbackSearchTerms: ["\uC6B0\uB3D9", "\uD574\uC6B4\uB300"],
   },
   {
     universeCode: "DAEGU_ALL",
@@ -124,6 +133,8 @@ const REGION_AUXILIARY_CANDIDATES: RegionAuxiliaryCandidate[] = [
       "\uC218\uC131\uAD6C",
       "\uB2EC\uC11C",
       "\uB2EC\uC11C\uAD6C",
+      "\uBC94\uC5B4",
+      "\uBC94\uC5B4\uB3D9",
       "daegu",
     ],
     broadAliases: ["\uB300\uAD6C", "\uB300\uAD6C\uAD11\uC5ED\uC2DC", "daegu"],
@@ -140,6 +151,7 @@ const REGION_AUXILIARY_CANDIDATES: RegionAuxiliaryCandidate[] = [
       "\uBD80\uD3C9",
       "\uBD80\uD3C9\uAD6C",
       "\uC1A1\uB3C4",
+      "\uC1A1\uB3C4\uB3D9",
       "\uCCAD\uB77C",
       "incheon",
     ],
@@ -150,6 +162,8 @@ const REGION_AUXILIARY_CANDIDATES: RegionAuxiliaryCandidate[] = [
     aliases: [
       "\uAD11\uC8FC",
       "\uAD11\uC8FC\uAD11\uC5ED\uC2DC",
+      "\uAD11\uC0B0",
+      "\uAD11\uC0B0\uAD6C",
       "\uBD09\uC120",
       "\uBD09\uC120\uB3D9",
       "gwangju",
@@ -193,8 +207,19 @@ const REGION_AUXILIARY_CANDIDATES: RegionAuxiliaryCandidate[] = [
       "\uC218\uC6D0\uC2DC",
       "\uACE0\uC591",
       "\uACE0\uC591\uC2DC",
+      "\uC77C\uC0B0",
+      "\uC77C\uC0B0\uB3D9\uAD6C",
+      "\uC77C\uC0B0\uC11C\uAD6C",
       "\uC131\uB0A8",
       "\uC131\uB0A8\uC2DC",
+      "\uBD84\uB2F9",
+      "\uBD84\uB2F9\uAD6C",
+      "\uC815\uC790",
+      "\uC815\uC790\uB3D9",
+      "\uD310\uAD50",
+      "\uD310\uAD50\uB3D9",
+      "\uB9C8\uB450",
+      "\uB9C8\uB450\uB3D9",
       "\uC6A9\uC778",
       "\uC6A9\uC778\uC2DC",
       "\uD654\uC131",
@@ -217,6 +242,10 @@ const REGION_AUXILIARY_CANDIDATES: RegionAuxiliaryCandidate[] = [
       "goyang",
     ],
     broadAliases: ["\uACBD\uAE30", "\uACBD\uAE30\uB3C4", "gyeonggi"],
+  },
+  {
+    universeCode: "SEJONG_ALL",
+    aliases: ["\uC5B4\uC9C4", "\uC5B4\uC9C4\uB3D9"],
   },
 ];
 
@@ -386,12 +415,35 @@ function normalizeSearchToken(value: unknown) {
     .replace(/\s+/g, "");
 }
 
+function stripKoreanLocationSuffix(value: unknown) {
+  const normalized = String(value ?? "").trim();
+  if (normalized.length <= 2) return normalized;
+
+  return normalized.replace(/(\uB3D9|\uAC00)$/, "");
+}
+
 function getSearchTextFields(item: RankingItem) {
+  const names = [item.name, item.apt_name_ko].filter(Boolean);
+  const regions = [item.sigunguName, item.sigungu_name].filter(Boolean);
+  const districts = [item.legalDongName, item.legal_dong_name].filter(Boolean);
+  const districtBases = districts
+    .map(stripKoreanLocationSuffix)
+    .filter((value) => value.length >= 2);
+  const locationCombos = [
+    ...districts.flatMap((district) =>
+      names.map((name) => `${district} ${name}`),
+    ),
+    ...districtBases.flatMap((district) =>
+      names.map((name) => `${district} ${name}`),
+    ),
+    ...regions.flatMap((region) => names.map((name) => `${region} ${name}`)),
+  ];
+
   return {
-    name: [item.name, item.apt_name_ko],
-    region: [item.sigunguName, item.sigungu_name],
-    district: [item.legalDongName, item.legal_dong_name],
-    location: [item.locationLabel],
+    name: names,
+    region: regions,
+    district: districts,
+    location: [item.locationLabel, ...locationCombos],
   };
 }
 
@@ -490,16 +542,6 @@ function normalizeExactName(value: unknown) {
     .toLowerCase();
 }
 
-function getItemExactName(item: RankingItem) {
-  return normalizeExactName(item.apt_name_ko ?? item.name);
-}
-
-function hasExactNameMatch(items: RankingItem[], q: string) {
-  const normalizedQ = normalizeExactName(q);
-  if (!normalizedQ) return false;
-  return items.some((item) => getItemExactName(item) === normalizedQ);
-}
-
 function isRankingVisibleTop1000(row: SearchBoardRow) {
   if (typeof row?.is_top1000 === "boolean") {
     return row.is_top1000;
@@ -532,10 +574,20 @@ function excludeAlreadyShownItems(
 }
 
 function getRegionAuxiliaryUniverseCodes(q: string) {
+  return Array.from(
+    new Set(
+      getRegionAuxiliaryCandidateMatches(q).map(
+        (candidate) => candidate.universeCode,
+      ),
+    ),
+  );
+}
+
+function getRegionAuxiliaryCandidateMatches(q: string) {
   const normalizedQuery = normalizeSearchToken(q);
   if (normalizedQuery.length < 2) return [];
 
-  const candidateCodes = REGION_AUXILIARY_CANDIDATES.filter((candidate) =>
+  return REGION_AUXILIARY_CANDIDATES.filter((candidate) =>
     candidate.aliases.some((alias) => {
       const normalizedAlias = normalizeSearchToken(alias);
       return (
@@ -543,9 +595,17 @@ function getRegionAuxiliaryUniverseCodes(q: string) {
         normalizedAlias.startsWith(normalizedQuery)
       );
     }),
-  ).map((candidate) => candidate.universeCode);
+  );
+}
 
-  return Array.from(new Set(candidateCodes));
+function getRegionAuxiliaryFallbackSearchTerms(q: string, universeCode: string) {
+  return Array.from(
+    new Set(
+      getRegionAuxiliaryCandidateMatches(q)
+        .filter((candidate) => candidate.universeCode === universeCode)
+        .flatMap((candidate) => candidate.fallbackSearchTerms ?? []),
+    ),
+  );
 }
 
 function isBroadRegionUniverseQuery(q: string, universeCode: string) {
@@ -584,7 +644,17 @@ async function loadRegionAuxiliaryItems(
 
       try {
         const source = await loadSourceItems(resolution.renderedUniverseCode);
-        const matchedItems = filterItemsByQuery(source.items, q);
+        let matchedItems = filterItemsByQuery(source.items, q);
+
+        if (matchedItems.length === 0) {
+          const fallbackTerms = getRegionAuxiliaryFallbackSearchTerms(
+            q,
+            resolution.renderedUniverseCode,
+          );
+          matchedItems = mergeUniqueByComplexId(
+            fallbackTerms.flatMap((term) => filterItemsByQuery(source.items, term)),
+          );
+        }
 
         if (
           matchedItems.length === 0 &&
@@ -626,6 +696,7 @@ function buildUnavailableSearchPayload(
     fallbackMode: "none",
     fallbackUsed: false,
     degraded: false,
+    resultOrder: ["localItems", "globalItems"],
     localItems: [],
     globalItems: [],
     message: resolution.reason ?? "universe_unavailable",
@@ -647,7 +718,7 @@ async function fetchSourceItems(
   return items;
 }
 
-async function fetchExactNameFallbackItems(
+async function fetchRankVisibleFallbackItems(
   universeCode: string,
   q: string,
 ): Promise<RankingItem[]> {
@@ -659,25 +730,14 @@ async function fetchExactNameFallbackItems(
     SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT,
   );
 
-  return rows
-    .filter((row) => {
-      return (
-        isRankingVisibleTop1000(row) &&
-        normalizeExactName(row.apt_name_ko ?? row.name) === normalizedQ
-      );
-    })
-    .sort((a, b) => {
-      const rankA =
-        toNullableNumber(a.rank_all ?? a.rank) ?? Number.MAX_SAFE_INTEGER;
-      const rankB =
-        toNullableNumber(b.rank_all ?? b.rank) ?? Number.MAX_SAFE_INTEGER;
-      if (rankA !== rankB) return rankA - rankB;
-      return String(a.complex_id ?? a.id ?? "").localeCompare(
-        String(b.complex_id ?? b.id ?? ""),
-      );
-    })
-    .slice(0, SEARCH_EXACT_NAME_FALLBACK_RESULT_LIMIT)
-    .map((row) => toRankingItem(row, universeCode));
+  // Bounded rank-visible fallback: search only the approved Top1000-style
+  // rank-board path, never apt_complex-only discovery or unranked rows.
+  return filterItemsByQuery(
+    rows
+      .filter(isRankingVisibleTop1000)
+      .map((row) => toRankingItem(row, universeCode)),
+    q,
+  ).slice(0, SEARCH_RANK_VISIBLE_FALLBACK_RESULT_LIMIT);
 }
 
 async function loadSourceItems(
@@ -828,7 +888,7 @@ export async function GET(request: NextRequest) {
 
   const requestedUniverseCode = universeResolution.renderedUniverseCode;
 
-  if (q.length < 1) {
+  if (normalizeSearchToken(q).length < 2) {
     return NextResponse.json(
       {
         ok: true,
@@ -840,6 +900,7 @@ export async function GET(request: NextRequest) {
         source: "empty_degraded",
         cacheState: "bypassed",
         fallbackMode: "same_universe_empty_degraded",
+        resultOrder: ["localItems", "globalItems"],
         localItems: [],
         globalItems: [],
       },
@@ -851,17 +912,32 @@ export async function GET(request: NextRequest) {
 
   try {
     const localSource = await loadSourceItems(requestedUniverseCode);
-    const matchedLocalItems = filterItemsByQuery(localSource.items, q);
-    let exactFallbackItems: RankingItem[] = [];
+    let matchedLocalItems = filterItemsByQuery(localSource.items, q);
+    let rankVisibleFallbackItems: RankingItem[] = [];
 
-    if (!hasExactNameMatch(matchedLocalItems, q)) {
+    if (matchedLocalItems.length === 0) {
+      const localFallbackTerms = getRegionAuxiliaryFallbackSearchTerms(
+        q,
+        requestedUniverseCode,
+      );
+      matchedLocalItems = mergeUniqueByComplexId(
+        localFallbackTerms.flatMap((term) =>
+          filterItemsByQuery(localSource.items, term),
+        ),
+      );
+    }
+
+    if (
+      matchedLocalItems.length < limit &&
+      !isStrictRegionIntentQuery(normalizeSearchToken(q))
+    ) {
       try {
-        exactFallbackItems = await fetchExactNameFallbackItems(
+        rankVisibleFallbackItems = await fetchRankVisibleFallbackItems(
           requestedUniverseCode,
           q,
         );
       } catch (fallbackError) {
-        console.info("[API /api/search] exact-name fallback skipped", {
+        console.info("[API /api/search] rank-visible fallback skipped", {
           universeCode: requestedUniverseCode,
           queryLength: q.length,
           message: getErrorMessage(fallbackError),
@@ -870,7 +946,7 @@ export async function GET(request: NextRequest) {
     }
 
     const localItems = mergeUniqueByComplexId([
-      ...exactFallbackItems,
+      ...rankVisibleFallbackItems,
       ...matchedLocalItems,
     ]).slice(0, limit);
     const globalItems = await loadGlobalAuxiliaryItems(
@@ -922,6 +998,7 @@ export async function GET(request: NextRequest) {
         source: "empty_degraded",
         cacheState: "miss",
         fallbackMode: "same_universe_empty_degraded",
+        resultOrder: ["localItems", "globalItems"],
         localItems: [],
         globalItems: [],
         degraded: true,
