@@ -103,6 +103,20 @@ export function ComplexHistoryMiniChart({
     [normalizedSeries],
   );
 
+  const distinctValueCount = useMemo(() => {
+    const values = new Set<number>();
+
+    for (const entry of normalizedSeries) {
+      for (const point of entry.points) {
+        if (Number.isFinite(point.value) && point.value > 0) {
+          values.add(point.value);
+        }
+      }
+    }
+
+    return values.size;
+  }, [normalizedSeries]);
+
   const [isMounted, setIsMounted] = useState(false);
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const [chartBox, setChartBox] = useState({ width: 0, height: 0 });
@@ -154,8 +168,11 @@ export function ComplexHistoryMiniChart({
     );
   }
 
-  const canRenderMeasuredChart =
-    isMounted && chartBox.width > 0 && chartBox.height >= MIN_CHART_HEIGHT;
+  const canRenderMeasuredChart = isMounted && chartBox.width > 0;
+  const renderWidth = Math.max(chartBox.width, 1);
+  const renderHeight = Math.max(chartBox.height, MIN_CHART_HEIGHT);
+  const hasSparseStepSeries =
+    mergedData.length >= 4 && distinctValueCount > 0 && distinctValueCount <= 3;
 
   return (
     <div className="relative w-full min-w-0 overflow-hidden rounded-2xl border border-white/8 bg-black/25 [background-image:linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]">
@@ -197,8 +214,8 @@ export function ComplexHistoryMiniChart({
           <div className="h-full min-h-[220px] w-full animate-pulse rounded-xl border border-white/8 bg-white/[0.02]" />
         ) : (
           <LineChart
-            width={Math.max(chartBox.width, 1)}
-            height={Math.max(chartBox.height, MIN_CHART_HEIGHT)}
+            width={renderWidth}
+            height={renderHeight}
             data={mergedData}
             margin={{ top: 12, right: 12, left: 0, bottom: 4 }}
           >
@@ -250,7 +267,7 @@ export function ComplexHistoryMiniChart({
             {normalizedSeries.map((entry, index) => (
               <Line
                 key={entry.key}
-                type="monotone"
+                type="linear"
                 dataKey={entry.key}
                 name={entry.name}
                 stroke={entry.color}
@@ -271,6 +288,12 @@ export function ComplexHistoryMiniChart({
           </LineChart>
         )}
       </div>
+
+      {hasSparseStepSeries ? (
+        <div className="relative border-t border-white/6 px-3 py-2 text-[11px] leading-5 text-white/50">
+          관측 가능한 시총 값이 적어 선이 계단처럼 보일 수 있습니다.
+        </div>
+      ) : null}
     </div>
   );
 }
