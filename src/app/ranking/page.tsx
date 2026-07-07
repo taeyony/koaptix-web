@@ -108,7 +108,7 @@ export default async function RankingPage({
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div className="w-full min-w-0 max-w-full">
                 <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">
-                  KOAPTIX RANKING OPERATIONS ROOM
+                  KOAPTIX RANKING BOARD
                 </p>
                 <h1 className="mt-1 break-words text-lg font-semibold tracking-tight text-white [overflow-wrap:anywhere] sm:text-xl lg:text-2xl">
                   KOAPTIX TOP1000
@@ -133,7 +133,7 @@ export default async function RankingPage({
                   href={homeHref}
                   className="rounded-xl border border-slate-700 px-3 py-2 text-xs uppercase tracking-[0.16em] text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
                 >
-                  Home
+                  홈으로
                 </Link>
               </div>
             </div>
@@ -153,7 +153,7 @@ export default async function RankingPage({
               title="KOAPTIX TOP1000"
               apiBasePath="/api/ranking"
               boardLimit={1000}
-              emptyMessage="TOP1000 데이터가 없습니다."
+              emptyMessage="현재 공개 TOP1000 보드를 준비 중입니다."
               enableTierFilters={true}
               useInternalScroll={false}
             />

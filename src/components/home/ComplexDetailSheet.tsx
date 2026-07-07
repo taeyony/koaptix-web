@@ -296,7 +296,7 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
       }
       showToast("이 브라우저에서는 링크 공유를 지원하지 않는다.", "error");
     } catch {
-      showToast("링크를 복사하지 못했다. 다시 시도해라.", "error");
+      showToast("링크를 복사하지 못했습니다. 잠시 후 다시 시도해주세요.", "error");
     } finally {
       setSharePending(false);
     }
@@ -424,7 +424,7 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
                 }
               />
               <Metric
-                label="Momentum (W)"
+                label="주간 시총 변화율"
                 value={
                   displayMarketCapDeltaPct7d != null
                     ? formatPercent(displayMarketCapDeltaPct7d)
@@ -444,9 +444,9 @@ export function ComplexDetailSheet({ open, item, detail, loading, error, onClose
               <div className="border-b border-white/5 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70">RECOVERY SIGNAL</p>
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70">회복 관측 지표</p>
                     <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">52주 최고가 회복률</h4>
-                    <p className="mt-1 text-xs text-white/45">과거의 고점과 현재의 격차를 즉시 드러내는 탐욕 지표</p>
+                    <p className="mt-1 text-xs text-white/45">이전 고점과 현재 추정치 사이의 거리를 보여주는 참고 지표입니다.</p>
                   </div>
                   <span className={`shrink-0 text-xs font-semibold tabular-nums ${recoveryTone(recoveryRate52w)}`}>
                     {recoveryRate52w != null ? `${recoveryRate52w.toFixed(1)}%` : "-"}

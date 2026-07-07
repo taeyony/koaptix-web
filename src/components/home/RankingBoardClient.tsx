@@ -926,7 +926,7 @@ export function RankingBoardClient({
 
             {isBoardLoading && (
               <span className="w-fit rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
-                Syncing...
+                보드 새로고침 중
               </span>
             )}
           </div>
@@ -972,7 +972,7 @@ export function RankingBoardClient({
                   : "text-slate-500 hover:text-slate-300"
                   }`}
               >
-                전체 스캔
+                전체 보기
               </button>
               <button
                 onClick={() => setShowBookmarksOnly(true)}
@@ -981,14 +981,14 @@ export function RankingBoardClient({
                   : "text-slate-500 hover:text-slate-300"
                   }`}
               >
-                ★ MY RADAR
+                ★ 관심 단지
               </button>
             </div>
 
             <div className="w-full lg:max-w-[200px]">
               <input
                 type="text"
-                placeholder="보드 내 단지·지역 필터"
+                placeholder="보드 안에서 단지·지역 찾기"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-lg border border-slate-700/50 bg-slate-800/30 px-3 py-2 text-sm text-slate-200 outline-none transition-all focus:border-cyan-500/50 focus:bg-slate-800/60"
@@ -1014,8 +1014,8 @@ export function RankingBoardClient({
               data-board-degraded={boardDeliveryMeta.degraded ? "true" : "false"}
               data-board-stale-universe-code={staleBoardUniverseCode ?? ""}
             >
-              Syncing {getUniverseLabel(boardUniverseCode)}. Keeping the last
-              tactical board visible until fresh data arrives.
+              {getUniverseLabel(boardUniverseCode)} 보드를 다시 확인하는 중입니다.
+              새 관측값이 도착할 때까지 이전 보드를 유지합니다.
             </div>
           )}
 
@@ -1024,7 +1024,7 @@ export function RankingBoardClient({
             (enableTierFilters && selectedTierFilter !== "ALL")) && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <span className="text-[10px] uppercase tracking-widest text-slate-500">
-                  Active:
+                  적용 중
                 </span>
 
                 {enableTierFilters && selectedTierFilter !== "ALL" && (
@@ -1083,7 +1083,7 @@ export function RankingBoardClient({
             {isBoardLoading && boardItems.length === 0 ? (
               <div className="flex h-32 flex-col items-center justify-center gap-2 text-slate-500">
                 <span className="text-2xl opacity-50">📡</span>
-                <p className="text-sm">보드 데이터를 불러오는 중입니다.</p>
+                <p className="text-sm">공개 랭킹 보드를 불러오는 중입니다.</p>
               </div>
             ) : filteredItems.length > 0 ? (
               <div className="flex flex-col gap-2 pb-2">
@@ -1117,12 +1117,12 @@ export function RankingBoardClient({
                 </span>
                 <p className="text-sm">
                   {searchQuery.trim() && boardItems.length > 0
-                    ? "현재 보드에 일치하는 단지가 없습니다."
+                    ? "현재 선택한 보드 안에서는 일치하는 단지가 없습니다."
                     : emptyMessage}
                 </p>
                 {searchQuery.trim() && boardItems.length > 0 && (
                   <p className="text-xs text-slate-600">
-                    더 넓은 검색은 화면 우하단 단지·지역 검색을 이용하세요.
+                    더 넓은 공개 결과는 화면 우하단 단지·지역 검색에서 이어서 볼 수 있습니다.
                   </p>
                 )}
               </div>
