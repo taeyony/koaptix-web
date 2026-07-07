@@ -56,6 +56,13 @@ type MapApiResponse = {
   message?: string;
 };
 
+type MapSearchApiResponse = {
+  ok?: boolean;
+  localItems?: RankingItem[];
+  globalItems?: RankingItem[];
+  message?: string;
+};
+
 type MapDeliveryState = {
   requestedUniverseCode: string;
   renderedUniverseCode: string;
@@ -72,6 +79,7 @@ type MapLocalSearchSuggestion =
       key: string;
       label: string;
       meta: string;
+      source: "local" | "remote";
       item: RankingItem;
     }
   | {
@@ -79,6 +87,7 @@ type MapLocalSearchSuggestion =
       key: string;
       label: string;
       meta: string;
+      source?: "district";
       district: DistrictAggregate;
     };
 
@@ -201,6 +210,16 @@ const TOP_N_OPTIONS: TopNOption[] = [
 ];
 const MAP_LOCAL_SEARCH_COMPLEX_LIMIT = 3;
 const MAP_LOCAL_SEARCH_DISTRICT_LIMIT = 3;
+const MAP_LOCAL_SEARCH_REMOTE_LIMIT = 6;
+const MAP_LOCAL_SEARCH_TOTAL_COMPLEX_LIMIT = 6;
+const MAP_LOCAL_SEARCH_REMOTE_MIN_QUERY_LENGTH = 2;
+const MAP_LOCAL_SEARCH_REMOTE_DEBOUNCE_MS = 300;
+const MAP_LOCAL_SEARCH_REMOTE_TIMEOUT_MS = 4500;
+
+const MAP_SEARCH_API = (query: string, universeCode: string, limit = MAP_LOCAL_SEARCH_REMOTE_LIMIT) =>
+  `/api/search?q=${encodeURIComponent(query)}&universe_code=${encodeURIComponent(
+    universeCode,
+  )}&limit=${limit}`;
 
 function getDesiredMapSourceLimit(topN: number, universeCode: string) {
   if (universeCode === DEFAULT_UNIVERSE_CODE) {
@@ -432,6 +451,27 @@ function includesMapSearchText(value: unknown, normalizedQuery: string) {
   return normalizeMapSearchText(value).includes(normalizedQuery);
 }
 
+async function readMapSearchItems(
+  input: string,
+  signal: AbortSignal,
+): Promise<RankingItem[]> {
+  const response = await fetch(input, {
+    method: "GET",
+    cache: "no-store",
+    signal,
+  });
+
+  const json = (await response.json()) as MapSearchApiResponse;
+
+  if (!response.ok || json.ok === false) {
+    throw new Error(
+      json.message ?? `Request failed: ${response.status} ${input}`,
+    );
+  }
+
+  return [...(json.localItems ?? []), ...(json.globalItems ?? [])];
+}
+
 function buildFallbackAggregate(items: RankingItem[]): DistrictAggregate[] {
   const grouped = new globalThis.Map<string, DistrictAggregate>();
 
@@ -624,6 +664,9 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   const [editingMax, setEditingMax] = useState<string | null>(null);
   const [mapSearchQuery, setMapSearchQuery] = useState("");
   const [isMapSearchOpen, setIsMapSearchOpen] = useState(false);
+  const [mapSearchRemoteItems, setMapSearchRemoteItems] = useState<RankingItem[]>([]);
+  const [isMapSearchRemotePending, setIsMapSearchRemotePending] = useState(false);
+  const mapSearchRemoteCacheRef = useRef<Record<string, RankingItem[]>>({});
 
   const fallbackMapItems = useMemo(
     () => buildFallbackAggregate(items),
@@ -642,6 +685,90 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       itemCount: fallbackMapItems.length,
     }),
   );
+
+  useEffect(() => {
+    const rawQuery = mapSearchQuery.trim();
+    const normalizedQuery = normalizeMapSearchText(rawQuery);
+
+    if (
+      !isMapSearchOpen ||
+      normalizedQuery.length < MAP_LOCAL_SEARCH_REMOTE_MIN_QUERY_LENGTH
+    ) {
+      const resetId = window.setTimeout(() => {
+        setMapSearchRemoteItems([]);
+        setIsMapSearchRemotePending(false);
+      }, 0);
+
+      return () => {
+        window.clearTimeout(resetId);
+      };
+    }
+
+    const cacheKey = `${currentUniverseCode}::${normalizedQuery}`;
+    const cached = mapSearchRemoteCacheRef.current[cacheKey];
+
+    if (cached) {
+      const cacheId = window.setTimeout(() => {
+        setMapSearchRemoteItems(cached);
+        setIsMapSearchRemotePending(false);
+      }, 0);
+
+      return () => {
+        window.clearTimeout(cacheId);
+      };
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+    let timedOut = false;
+    let timeoutId: number | undefined;
+
+    const debounceId = window.setTimeout(async () => {
+      setIsMapSearchRemotePending(true);
+
+      timeoutId = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, MAP_LOCAL_SEARCH_REMOTE_TIMEOUT_MS);
+
+      try {
+        const remoteItems = await readMapSearchItems(
+          MAP_SEARCH_API(rawQuery, currentUniverseCode),
+          controller.signal,
+        );
+
+        if (cancelled) return;
+
+        mapSearchRemoteCacheRef.current[cacheKey] = remoteItems;
+        setMapSearchRemoteItems(remoteItems);
+      } catch (searchError) {
+        if (!timedOut && (cancelled || controller.signal.aborted)) return;
+
+        console.warn("[NeonMap] map search bridge skipped", {
+          currentUniverseCode,
+          queryLength: rawQuery.length,
+          timedOut,
+          message:
+            searchError instanceof Error
+              ? searchError.message
+              : "search_bridge_unavailable",
+        });
+        setMapSearchRemoteItems([]);
+      } finally {
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+        if (!cancelled) {
+          setIsMapSearchRemotePending(false);
+        }
+      }
+    }, MAP_LOCAL_SEARCH_REMOTE_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(debounceId);
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [currentUniverseCode, isMapSearchOpen, mapSearchQuery]);
 
   const [loading, error] = useKakaoLoader({
     appkey: process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY as string,
@@ -1037,6 +1164,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         if (!item.complexId || seenComplexIds.has(item.complexId)) return false;
 
         const matched =
+          includesMapSearchText(item.complexId, normalizedQuery) ||
           includesMapSearchText(item.name, normalizedQuery) ||
           includesMapSearchText(item.locationLabel, normalizedQuery) ||
           includesMapSearchText(item.sigunguName, normalizedQuery) ||
@@ -1057,6 +1185,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         meta: [getRankingItemLocationLabel(item), getRankingItemRankLabel(item)]
           .filter(Boolean)
           .join(" · "),
+        source: "local",
         item,
       }));
 
@@ -1097,12 +1226,42 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
           ]
             .filter(Boolean)
             .join(" · "),
+          source: "local",
           item,
         };
       })
       .filter((suggestion): suggestion is MapLocalSearchSuggestion => suggestion !== null);
 
-    const complexes = [...itemComplexes, ...mapRepresentativeComplexes];
+    const localComplexes = [...itemComplexes, ...mapRepresentativeComplexes];
+    const remoteComplexes = mapSearchRemoteItems
+      .filter((item) => {
+        const complexId = String(item.complexId ?? "").trim();
+        if (!complexId || seenComplexIds.has(complexId)) return false;
+
+        seenComplexIds.add(complexId);
+        return true;
+      })
+      .slice(0, Math.max(MAP_LOCAL_SEARCH_TOTAL_COMPLEX_LIMIT - localComplexes.length, 0))
+      .map<MapLocalSearchSuggestion>((item) => {
+        const universeCode = getRankingItemUniverseCode(item, currentUniverseCode);
+
+        return {
+          kind: "complex",
+          key: `remote-complex-${universeCode}-${item.complexId}`,
+          label: item.name,
+          meta: [
+            getRankingItemLocationLabel(item),
+            getRankingItemRankLabel(item),
+            universeCode !== DEFAULT_UNIVERSE_CODE ? getUniverseLabel(universeCode) : "TOP1000",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          source: "remote",
+          item,
+        };
+      });
+
+    const complexes = [...localComplexes, ...remoteComplexes];
 
     const districts = mapItems
       .filter((district) => {
@@ -1132,7 +1291,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       complexes,
       districts,
     };
-  }, [items, mapItems, mapSearchQuery, currentUniverseCode]);
+  }, [items, mapItems, mapSearchQuery, mapSearchRemoteItems, currentUniverseCode]);
 
   const hasMapSearchQuery = mapSearchQuery.trim().length > 0;
   const hasMapSearchSuggestions =
@@ -1322,6 +1481,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                                 key={suggestion.key}
                                 type="button"
                                 data-testid="neon-map-local-search-complex-result"
+                                data-search-source={suggestion.source}
                                 onMouseDown={(event) => event.preventDefault()}
                                 onClick={() => handleMapSearchSelect(suggestion)}
                                 className="flex w-full min-w-0 items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-cyan-400/10 focus:bg-cyan-400/10 focus:outline-none"
@@ -1379,6 +1539,15 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                     <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-3 text-[12px] leading-relaxed text-slate-400">
                       관측자 Y가 현재 지도 범위에서 찾지 못했어요. 검색어를 조금 줄여보세요.
                     </div>
+                  )}
+
+                  {isMapSearchRemotePending && (
+                    <p
+                      data-testid="neon-map-local-search-remote-pending"
+                      className="mt-2 px-2 text-[10px] leading-relaxed text-cyan-300/70"
+                    >
+                      TOP1000 search expanding...
+                    </p>
                   )}
 
                   <p className="mt-2 border-t border-slate-800 px-2 pt-2 text-[10px] leading-relaxed text-slate-500">
@@ -1534,6 +1703,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                                 key={suggestion.key}
                                 type="button"
                                 data-testid="neon-map-local-search-complex-result"
+                                data-search-source={suggestion.source}
                                 onMouseDown={(event) => event.preventDefault()}
                                 onClick={() => handleMapSearchSelect(suggestion)}
                                 className="flex w-full min-w-0 items-center justify-between gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-cyan-400/10 focus:bg-cyan-400/10 focus:outline-none"
@@ -1591,6 +1761,15 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                     <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-3 text-[12px] leading-relaxed text-slate-400">
                       관측자 Y가 현재 지도 범위에서 찾지 못했어요. 검색어를 조금 줄여보세요.
                     </div>
+                  )}
+
+                  {isMapSearchRemotePending && (
+                    <p
+                      data-testid="neon-map-local-search-remote-pending"
+                      className="mt-2 px-2 text-[10px] leading-relaxed text-cyan-300/70"
+                    >
+                      TOP1000 search expanding...
+                    </p>
                   )}
 
                   <p className="mt-2 border-t border-slate-800 px-2 pt-2 text-[10px] leading-relaxed text-slate-500">
