@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { RankingItem } from "../../lib/koaptix/types";
+import type {
+  DiscoveryCandidate,
+  DiscoveryWarning,
+  RankingItem,
+} from "../../lib/koaptix/types";
 import { BetaDisclosure } from "./BetaDisclosure";
 import {
   DEFAULT_UNIVERSE_CODE,
@@ -21,7 +25,14 @@ type SearchApiResponse = {
   universeCode?: string;
   localItems?: RankingItem[];
   globalItems?: RankingItem[];
+  discoveryCandidates?: DiscoveryCandidate[];
   message?: string;
+};
+
+type SearchResultPayload = {
+  localItems: RankingItem[];
+  globalItems: RankingItem[];
+  discoveryCandidates: DiscoveryCandidate[];
 };
 
 type RegionSearchResult = {
@@ -200,7 +211,7 @@ function scoreRegionSearchResult(
 async function readSearchResult(
   input: string,
   signal: AbortSignal,
-): Promise<{ localItems: RankingItem[]; globalItems: RankingItem[] }> {
+): Promise<SearchResultPayload> {
   const response = await fetch(input, {
     method: "GET",
     cache: "no-store",
@@ -218,6 +229,7 @@ async function readSearchResult(
   return {
     localItems: json.localItems ?? [],
     globalItems: json.globalItems ?? [],
+    discoveryCandidates: json.discoveryCandidates ?? [],
   };
 }
 
@@ -237,13 +249,16 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [localItems, setLocalItems] = useState<RankingItem[]>([]);
   const [globalItems, setGlobalItems] = useState<RankingItem[]>([]);
+  const [discoveryCandidates, setDiscoveryCandidates] = useState<
+    DiscoveryCandidate[]
+  >([]);
+  const [selectedDiscoveryCandidate, setSelectedDiscoveryCandidate] =
+    useState<DiscoveryCandidate | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const cacheRef = useRef<
-    Record<string, { localItems: RankingItem[]; globalItems: RankingItem[] }>
-  >({});
+  const cacheRef = useRef<Record<string, SearchResultPayload>>({});
 
   const replaceUrlParams = useCallback(
     (
@@ -367,6 +382,8 @@ export function CommandPalette({
     if (q.length < 2) {
       setLocalItems([]);
       setGlobalItems([]);
+      setDiscoveryCandidates([]);
+      setSelectedDiscoveryCandidate(null);
       setSearchError(null);
       setIsSearching(false);
       return;
@@ -377,6 +394,8 @@ export function CommandPalette({
     if (cached) {
       setLocalItems(cached.localItems);
       setGlobalItems(cached.globalItems);
+      setDiscoveryCandidates(cached.discoveryCandidates);
+      setSelectedDiscoveryCandidate(null);
       setSearchError(null);
       setIsSearching(false);
       return;
@@ -409,6 +428,8 @@ export function CommandPalette({
       cacheRef.current[cacheKey] = next;
       setLocalItems(next.localItems);
       setGlobalItems(next.globalItems);
+      setDiscoveryCandidates(next.discoveryCandidates);
+      setSelectedDiscoveryCandidate(null);
     } catch (error) {
       if (!timedOut && (controller.signal.aborted || cancelled)) return;
 
@@ -434,6 +455,8 @@ export function CommandPalette({
       setSearchError(message);
       setLocalItems([]);
       setGlobalItems([]);
+      setDiscoveryCandidates([]);
+      setSelectedDiscoveryCandidate(null);
     } finally {
       if (fetchTimeoutId !== undefined) window.clearTimeout(fetchTimeoutId);
       if (!cancelled) {
@@ -461,6 +484,15 @@ export function CommandPalette({
     if (query.trim().length < 2) return [];
     return globalItems;
   }, [globalItems, query]);
+
+  const visibleDiscoveryCandidates = useMemo(() => {
+    if (query.trim().length < 2) return [];
+    return discoveryCandidates;
+  }, [discoveryCandidates, query]);
+
+  const hasRankedSearchResults =
+    visibleLocalItems.length > 0 || visibleGlobalItems.length > 0;
+  const hasDiscoveryCandidates = visibleDiscoveryCandidates.length > 0;
 
   const rankingSearchHref = useMemo(() => {
     const params = new URLSearchParams();
@@ -511,6 +543,95 @@ export function CommandPalette({
     },
     [query, router],
   );
+
+  const handleSelectDiscoveryCandidate = useCallback(
+    (candidate: DiscoveryCandidate) => {
+      setSelectedDiscoveryCandidate(candidate);
+    },
+    [],
+  );
+
+  const getDiscoveryWarningLabel = (warning: DiscoveryWarning) => {
+    if (warning === "SOURCE_IDENTITY_AMBIGUOUS") return "원천 연결 추가 확인";
+    if (warning === "AREA_HOUSEHOLD_GAP") return "세대수 연결 확인 중";
+    if (warning === "TRADE_CLEAN_GAP") return "실거래 정제 대기";
+    if (warning === "MARKET_CAP_SOURCE_GAP") return "시총 산정 전";
+    return warning;
+  };
+
+  const renderDiscoveryCandidateCard = (candidate: DiscoveryCandidate) => {
+    const isSelected =
+      selectedDiscoveryCandidate?.discoveryId === candidate.discoveryId;
+    const evidenceLabels = [
+      candidate.evidenceFlags.hasComplex ? "단지명 확인" : null,
+      candidate.evidenceFlags.hasRegionMap ? "지역 확인" : null,
+      candidate.evidenceFlags.hasAlias ? "별칭 확인" : null,
+      candidate.evidenceFlags.hasExternalId ? "외부 ID 확인" : null,
+    ].filter((label): label is string => Boolean(label));
+
+    return (
+      <button
+        key={candidate.discoveryId}
+        type="button"
+        onClick={() => handleSelectDiscoveryCandidate(candidate)}
+        data-testid="command-discovery-candidate-card"
+        data-complex-id={candidate.complexId}
+        className={`group w-full rounded-2xl border px-4 py-4 text-left transition ${
+          isSelected
+            ? "border-amber-300/60 bg-amber-500/15"
+            : "border-amber-400/25 bg-amber-500/10 hover:border-amber-300/50 hover:bg-amber-500/15"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-[11px] font-semibold text-amber-200">
+                {candidate.copy.badge}
+              </span>
+              <span className="truncate text-[24px] font-semibold leading-none text-white">
+                {candidate.displayName}
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-amber-100/80">
+              {candidate.regionLabel}
+            </p>
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              {candidate.copy.message}
+            </p>
+          </div>
+          <div className="shrink-0 text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-200/80">
+            OBSERVE
+          </div>
+        </div>
+
+        {evidenceLabels.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {evidenceLabels.map((label) => (
+              <span
+                key={label}
+                className="rounded-full border border-amber-300/20 bg-black/20 px-2 py-1 text-[11px] text-amber-100/75"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {candidate.warnings.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {candidate.warnings.map((warning) => (
+              <span
+                key={warning}
+                className="rounded-full border border-slate-600 bg-slate-950/50 px-2 py-1 text-[11px] text-slate-300"
+              >
+                {getDiscoveryWarningLabel(warning)}
+              </span>
+            ))}
+          </div>
+        )}
+      </button>
+    );
+  };
 
   const renderResultCard = (item: RankingItem) => (
     <button
@@ -681,8 +802,14 @@ export function CommandPalette({
                     </div>
                   )}
                 </div>
-              ) : visibleLocalItems.length > 0 || visibleGlobalItems.length > 0 ? (
+              ) : hasRankedSearchResults || hasDiscoveryCandidates ? (
                 <div className="max-h-[520px] space-y-5 overflow-y-auto pr-1">
+                  {!hasRankedSearchResults && hasDiscoveryCandidates && (
+                    <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/85">
+                      랭킹 결과는 아직 없지만, 관측 준비중인 후보가 있어요.
+                    </div>
+                  )}
+
                   {visibleLocalItems.length > 0 && (
                     <div>
                       <div className="mb-3 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-cyan-300/80">
@@ -704,6 +831,35 @@ export function CommandPalette({
                       <div className="space-y-3">
                         {visibleGlobalItems.map(renderResultCard)}
                       </div>
+                    </div>
+                  )}
+
+                  {visibleDiscoveryCandidates.length > 0 && (
+                    <div>
+                      <div className="mb-3 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-amber-200/80">
+                        <span>랭킹 산정 전 후보</span>
+                        <span>{visibleDiscoveryCandidates.length} ITEMS</span>
+                      </div>
+                      <div className="space-y-3">
+                        {visibleDiscoveryCandidates.map(renderDiscoveryCandidateCard)}
+                      </div>
+
+                      {selectedDiscoveryCandidate && (
+                        <div className="mt-3 rounded-2xl border border-amber-300/25 bg-black/30 px-4 py-4 text-sm leading-6 text-slate-300">
+                          <p className="font-semibold text-amber-100">
+                            {selectedDiscoveryCandidate.displayName}
+                          </p>
+                          <p className="mt-1 text-slate-400">
+                            {selectedDiscoveryCandidate.regionLabel}
+                          </p>
+                          <p className="mt-3">
+                            {selectedDiscoveryCandidate.copy.helperText}
+                          </p>
+                          <p className="mt-3 text-[12px] text-slate-500">
+                            아직 공개 랭킹 보드의 단지 상세로 열지 않습니다.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

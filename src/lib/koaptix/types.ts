@@ -71,6 +71,52 @@ export type TierStats = {
   cityLabel?: string;
 };
 
+export type DiscoveryStatus =
+  | "OBSERVATION_READY"
+  | "SOURCE_IDENTITY_AMBIGUOUS"
+  | "SOURCE_PRESENT_REGION_MISSING"
+  | "SOURCE_ABSENT";
+
+export type DiscoveryWarning =
+  | "SOURCE_IDENTITY_AMBIGUOUS"
+  | "AREA_HOUSEHOLD_GAP"
+  | "TRADE_CLEAN_GAP"
+  | "MARKET_CAP_SOURCE_GAP";
+
+export type DiscoveryCandidate = {
+  discoveryId: string;
+  complexId: string;
+  displayName: string;
+  regionLabel: string;
+  sigunguName?: string | null;
+  umdName?: string | null;
+  discoveryStatus: DiscoveryStatus;
+  evidenceFlags: {
+    hasComplex: boolean;
+    hasAlias: boolean;
+    hasExternalId: boolean;
+    hasRegionMap: boolean;
+    hasAreaHousehold: boolean;
+    hasTradeClean: boolean;
+    hasMarketCap: boolean;
+    hasEligibility: boolean;
+    hasRank: boolean;
+    hasDetail: boolean;
+  };
+  warnings: DiscoveryWarning[];
+  copy: {
+    badge: string;
+    message: string;
+    helperText: string;
+  };
+  disabledActions: {
+    openRankedDetail: true;
+    showMarketCap: true;
+    showRank: true;
+    showChart: true;
+  };
+};
+
 export type HistoryChartSeries = {
   key: string;
   name: string;

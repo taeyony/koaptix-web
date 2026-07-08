@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 import {
   DEFAULT_UNIVERSE_CODE,
@@ -7,7 +8,11 @@ import {
   type UniverseRequestResolution,
 } from "../../../lib/koaptix/universes";
 import { getLatestRankBoard } from "../../../lib/koaptix/queries";
-import type { RankingItem } from "../../../lib/koaptix/types";
+import type {
+  DiscoveryCandidate,
+  DiscoveryWarning,
+  RankingItem,
+} from "../../../lib/koaptix/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -20,6 +25,7 @@ const SEARCH_RANK_VISIBLE_FALLBACK_RESULT_LIMIT = 8;
 const SEARCH_KOREA_ALL_DONG_AUXILIARY_RESULT_LIMIT = 10;
 const SEARCH_REGIONAL_NAME_AUXILIARY_RESULT_LIMIT = 8;
 const SEARCH_REGIONAL_NAME_AUXILIARY_PER_UNIVERSE_LIMIT = 8;
+const SEARCH_DISCOVERY_CANDIDATE_LIMIT = 5;
 const SEARCH_SUCCESS_CACHE_CONTROL =
   "public, max-age=10, s-maxage=30, stale-while-revalidate=300";
 const SEARCH_ERROR_CACHE_CONTROL = "no-store";
@@ -65,6 +71,39 @@ type SearchBoardRow = {
   is_top1000?: boolean | null;
 };
 
+type DiscoveryAptComplexRow = {
+  complex_id?: number | string | null;
+  apt_name_ko?: string | null;
+  region_id?: number | string | null;
+  address_jibun?: string | null;
+};
+
+type DiscoveryRegionMapRow = {
+  complex_id?: number | string | null;
+  lawd_cd?: number | string | null;
+  sgg_cd?: number | string | null;
+  sigungu_name?: string | null;
+  umd_nm?: string | null;
+};
+
+type DiscoveryAliasRow = {
+  complex_id?: number | string | null;
+  alias_name?: string | null;
+};
+
+type DiscoveryExternalIdRow = {
+  complex_id?: number | string | null;
+  source_system?: string | null;
+  external_id?: string | null;
+};
+
+type DiscoveryFixtureSeed = {
+  complexId: string;
+  fallbackName: string;
+  fallbackRegionLabel: string;
+  warnings: DiscoveryWarning[];
+};
+
 const searchSourceCache = new Map<
   string,
   {
@@ -75,11 +114,304 @@ const searchSourceCache = new Map<
 >();
 const searchSourceInflight = new Map<string, Promise<RankingItem[]>>();
 
+const DISCOVERY_ACCEPTANCE_SEEDS: DiscoveryFixtureSeed[] = [
+  {
+    complexId: "168804",
+    fallbackName: "진월한국아델리움",
+    fallbackRegionLabel: "광주 남구 진월동",
+    warnings: ["SOURCE_IDENTITY_AMBIGUOUS"],
+  },
+  {
+    complexId: "168810",
+    fallbackName: "진월한국아델리움",
+    fallbackRegionLabel: "광주 남구 진월동",
+    warnings: ["SOURCE_IDENTITY_AMBIGUOUS", "AREA_HOUSEHOLD_GAP"],
+  },
+  {
+    complexId: "168815",
+    fallbackName: "진월한국아델리움",
+    fallbackRegionLabel: "광주 남구 진월동",
+    warnings: ["SOURCE_IDENTITY_AMBIGUOUS", "AREA_HOUSEHOLD_GAP"],
+  },
+];
+
+const DISCOVERY_ACCEPTANCE_TERMS = [
+  "한국아델리움",
+  "한국 아델리움",
+  "아델리움",
+  "진월한국아델리움",
+  "진월 한국아델리움",
+  "진월동한국아델리움",
+  "진월동 한국아델리움",
+  "한국아델리움1차",
+  "진월동한국아델리움1차",
+  "진월동 한국아델리움1차",
+  "진월2차한국아델리움",
+  "진월2차 한국아델리움",
+  "진월한국아델리움57",
+  "한국아델리움57",
+  "아델리움57",
+];
+
+const DISCOVERY_COMPATIBLE_UNIVERSE_CODES = new Set([
+  DEFAULT_UNIVERSE_CODE,
+  "GWANGJU_ALL",
+]);
+
 function parseLimit(value: string | null, fallback = 12, min = 5, max = 20) {
   if (!value) return fallback;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(parsed, max));
+}
+
+function createDiscoverySupabase() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+function normalizeDiscoveryComplexId(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function keyRowsByComplexId<T extends { complex_id?: number | string | null }>(
+  rows: T[] | null | undefined,
+) {
+  const result = new Map<string, T>();
+  for (const row of rows ?? []) {
+    const complexId = normalizeDiscoveryComplexId(row.complex_id);
+    if (complexId && !result.has(complexId)) {
+      result.set(complexId, row);
+    }
+  }
+  return result;
+}
+
+function complexIdSetFromRows(
+  rows: { complex_id?: number | string | null }[] | null | undefined,
+) {
+  return new Set(
+    (rows ?? [])
+      .map((row) => normalizeDiscoveryComplexId(row.complex_id))
+      .filter(Boolean),
+  );
+}
+
+function getDiscoveryFixtureSeeds(q: string, universeCode: string) {
+  if (!DISCOVERY_COMPATIBLE_UNIVERSE_CODES.has(universeCode)) return [];
+
+  const normalizedQuery = normalizeSearchToken(q);
+  if (normalizedQuery.length < 2) return [];
+
+  const hasAcceptanceIntent = DISCOVERY_ACCEPTANCE_TERMS.some((term) => {
+    const normalizedTerm = normalizeSearchToken(term);
+    return (
+      normalizedQuery.includes(normalizedTerm) ||
+      normalizedTerm.includes(normalizedQuery)
+    );
+  });
+
+  return hasAcceptanceIntent ? DISCOVERY_ACCEPTANCE_SEEDS : [];
+}
+
+async function fetchDiscoveryEvidenceSet(
+  supabase: ReturnType<typeof createDiscoverySupabase>,
+  tableName: string,
+  complexIds: string[],
+) {
+  if (complexIds.length === 0) return new Set<string>();
+
+  const { data, error } = await supabase
+    .from(tableName)
+    .select("complex_id")
+    .in("complex_id", complexIds)
+    .limit(complexIds.length * 4);
+
+  if (error) {
+    console.info("[API /api/search] discovery evidence skipped", {
+      tableName,
+      message: error.message,
+    });
+    return new Set<string>();
+  }
+
+  return complexIdSetFromRows(data);
+}
+
+function buildDiscoveryCopy(warnings: DiscoveryWarning[]) {
+  const hasSourceWarning = warnings.includes("SOURCE_IDENTITY_AMBIGUOUS");
+
+  return {
+    badge: "관측 준비중",
+    message:
+      "단지 이름과 지역 정보는 확인됐지만, 아직 KOAPTIX 랭킹 산정에 필요한 실거래·세대수 연결이 끝나지 않았어요.",
+    helperText: hasSourceWarning
+      ? "랭킹 보드에 올리기 전 원천 연결과 공개 검증 상태를 더 확인하고 있습니다. 일부 원천 연결은 추가 확인이 필요합니다."
+      : "랭킹 보드에 올리기 전 원천 연결과 공개 검증 상태를 더 확인하고 있습니다.",
+  };
+}
+
+async function loadDiscoveryCandidates(
+  q: string,
+  universeCode: string,
+  alreadyRankedIds: Set<string>,
+): Promise<DiscoveryCandidate[]> {
+  const seeds = getDiscoveryFixtureSeeds(q, universeCode);
+  if (seeds.length === 0) return [];
+
+  try {
+    const supabase = createDiscoverySupabase();
+    const candidateIds = seeds.map((seed) => seed.complexId);
+
+    const [
+      complexResult,
+      regionMapResult,
+      aliasResult,
+      externalIdResult,
+      areaHouseholdIds,
+      tradeCleanIds,
+      marketCapIds,
+      eligibilityIds,
+      detailIds,
+    ] = await Promise.all([
+      supabase
+        .from("apt_complex")
+        .select("complex_id, apt_name_ko, region_id, address_jibun")
+        .in("complex_id", candidateIds),
+      supabase
+        .from("koaptix_complex_region_map")
+        .select("complex_id, lawd_cd, sgg_cd, sigungu_name, umd_nm")
+        .in("complex_id", candidateIds),
+      supabase
+        .from("complex_name_alias")
+        .select("complex_id, alias_name")
+        .in("complex_id", candidateIds),
+      supabase
+        .from("complex_external_id")
+        .select("complex_id, source_system, external_id")
+        .in("complex_id", candidateIds),
+      fetchDiscoveryEvidenceSet(
+        supabase,
+        "apt_complex_area_cluster_household",
+        candidateIds,
+      ),
+      fetchDiscoveryEvidenceSet(supabase, "apt_trade_clean", candidateIds),
+      fetchDiscoveryEvidenceSet(supabase, "apt_market_cap_snapshot", candidateIds),
+      fetchDiscoveryEvidenceSet(
+        supabase,
+        "complex_eligibility_snapshot",
+        candidateIds,
+      ),
+      fetchDiscoveryEvidenceSet(
+        supabase,
+        "v_koaptix_complex_detail_sheet",
+        candidateIds,
+      ),
+    ]);
+
+    if (complexResult.error) throw complexResult.error;
+    if (regionMapResult.error) throw regionMapResult.error;
+
+    const complexById = keyRowsByComplexId(
+      (complexResult.data ?? []) as DiscoveryAptComplexRow[],
+    );
+    const regionMapById = keyRowsByComplexId(
+      (regionMapResult.data ?? []) as DiscoveryRegionMapRow[],
+    );
+    const aliasIds = complexIdSetFromRows(
+      (aliasResult.data ?? []) as DiscoveryAliasRow[],
+    );
+    const externalIdIds = complexIdSetFromRows(
+      ((externalIdResult.data ?? []) as DiscoveryExternalIdRow[]).filter((row) =>
+        String(row.source_system ?? "").toLowerCase().includes("kapt"),
+      ),
+    );
+
+    if (aliasResult.error) {
+      console.info("[API /api/search] discovery alias evidence skipped", {
+        message: aliasResult.error.message,
+      });
+    }
+
+    if (externalIdResult.error) {
+      console.info("[API /api/search] discovery external-id evidence skipped", {
+        message: externalIdResult.error.message,
+      });
+    }
+
+    return seeds
+      .map((seed): DiscoveryCandidate | null => {
+        const complexId = seed.complexId;
+        if (alreadyRankedIds.has(complexId)) return null;
+
+        const complex = complexById.get(complexId) ?? null;
+        const regionMap = regionMapById.get(complexId) ?? null;
+        if (!complex || !regionMap) return null;
+
+        const hasRank = alreadyRankedIds.has(complexId);
+        const hasDetail = detailIds.has(complexId);
+        if (hasRank || hasDetail) return null;
+
+        const sigunguName = regionMap.sigungu_name ?? null;
+        const umdName = regionMap.umd_nm ?? null;
+        const regionLabel =
+          [sigunguName, umdName].filter(Boolean).join(" ") ||
+          seed.fallbackRegionLabel;
+        const warnings = Array.from(new Set(seed.warnings));
+
+        return {
+          discoveryId: `observation-ready:${complexId}`,
+          complexId,
+          displayName: complex.apt_name_ko ?? seed.fallbackName,
+          regionLabel,
+          sigunguName,
+          umdName,
+          discoveryStatus: "OBSERVATION_READY",
+          evidenceFlags: {
+            hasComplex: true,
+            hasAlias: aliasIds.has(complexId),
+            hasExternalId: externalIdIds.has(complexId),
+            hasRegionMap: true,
+            hasAreaHousehold: areaHouseholdIds.has(complexId),
+            hasTradeClean: tradeCleanIds.has(complexId),
+            hasMarketCap: marketCapIds.has(complexId),
+            hasEligibility: eligibilityIds.has(complexId),
+            hasRank,
+            hasDetail,
+          },
+          warnings,
+          copy: buildDiscoveryCopy(warnings),
+          disabledActions: {
+            openRankedDetail: true,
+            showMarketCap: true,
+            showRank: true,
+            showChart: true,
+          },
+        };
+      })
+      .filter((candidate): candidate is DiscoveryCandidate => candidate !== null)
+      .slice(0, SEARCH_DISCOVERY_CANDIDATE_LIMIT);
+  } catch (error) {
+    console.info("[API /api/search] discovery candidates skipped", {
+      universeCode,
+      queryLength: q.length,
+      message: getErrorMessage(error),
+    });
+
+    return [];
+  }
 }
 
 function getSearchSourceLimit() {
@@ -1063,6 +1395,7 @@ function buildUnavailableSearchPayload(
     resultOrder: ["localItems", "globalItems"],
     localItems: [],
     globalItems: [],
+    discoveryCandidates: [],
     message: resolution.reason ?? "universe_unavailable",
   };
 }
@@ -1389,6 +1722,7 @@ export async function GET(request: NextRequest) {
         resultOrder: ["localItems", "globalItems"],
         localItems: [],
         globalItems: [],
+        discoveryCandidates: [],
       },
       {
         headers: { "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL },
@@ -1441,6 +1775,15 @@ export async function GET(request: NextRequest) {
       localItems,
       limit,
     );
+    const discoveryCandidates = await loadDiscoveryCandidates(
+      q,
+      requestedUniverseCode,
+      new Set(
+        [...localItems, ...globalItems]
+          .map((item) => String(item.complexId ?? "").trim())
+          .filter(Boolean),
+      ),
+    );
 
     return NextResponse.json(
       {
@@ -1456,6 +1799,7 @@ export async function GET(request: NextRequest) {
         resultOrder: ["localItems", "globalItems"],
         localItems,
         globalItems,
+        discoveryCandidates,
       },
       {
         headers: { "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL },
@@ -1487,6 +1831,7 @@ export async function GET(request: NextRequest) {
         resultOrder: ["localItems", "globalItems"],
         localItems: [],
         globalItems: [],
+        discoveryCandidates: [],
         degraded: true,
         message,
       },
