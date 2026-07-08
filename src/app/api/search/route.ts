@@ -18,6 +18,8 @@ const SEARCH_REGIONAL_RETRY_LIMIT = 40;
 const SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT = 1_000;
 const SEARCH_RANK_VISIBLE_FALLBACK_RESULT_LIMIT = 8;
 const SEARCH_KOREA_ALL_DONG_AUXILIARY_RESULT_LIMIT = 10;
+const SEARCH_REGIONAL_NAME_AUXILIARY_RESULT_LIMIT = 8;
+const SEARCH_REGIONAL_NAME_AUXILIARY_PER_UNIVERSE_LIMIT = 8;
 const SEARCH_SUCCESS_CACHE_CONTROL =
   "public, max-age=10, s-maxage=30, stale-while-revalidate=300";
 const SEARCH_ERROR_CACHE_CONTROL = "no-store";
@@ -91,6 +93,19 @@ type RegionAuxiliaryCandidate = {
   aliases: string[];
   broadAliases?: string[];
   fallbackSearchTerms?: string[];
+};
+
+type RegionalNameCompanionIntent = {
+  normalizedNameTerms: string[];
+  normalizedLocationTerms: string[];
+  candidateUniverseCodes: string[];
+};
+
+type ScoredRegionalNameCompanionItem = {
+  item: RankingItem;
+  score: number;
+  universeIndex: number;
+  sourceIndex: number;
 };
 
 const REGION_AUXILIARY_CANDIDATES: RegionAuxiliaryCandidate[] = [
@@ -681,6 +696,196 @@ function getRegionAuxiliaryCandidateMatches(q: string) {
   );
 }
 
+function getUniqueNormalizedTerms(values: string[]) {
+  return Array.from(
+    new Set(values.map(normalizeSearchToken).filter((value) => value.length >= 2)),
+  );
+}
+
+function getQueryTokens(q: string) {
+  return q.trim().split(/\s+/).filter(Boolean);
+}
+
+function getMacroUniverseCodesForRegionToken(token: string) {
+  const normalizedToken = normalizeSearchToken(token);
+  if (normalizedToken.length < 2) return [];
+
+  return Array.from(
+    new Set(
+      REGION_AUXILIARY_CANDIDATES.filter((candidate) =>
+        [...candidate.aliases, ...(candidate.broadAliases ?? [])].some(
+          (alias) => normalizeSearchToken(alias) === normalizedToken,
+        ),
+      ).map((candidate) => candidate.universeCode),
+    ),
+  ).filter((universeCode) => universeCode !== DEFAULT_UNIVERSE_CODE);
+}
+
+function isMacroRegionToken(token: string) {
+  return getMacroUniverseCodesForRegionToken(token).length > 0;
+}
+
+function isExplicitRegionalNameLocationToken(token: string) {
+  return isKoreanLocationToken(token) || isMacroRegionToken(token);
+}
+
+function buildRegionalNameCompanionIntent(
+  q: string,
+): RegionalNameCompanionIntent | null {
+  const trimmed = q.trim();
+  const normalizedQuery = normalizeSearchToken(trimmed);
+  if (normalizedQuery.length < 2 || !hasHangul(trimmed)) return null;
+
+  const tokens = getQueryTokens(trimmed);
+  const locationTokens = tokens.filter(isExplicitRegionalNameLocationToken);
+  const nameTokens = tokens.filter(
+    (token) => !isExplicitRegionalNameLocationToken(token),
+  );
+
+  if (locationTokens.length > 0 && nameTokens.length === 0) return null;
+
+  const rawNameTerms = [
+    ...(locationTokens.length === 0 ? [trimmed] : []),
+    ...(nameTokens.length > 0 ? [nameTokens.join(" ")] : []),
+    ...(nameTokens.length === 1 ? nameTokens : []),
+  ];
+  const normalizedNameTerms = getUniqueNormalizedTerms(rawNameTerms);
+
+  if (normalizedNameTerms.length === 0) return null;
+
+  const macroCandidateCodes = Array.from(
+    new Set(locationTokens.flatMap(getMacroUniverseCodesForRegionToken)),
+  );
+
+  return {
+    normalizedNameTerms,
+    normalizedLocationTerms: getUniqueNormalizedTerms(locationTokens),
+    candidateUniverseCodes:
+      macroCandidateCodes.length > 0
+        ? macroCandidateCodes
+        : SUPPORTED_MACRO_AUXILIARY_UNIVERSE_CODES,
+  };
+}
+
+function isMacroLocationTermSatisfiedByUniverse(
+  normalizedLocationTerm: string,
+  universeCode: string,
+) {
+  return REGION_AUXILIARY_CANDIDATES.some(
+    (candidate) =>
+      candidate.universeCode === universeCode &&
+      [...candidate.aliases, ...(candidate.broadAliases ?? [])].some(
+        (alias) => normalizeSearchToken(alias) === normalizedLocationTerm,
+      ),
+  );
+}
+
+function scoreRegionalNameCompanionLocationTerm(
+  item: RankingItem,
+  normalizedLocationTerm: string,
+  universeCode: string,
+) {
+  if (
+    isMacroLocationTermSatisfiedByUniverse(normalizedLocationTerm, universeCode)
+  ) {
+    return 900;
+  }
+
+  const fields = getSearchTextFields(item);
+  const regionScore = scoreFieldMatch(
+    fields.region,
+    normalizedLocationTerm,
+    { exact: 820, startsWith: 760, includes: 0 },
+    false,
+  );
+  const districtScore = scoreFieldMatch(
+    fields.district,
+    normalizedLocationTerm,
+    { exact: 860, startsWith: 800, includes: 0 },
+    false,
+  );
+  const locationScore = scoreFieldMatch(
+    fields.location,
+    normalizedLocationTerm,
+    { exact: 780, startsWith: 740, includes: 620 },
+    normalizedLocationTerm.length >= 3,
+  );
+  const score = Math.max(
+    regionScore ?? -1,
+    districtScore ?? -1,
+    locationScore ?? -1,
+  );
+
+  return score >= 0 ? score : null;
+}
+
+function scoreRegionalNameCompanionLocationMatch(
+  item: RankingItem,
+  normalizedLocationTerms: string[],
+  universeCode: string,
+) {
+  if (normalizedLocationTerms.length === 0) return 0;
+
+  let totalScore = 0;
+
+  for (const normalizedLocationTerm of normalizedLocationTerms) {
+    const termScore = scoreRegionalNameCompanionLocationTerm(
+      item,
+      normalizedLocationTerm,
+      universeCode,
+    );
+
+    if (termScore === null) return null;
+    totalScore += termScore;
+  }
+
+  return totalScore;
+}
+
+function scoreRegionalNameCompanionNameMatch(
+  item: RankingItem,
+  normalizedNameTerms: string[],
+) {
+  const fields = getSearchTextFields(item);
+  let bestScore: number | null = null;
+
+  normalizedNameTerms.forEach((normalizedNameTerm, index) => {
+    const score = scoreFieldMatch(
+      fields.name,
+      normalizedNameTerm,
+      { exact: 1120, startsWith: 1040, includes: 920 },
+      true,
+    );
+
+    if (score !== null) {
+      bestScore = Math.max(bestScore ?? 0, score - index * 20);
+    }
+  });
+
+  return bestScore;
+}
+
+function scoreRegionalNameCompanionItem(
+  item: RankingItem,
+  intent: RegionalNameCompanionIntent,
+  universeCode: string,
+) {
+  const nameScore = scoreRegionalNameCompanionNameMatch(
+    item,
+    intent.normalizedNameTerms,
+  );
+  if (nameScore === null) return null;
+
+  const locationScore = scoreRegionalNameCompanionLocationMatch(
+    item,
+    intent.normalizedLocationTerms,
+    universeCode,
+  );
+  if (locationScore === null) return null;
+
+  return nameScore + locationScore;
+}
+
 function getRegionAuxiliaryFallbackSearchTerms(q: string, universeCode: string) {
   return Array.from(
     new Set(
@@ -698,9 +903,18 @@ function getKoreaAllDongAuxiliarySearchTerms(q: string) {
 
   const tokens = trimmed.split(/\s+/).filter(Boolean);
   const lastToken = tokens[tokens.length - 1] ?? trimmed;
+  const explicitLocationTokens = tokens.filter(isKoreanLocationToken);
+  const hasNonLocationNameToken = tokens.some(
+    (token) => !isKoreanLocationToken(token) && !isMacroRegionToken(token),
+  );
+
+  if (explicitLocationTokens.length > 0 && hasNonLocationNameToken) {
+    return [];
+  }
+
   const looksLocationLike =
     isKoreanLocationToken(lastToken) ||
-    tokens.some(isKoreanLocationToken) ||
+    explicitLocationTokens.length > 0 ||
     normalizedQuery.length <= 3;
 
   if (!looksLocationLike) return [];
@@ -909,6 +1123,95 @@ async function fetchRankVisibleRegionalAuxiliaryItems(
   ).slice(0, SEARCH_KOREA_ALL_DONG_AUXILIARY_RESULT_LIMIT);
 }
 
+async function fetchRankVisibleRegionalNameCompanionItems(
+  universeCode: string,
+  intent: RegionalNameCompanionIntent,
+  universeIndex: number,
+): Promise<ScoredRegionalNameCompanionItem[]> {
+  const rows: SearchBoardRow[] = await getLatestRankBoard(
+    universeCode,
+    SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT,
+  );
+
+  // KOREA_ALL companion search stays bounded to rank-visible regional boards.
+  return rows
+    .filter(isRankingVisibleTop1000)
+    .map((row, sourceIndex) => ({
+      item: toRankingItem(row, universeCode),
+      sourceIndex,
+    }))
+    .map(({ item, sourceIndex }) => ({
+      item,
+      sourceIndex,
+      universeIndex,
+      score: scoreRegionalNameCompanionItem(item, intent, universeCode),
+    }))
+    .filter(
+      (
+        entry,
+      ): entry is ScoredRegionalNameCompanionItem =>
+        entry.score !== null,
+    )
+    .sort((a, b) => b.score - a.score || a.sourceIndex - b.sourceIndex)
+    .slice(0, SEARCH_REGIONAL_NAME_AUXILIARY_PER_UNIVERSE_LIMIT);
+}
+
+async function loadRegionalNameCompanionItems(
+  q: string,
+  alreadyShownItems: RankingItem[],
+  limit: number,
+) {
+  const intent = buildRegionalNameCompanionIntent(q);
+  const auxiliaryLimit = Math.max(
+    0,
+    Math.min(SEARCH_REGIONAL_NAME_AUXILIARY_RESULT_LIMIT, limit),
+  );
+  if (!intent || auxiliaryLimit <= 0) return [];
+
+  const candidateResults = await Promise.all(
+    intent.candidateUniverseCodes.map(async (candidateCode, universeIndex) => {
+      const resolution = resolveUniverseRequest(candidateCode, {
+        capability: "search",
+      });
+
+      if (resolution.universeUnavailable) {
+        return [] as ScoredRegionalNameCompanionItem[];
+      }
+
+      try {
+        return await fetchRankVisibleRegionalNameCompanionItems(
+          resolution.renderedUniverseCode,
+          intent,
+          universeIndex,
+        );
+      } catch (error) {
+        console.info("[API /api/search] regional name companion skipped", {
+          candidateCode,
+          queryLength: q.length,
+          message: getErrorMessage(error),
+        });
+
+        return [] as ScoredRegionalNameCompanionItem[];
+      }
+    }),
+  );
+
+  const orderedItems = candidateResults
+    .flat()
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.universeIndex - b.universeIndex ||
+        a.sourceIndex - b.sourceIndex,
+    )
+    .map((entry) => entry.item);
+
+  return excludeAlreadyShownItems(
+    mergeUniqueByComplexId(orderedItems),
+    alreadyShownItems,
+  ).slice(0, auxiliaryLimit);
+}
+
 async function loadSourceItems(
   universeCode: string,
 ): Promise<SearchSourceResult> {
@@ -1008,7 +1311,21 @@ async function loadGlobalAuxiliaryItems(
   limit: number,
 ) {
   if (requestedUniverseCode === DEFAULT_UNIVERSE_CODE) {
-    return loadRegionAuxiliaryItems(q, localItems, limit);
+    const regionalAuxiliaryItems = await loadRegionAuxiliaryItems(
+      q,
+      localItems,
+      limit,
+    );
+    const regionalNameCompanionItems = await loadRegionalNameCompanionItems(
+      q,
+      [...localItems, ...regionalAuxiliaryItems],
+      limit,
+    );
+
+    return mergeUniqueByComplexId([
+      ...regionalAuxiliaryItems,
+      ...regionalNameCompanionItems,
+    ]).slice(0, limit);
   }
 
   const globalLimit = Math.max(0, Math.min(4, limit));
