@@ -8,6 +8,7 @@ import {
   type UniverseRequestResolution,
 } from "../../../lib/koaptix/universes";
 import { getLatestRankBoard } from "../../../lib/koaptix/queries";
+import { getKoaptixCurrentnessHeaders } from "../../../lib/koaptix/currentness";
 import type {
   DiscoveryCandidate,
   DiscoveryWarning,
@@ -2525,7 +2526,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       buildUnavailableSearchPayload(universeResolution, limit),
       {
-        headers: { "Cache-Control": SEARCH_ERROR_CACHE_CONTROL },
+        headers: {
+          "Cache-Control": SEARCH_ERROR_CACHE_CONTROL,
+          ...getKoaptixCurrentnessHeaders(),
+        },
       },
     );
   }
@@ -2550,7 +2554,10 @@ export async function GET(request: NextRequest) {
         discoveryCandidates: [],
       },
       {
-        headers: { "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL },
+        headers: {
+          "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL,
+          ...getKoaptixCurrentnessHeaders(),
+        },
       },
     );
   }
@@ -2629,7 +2636,10 @@ export async function GET(request: NextRequest) {
         discoveryCandidates,
       },
       {
-        headers: { "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL },
+        headers: {
+          "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL,
+          ...getKoaptixCurrentnessHeaders(),
+        },
       },
     );
   } catch (error) {
@@ -2663,7 +2673,10 @@ export async function GET(request: NextRequest) {
         message,
       },
       {
-        headers: { "Cache-Control": SEARCH_ERROR_CACHE_CONTROL },
+        headers: {
+          "Cache-Control": SEARCH_ERROR_CACHE_CONTROL,
+          ...getKoaptixCurrentnessHeaders(),
+        },
       },
     );
   }
