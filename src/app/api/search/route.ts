@@ -119,6 +119,28 @@ type DiscoveryMatchAssessment = {
   warnings: DiscoveryWarning[];
 };
 
+type DiscoveryMode =
+  | "DISABLED_FOR_BROAD_NATIONAL"
+  | "SCOPED_ONLY"
+  | "CONTEXT_RICH_ALLOWED"
+  | "POSITIVE_CONTROL_ALLOWED";
+
+type SearchQueryClassification = {
+  normalizedQuery: string;
+  compactQuery: string;
+  tokens: string[];
+  hasRegionToken: boolean;
+  hasDongToken: boolean;
+  hasSigunguToken: boolean;
+  hasApartmentSuffix: boolean;
+  hasSelectedScopedUniverse: boolean;
+  isKoreaAllUnscoped: boolean;
+  isBroadGenericTerm: boolean;
+  isPositiveControlIntent: boolean;
+  isContextRichIntent: boolean;
+  discoveryMode: DiscoveryMode;
+};
+
 const searchSourceCache = new Map<
   string,
   {
@@ -171,6 +193,53 @@ const DISCOVERY_ACCEPTANCE_TERMS = [
 const DISCOVERY_COMPATIBLE_UNIVERSE_CODES = new Set([
   DEFAULT_UNIVERSE_CODE,
   "GWANGJU_ALL",
+]);
+
+const DISCOVERY_MACRO_SGG_PREFIX: Record<string, string> = {
+  SEOUL_ALL: "11",
+  BUSAN_ALL: "26",
+  DAEGU_ALL: "27",
+  INCHEON_ALL: "28",
+  GWANGJU_ALL: "29",
+  DAEJEON_ALL: "30",
+  ULSAN_ALL: "31",
+  SEJONG_ALL: "36",
+  GYEONGGI_ALL: "41",
+  GANGWON_ALL: "42",
+  CHUNGBUK_ALL: "43",
+  CHUNGNAM_ALL: "44",
+  JEONBUK_ALL: "52",
+  JEONNAM_ALL: "46",
+  GYEONGBUK_ALL: "47",
+  GYEONGNAM_ALL: "48",
+  JEJU_ALL: "50",
+};
+
+const DISCOVERY_REGION_CONTEXT_TERMS = [
+  "광주",
+  "광주광역시",
+  "광주특별시",
+  "전남광주",
+  "전남광주통합특별시",
+  "전남",
+  "전라남도",
+  "남구",
+  "진월동",
+  "진월",
+];
+
+const DISCOVERY_BROAD_GENERIC_BASE_TERMS = new Set([
+  "새한",
+  "현대",
+  "우성",
+  "주공",
+  "자이",
+  "푸르지오",
+  "래미안",
+  "아이파크",
+  "더샵",
+  "롯데캐슬",
+  "힐스테이트",
 ]);
 
 function parseLimit(value: string | null, fallback = 12, min = 5, max = 20) {
@@ -336,6 +405,177 @@ function getDiscoveryLocationTerms(q: string) {
     .slice(0, SEARCH_DISCOVERY_QUERY_TERM_LIMIT);
 }
 
+function normalizeBroadGenericBaseTerm(value: string) {
+  return normalizeSearchToken(value)
+    .replace(/아파트$/i, "")
+    .replace(/apt$/i, "")
+    .replace(/단지$/i, "");
+}
+
+function hasPositiveControlDiscoveryIntent(normalizedQuery: string) {
+  return DISCOVERY_ACCEPTANCE_TERMS.some((term) => {
+    const normalizedTerm = normalizeSearchToken(term);
+    return (
+      normalizedQuery.includes(normalizedTerm) ||
+      normalizedTerm.includes(normalizedQuery)
+    );
+  });
+}
+
+function getNormalizedSearchTokens(q: string) {
+  return String(q ?? "")
+    .trim()
+    .split(/\s+/)
+    .map(normalizeSearchToken)
+    .filter(Boolean);
+}
+
+function includesNormalizedTerm(normalizedQuery: string, terms: string[]) {
+  return terms
+    .map(normalizeSearchToken)
+    .some((term) => term.length >= 2 && normalizedQuery.includes(term));
+}
+
+function classifySearchQuery(
+  q: string,
+  universeCode: string,
+): SearchQueryClassification {
+  const normalizedQuery = normalizeSearchToken(q);
+  const compactQuery = normalizedQuery;
+  const tokens = getNormalizedSearchTokens(q);
+  const nameTerms = getDiscoveryNameTerms(q);
+  const hasKnownRegionToken = includesNormalizedTerm(
+    normalizedQuery,
+    DISCOVERY_REGION_CONTEXT_TERMS,
+  );
+  const hasLocationTerm = getDiscoveryLocationTerms(q).length > 0;
+  const hasDongToken =
+    /[\uAC00-\uD7A3]+동/.test(normalizedQuery) ||
+    tokens.some((token) => token.endsWith("동"));
+  const hasSigunguToken =
+    /[\uAC00-\uD7A3]+[시군구]/.test(normalizedQuery) ||
+    tokens.some((token) => /[시군구]$/.test(token));
+  const hasRegionToken = hasKnownRegionToken || hasLocationTerm;
+  const hasApartmentSuffix =
+    /(아파트|apt|단지)$/i.test(String(q ?? "").trim()) ||
+    /(아파트|apt|단지)/i.test(normalizedQuery);
+  const hasSelectedScopedUniverse = universeCode !== DEFAULT_UNIVERSE_CODE;
+  const isPositiveControlIntent = hasPositiveControlDiscoveryIntent(normalizedQuery);
+  const hasSpecificNameTerm = nameTerms.some(
+    (term) => normalizeBroadGenericBaseTerm(term).length >= 2,
+  );
+  const isContextRichIntent =
+    hasRegionToken && (hasSpecificNameTerm || hasApartmentSuffix);
+  const isKoreaAllUnscoped =
+    universeCode === DEFAULT_UNIVERSE_CODE &&
+    !hasRegionToken &&
+    !isPositiveControlIntent;
+  const genericBaseTerm = normalizeBroadGenericBaseTerm(normalizedQuery);
+  const isBroadGenericTerm =
+    !hasRegionToken &&
+    !hasSelectedScopedUniverse &&
+    !isPositiveControlIntent &&
+    (genericBaseTerm.length <= 4 ||
+      DISCOVERY_BROAD_GENERIC_BASE_TERMS.has(genericBaseTerm));
+
+  let discoveryMode: DiscoveryMode = "DISABLED_FOR_BROAD_NATIONAL";
+  if (isPositiveControlIntent) {
+    discoveryMode = "POSITIVE_CONTROL_ALLOWED";
+  } else if (isContextRichIntent) {
+    discoveryMode = "CONTEXT_RICH_ALLOWED";
+  } else if (hasSelectedScopedUniverse) {
+    discoveryMode = "SCOPED_ONLY";
+  } else if (!isKoreaAllUnscoped && !isBroadGenericTerm) {
+    discoveryMode = "CONTEXT_RICH_ALLOWED";
+  }
+
+  return {
+    normalizedQuery,
+    compactQuery,
+    tokens,
+    hasRegionToken,
+    hasDongToken,
+    hasSigunguToken,
+    hasApartmentSuffix,
+    hasSelectedScopedUniverse,
+    isKoreaAllUnscoped,
+    isBroadGenericTerm,
+    isPositiveControlIntent,
+    isContextRichIntent,
+    discoveryMode,
+  };
+}
+
+function shouldLoadGenericDiscoverySeeds(classification: SearchQueryClassification) {
+  if (classification.discoveryMode === "DISABLED_FOR_BROAD_NATIONAL") {
+    return false;
+  }
+
+  if (
+    classification.discoveryMode === "POSITIVE_CONTROL_ALLOWED" &&
+    !classification.isContextRichIntent &&
+    !classification.hasSelectedScopedUniverse
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function getDiscoveryNameSourceLimit(classification: SearchQueryClassification) {
+  if (classification.discoveryMode === "DISABLED_FOR_BROAD_NATIONAL") return 0;
+  if (classification.isContextRichIntent) return SEARCH_DISCOVERY_NAME_SOURCE_LIMIT;
+  if (classification.discoveryMode === "SCOPED_ONLY") return 32;
+  return 48;
+}
+
+function getDiscoveryRegionSourceLimit(classification: SearchQueryClassification) {
+  if (classification.discoveryMode === "DISABLED_FOR_BROAD_NATIONAL") return 0;
+  if (!classification.hasRegionToken) return 0;
+  if (classification.isContextRichIntent) return SEARCH_DISCOVERY_REGION_SOURCE_LIMIT;
+  return 32;
+}
+
+function getDiscoveryHydrationLimit(classification: SearchQueryClassification) {
+  if (classification.discoveryMode === "DISABLED_FOR_BROAD_NATIONAL") return 0;
+  if (classification.isContextRichIntent) {
+    return Math.min(48, SEARCH_DISCOVERY_HYDRATION_LIMIT);
+  }
+  if (classification.discoveryMode === "SCOPED_ONLY") {
+    return Math.min(32, SEARCH_DISCOVERY_HYDRATION_LIMIT);
+  }
+  return Math.min(SEARCH_DISCOVERY_CANDIDATE_LIMIT, SEARCH_DISCOVERY_HYDRATION_LIMIT);
+}
+
+function sggPrefixForDiscoveryUniverse(universeCode: string) {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) return null;
+  if (/^SGG_\d{5}$/.test(universeCode)) return universeCode.slice(4);
+  return DISCOVERY_MACRO_SGG_PREFIX[universeCode] ?? null;
+}
+
+function regionMapMatchesDiscoveryScope(
+  regionMap: DiscoveryRegionMapRow | null,
+  universeCode: string,
+) {
+  if (!regionMap || universeCode === DEFAULT_UNIVERSE_CODE) return true;
+
+  const scopeCode = sggPrefixForDiscoveryUniverse(universeCode);
+  if (!scopeCode) return true;
+
+  const sggCode = normalizeSearchToken(regionMap.sgg_cd);
+  const lawdCode = normalizeSearchToken(regionMap.lawd_cd);
+
+  if (/^SGG_\d{5}$/.test(universeCode)) {
+    return sggCode === scopeCode || lawdCode.startsWith(scopeCode);
+  }
+
+  return sggCode.startsWith(scopeCode) || lawdCode.startsWith(scopeCode);
+}
+
+function intersectDiscoveryIds(left: Set<string>, right: Set<string>) {
+  return Array.from(left).filter((id) => right.has(id));
+}
+
 function hasStrongDiscoveryContext(q: string, regionMap: DiscoveryRegionMapRow | null) {
   if (!regionMap) return false;
 
@@ -450,25 +690,34 @@ function assessDiscoveryCandidate(
 async function fetchDiscoveryCandidateIds(
   supabase: ReturnType<typeof createDiscoverySupabase>,
   q: string,
+  classification: SearchQueryClassification,
 ) {
+  if (classification.discoveryMode === "DISABLED_FOR_BROAD_NATIONAL") {
+    return [];
+  }
+
   const candidateIds = new Set<string>();
+  const nameCandidateIds = new Set<string>();
+  const locationCandidateIds = new Set<string>();
   const nameTerms = getDiscoveryNameTerms(q);
   const locationTerms = getDiscoveryLocationTerms(q);
+  const nameSourceLimit = getDiscoveryNameSourceLimit(classification);
+  const regionSourceLimit = getDiscoveryRegionSourceLimit(classification);
 
-  for (const term of nameTerms) {
+  for (const term of nameSourceLimit > 0 ? nameTerms : []) {
     const [complexResult, aliasResult] = await Promise.all([
       supabase
         .from("apt_complex")
         .select("complex_id")
         .ilike("apt_name_ko", `%${term}%`)
         .order("complex_id", { ascending: true })
-        .limit(SEARCH_DISCOVERY_NAME_SOURCE_LIMIT),
+        .limit(nameSourceLimit),
       supabase
         .from("complex_name_alias")
         .select("complex_id")
         .ilike("alias_name", `%${term}%`)
         .order("complex_id", { ascending: true })
-        .limit(SEARCH_DISCOVERY_NAME_SOURCE_LIMIT),
+        .limit(nameSourceLimit),
     ]);
 
     if (complexResult.error) {
@@ -486,20 +735,22 @@ async function fetchDiscoveryCandidateIds(
     }
 
     for (const id of complexIdSetFromRows(complexResult.data)) {
+      nameCandidateIds.add(id);
       candidateIds.add(id);
     }
     for (const id of complexIdSetFromRows(aliasResult.data)) {
+      nameCandidateIds.add(id);
       candidateIds.add(id);
     }
   }
 
-  for (const term of locationTerms) {
+  for (const term of regionSourceLimit > 0 ? locationTerms : []) {
     const regionResult = await supabase
       .from("koaptix_complex_region_map")
       .select("complex_id")
       .or(`umd_nm.ilike.%${term}%,sigungu_name.ilike.%${term}%`)
       .order("complex_id", { ascending: true })
-      .limit(SEARCH_DISCOVERY_REGION_SOURCE_LIMIT);
+      .limit(regionSourceLimit);
 
     if (regionResult.error) {
       console.info("[API /api/search] discovery region probe skipped", {
@@ -510,11 +761,26 @@ async function fetchDiscoveryCandidateIds(
     }
 
     for (const id of complexIdSetFromRows(regionResult.data)) {
+      locationCandidateIds.add(id);
       candidateIds.add(id);
     }
   }
 
-  return Array.from(candidateIds).slice(0, SEARCH_DISCOVERY_HYDRATION_LIMIT);
+  if (
+    classification.isContextRichIntent &&
+    nameCandidateIds.size > 0 &&
+    locationCandidateIds.size > 0
+  ) {
+    const intersectedIds = intersectDiscoveryIds(
+      nameCandidateIds,
+      locationCandidateIds,
+    );
+    if (intersectedIds.length > 0) {
+      return intersectedIds.slice(0, getDiscoveryHydrationLimit(classification));
+    }
+  }
+
+  return Array.from(candidateIds).slice(0, getDiscoveryHydrationLimit(classification));
 }
 
 function mergeDiscoverySeeds(seeds: DiscoverySeed[]) {
@@ -612,13 +878,19 @@ async function loadGenericDiscoverySeeds(
   q: string,
   universeCode: string,
   alreadyRankedIds: Set<string>,
+  classification: SearchQueryClassification,
 ): Promise<DiscoverySeed[]> {
   if (!universeCode) return [];
+  if (!shouldLoadGenericDiscoverySeeds(classification)) return [];
 
   const normalizedQuery = normalizeSearchToken(q);
   if (normalizedQuery.length < 2) return [];
 
-  const candidateIds = await fetchDiscoveryCandidateIds(supabase, q);
+  const candidateIds = await fetchDiscoveryCandidateIds(
+    supabase,
+    q,
+    classification,
+  );
   if (candidateIds.length === 0) return [];
 
   const [
@@ -721,6 +993,8 @@ async function loadGenericDiscoverySeeds(
 
       const complex = complexById.get(complexId) ?? null;
       const regionMap = regionMapById.get(complexId) ?? null;
+      if (!regionMapMatchesDiscoveryScope(regionMap, universeCode)) return null;
+
       const aliases = aliasesById.get(complexId) ?? [];
       const flags = {
         hasAlias: aliases.length > 0,
@@ -780,7 +1054,12 @@ async function loadDiscoveryCandidates(
   q: string,
   universeCode: string,
   alreadyRankedIds: Set<string>,
+  classification: SearchQueryClassification,
 ): Promise<DiscoveryCandidate[]> {
+  if (classification.discoveryMode === "DISABLED_FOR_BROAD_NATIONAL") {
+    return [];
+  }
+
   try {
     const supabase = createDiscoverySupabase();
     const fixtureSeeds: DiscoverySeed[] = getDiscoveryFixtureSeeds(
@@ -796,6 +1075,7 @@ async function loadDiscoveryCandidates(
       q,
       universeCode,
       alreadyRankedIds,
+      classification,
     );
     const seeds = mergeDiscoverySeeds([...fixtureSeeds, ...genericSeeds]);
     if (seeds.length === 0) return [];
@@ -2276,6 +2556,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const queryClassification = classifySearchQuery(q, requestedUniverseCode);
     const localSource = await loadSourceItems(requestedUniverseCode);
     let matchedLocalItems = filterItemsByQuery(localSource.items, q);
     let rankVisibleFallbackItems: RankingItem[] = [];
@@ -2294,7 +2575,7 @@ export async function GET(request: NextRequest) {
 
     if (
       matchedLocalItems.length < limit &&
-      !isStrictRegionIntentQuery(normalizeSearchToken(q))
+      !isStrictRegionIntentQuery(queryClassification.normalizedQuery)
     ) {
       try {
         rankVisibleFallbackItems = await fetchRankVisibleFallbackItems(
@@ -2328,6 +2609,7 @@ export async function GET(request: NextRequest) {
           .map((item) => String(item.complexId ?? "").trim())
           .filter(Boolean),
       ),
+      queryClassification,
     );
 
     return NextResponse.json(
