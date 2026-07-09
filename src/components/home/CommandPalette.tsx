@@ -556,6 +556,7 @@ export function CommandPalette({
     if (warning === "AREA_HOUSEHOLD_GAP") return "세대수 연결 확인 중";
     if (warning === "TRADE_CLEAN_GAP") return "실거래 정제 대기";
     if (warning === "MARKET_CAP_SOURCE_GAP") return "시총 산정 전";
+    if (warning === "ELIGIBILITY_OR_RANK_GAP") return "랭킹 산정 대기";
     return warning;
   };
 

@@ -81,7 +81,8 @@ export type DiscoveryWarning =
   | "SOURCE_IDENTITY_AMBIGUOUS"
   | "AREA_HOUSEHOLD_GAP"
   | "TRADE_CLEAN_GAP"
-  | "MARKET_CAP_SOURCE_GAP";
+  | "MARKET_CAP_SOURCE_GAP"
+  | "ELIGIBILITY_OR_RANK_GAP";
 
 export type DiscoveryCandidate = {
   discoveryId: string;
@@ -98,9 +99,12 @@ export type DiscoveryCandidate = {
     hasRegionMap: boolean;
     hasAreaHousehold: boolean;
     hasTradeClean: boolean;
+    hasPriceSnapshot?: boolean;
+    hasComponentSnapshot?: boolean;
     hasMarketCap: boolean;
     hasEligibility: boolean;
     hasRank: boolean;
+    hasLatestBoard?: boolean;
     hasDetail: boolean;
   };
   warnings: DiscoveryWarning[];

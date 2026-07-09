@@ -26,6 +26,10 @@ const SEARCH_KOREA_ALL_DONG_AUXILIARY_RESULT_LIMIT = 10;
 const SEARCH_REGIONAL_NAME_AUXILIARY_RESULT_LIMIT = 8;
 const SEARCH_REGIONAL_NAME_AUXILIARY_PER_UNIVERSE_LIMIT = 8;
 const SEARCH_DISCOVERY_CANDIDATE_LIMIT = 5;
+const SEARCH_DISCOVERY_NAME_SOURCE_LIMIT = 120;
+const SEARCH_DISCOVERY_REGION_SOURCE_LIMIT = 80;
+const SEARCH_DISCOVERY_HYDRATION_LIMIT = 120;
+const SEARCH_DISCOVERY_QUERY_TERM_LIMIT = 8;
 const SEARCH_SUCCESS_CACHE_CONTROL =
   "public, max-age=10, s-maxage=30, stale-while-revalidate=300";
 const SEARCH_ERROR_CACHE_CONTROL = "no-store";
@@ -101,6 +105,17 @@ type DiscoveryFixtureSeed = {
   complexId: string;
   fallbackName: string;
   fallbackRegionLabel: string;
+  warnings: DiscoveryWarning[];
+};
+
+type DiscoverySeed = DiscoveryFixtureSeed & {
+  matchScore: number;
+  source: "fixture" | "generic";
+};
+
+type DiscoveryMatchAssessment = {
+  passes: boolean;
+  score: number;
   warnings: DiscoveryWarning[];
 };
 
@@ -199,6 +214,20 @@ function keyRowsByComplexId<T extends { complex_id?: number | string | null }>(
   return result;
 }
 
+function groupRowsByComplexId<T extends { complex_id?: number | string | null }>(
+  rows: T[] | null | undefined,
+) {
+  const result = new Map<string, T[]>();
+  for (const row of rows ?? []) {
+    const complexId = normalizeDiscoveryComplexId(row.complex_id);
+    if (!complexId) continue;
+    const existing = result.get(complexId) ?? [];
+    existing.push(row);
+    result.set(complexId, existing);
+  }
+  return result;
+}
+
 function complexIdSetFromRows(
   rows: { complex_id?: number | string | null }[] | null | undefined,
 ) {
@@ -206,6 +235,312 @@ function complexIdSetFromRows(
     (rows ?? [])
       .map((row) => normalizeDiscoveryComplexId(row.complex_id))
       .filter(Boolean),
+  );
+}
+
+function normalizeDiscoveryNameTerm(value: unknown) {
+  let normalized = normalizeSearchToken(value)
+    .replace(/아파트$/i, "")
+    .replace(/apt$/i, "")
+    .replace(/단지$/i, "");
+
+  // Handle common context-glued Korean searches such as "진월동새한아파트".
+  const lastLocationSuffixIndex = Math.max(
+    normalized.lastIndexOf("동"),
+    normalized.lastIndexOf("구"),
+    normalized.lastIndexOf("시"),
+    normalized.lastIndexOf("군"),
+    normalized.lastIndexOf("읍"),
+    normalized.lastIndexOf("면"),
+    normalized.lastIndexOf("리"),
+  );
+
+  if (
+    lastLocationSuffixIndex >= 0 &&
+    lastLocationSuffixIndex < normalized.length - 1
+  ) {
+    normalized = normalized.slice(lastLocationSuffixIndex + 1);
+    normalized = normalized
+      .replace(/아파트$/i, "")
+      .replace(/apt$/i, "")
+      .replace(/단지$/i, "");
+  }
+
+  return normalized;
+}
+
+function isDiscoveryLocationTerm(value: string) {
+  const normalized = normalizeSearchToken(value);
+  if (normalized.length < 2) return false;
+
+  return (
+    /[시군구동읍면리]$/.test(normalized) ||
+    normalized === "광주" ||
+    normalized === "진월"
+  );
+}
+
+function getDiscoveryNameTerms(q: string) {
+  const terms = new Set<string>();
+  const raw = String(q ?? "").trim();
+  const normalizedQuery = normalizeSearchToken(raw);
+
+  if (normalizedQuery) {
+    terms.add(normalizeDiscoveryNameTerm(normalizedQuery));
+  }
+
+  const compactWithoutKnownContext = normalizedQuery.replace(
+    /(광주광역시|광주|남구|진월동|진월)/g,
+    "",
+  );
+  if (compactWithoutKnownContext) {
+    terms.add(normalizeDiscoveryNameTerm(compactWithoutKnownContext));
+  }
+
+  for (const token of raw.split(/\s+/)) {
+    const normalizedToken = normalizeSearchToken(token);
+    if (!normalizedToken || isDiscoveryLocationTerm(normalizedToken)) continue;
+    terms.add(normalizedToken);
+    terms.add(normalizeDiscoveryNameTerm(normalizedToken));
+  }
+
+  return Array.from(terms)
+    .filter((term) => term.length >= 2 && hasHangul(term))
+    .slice(0, SEARCH_DISCOVERY_QUERY_TERM_LIMIT);
+}
+
+function getDiscoveryLocationTerms(q: string) {
+  const terms = new Set<string>();
+  const raw = String(q ?? "").trim();
+  const normalizedQuery = normalizeSearchToken(raw);
+
+  for (const token of raw.split(/\s+/)) {
+    const normalizedToken = normalizeSearchToken(token);
+    if (!normalizedToken) continue;
+    if (isDiscoveryLocationTerm(normalizedToken)) {
+      terms.add(normalizedToken);
+      terms.add(stripKoreanLocationSuffix(normalizedToken));
+    }
+  }
+
+  for (const knownTerm of ["광주", "남구", "진월동", "진월"]) {
+    if (normalizedQuery.includes(knownTerm)) {
+      terms.add(knownTerm);
+      terms.add(stripKoreanLocationSuffix(knownTerm));
+    }
+  }
+
+  return Array.from(terms)
+    .map(normalizeSearchToken)
+    .filter((term) => term.length >= 2 && hasHangul(term))
+    .slice(0, SEARCH_DISCOVERY_QUERY_TERM_LIMIT);
+}
+
+function hasStrongDiscoveryContext(q: string, regionMap: DiscoveryRegionMapRow | null) {
+  if (!regionMap) return false;
+
+  const locationTerms = getDiscoveryLocationTerms(q);
+  if (locationTerms.length === 0) return false;
+
+  const regionValues = [
+    regionMap.sigungu_name,
+    regionMap.umd_nm,
+    stripKoreanLocationSuffix(regionMap.umd_nm ?? ""),
+    regionMap.sgg_cd,
+    regionMap.lawd_cd,
+  ]
+    .map(normalizeSearchToken)
+    .filter(Boolean);
+
+  return locationTerms.some((term) =>
+    regionValues.some((value) => value === term || value.includes(term)),
+  );
+}
+
+function scoreDiscoveryNameMatch(
+  q: string,
+  complex: DiscoveryAptComplexRow | null,
+  aliases: DiscoveryAliasRow[],
+) {
+  const nameTerms = getDiscoveryNameTerms(q);
+  if (nameTerms.length === 0) return { matched: false, exact: false, score: 0 };
+
+  const names = [complex?.apt_name_ko, ...aliases.map((row) => row.alias_name)]
+    .map((value) => normalizeDiscoveryNameTerm(value))
+    .filter(Boolean);
+
+  const exact = nameTerms.some((term) => names.some((name) => name === term));
+  if (exact) return { matched: true, exact: true, score: 120 };
+
+  const contains = nameTerms.some((term) =>
+    names.some((name) => name.includes(term) || term.includes(name)),
+  );
+  if (contains) return { matched: true, exact: false, score: 80 };
+
+  return { matched: false, exact: false, score: 0 };
+}
+
+function assessDiscoveryCandidate(
+  q: string,
+  complex: DiscoveryAptComplexRow | null,
+  regionMap: DiscoveryRegionMapRow | null,
+  aliases: DiscoveryAliasRow[],
+  flags: {
+    hasAlias: boolean;
+    hasExternalId: boolean;
+    hasAreaHousehold: boolean;
+    hasTradeClean: boolean;
+    hasPriceSnapshot: boolean;
+    hasComponentSnapshot: boolean;
+    hasMarketCap: boolean;
+    hasEligibility: boolean;
+    hasLatestBoard: boolean;
+    hasDetail: boolean;
+  },
+): DiscoveryMatchAssessment {
+  if (!complex || !regionMap || flags.hasLatestBoard || flags.hasDetail) {
+    return { passes: false, score: 0, warnings: [] };
+  }
+
+  const nameMatch = scoreDiscoveryNameMatch(q, complex, aliases);
+  if (!nameMatch.matched) return { passes: false, score: 0, warnings: [] };
+
+  const hasRegionContext = hasStrongDiscoveryContext(q, regionMap);
+  const normalizedQuery = normalizeSearchToken(q);
+  const broadNameOnly = normalizedQuery.length <= 4 && !hasRegionContext;
+  const downstreamEvidence =
+    flags.hasAreaHousehold ||
+    flags.hasTradeClean ||
+    flags.hasPriceSnapshot ||
+    flags.hasComponentSnapshot ||
+    flags.hasMarketCap;
+
+  if (
+    broadNameOnly &&
+    (!nameMatch.exact || !flags.hasExternalId || !downstreamEvidence)
+  ) {
+    return { passes: false, score: 0, warnings: [] };
+  }
+
+  const warnings = new Set<DiscoveryWarning>();
+  if (!flags.hasAreaHousehold) warnings.add("AREA_HOUSEHOLD_GAP");
+  if (!flags.hasTradeClean) warnings.add("TRADE_CLEAN_GAP");
+  if (!flags.hasMarketCap) warnings.add("MARKET_CAP_SOURCE_GAP");
+  if (
+    (flags.hasPriceSnapshot || flags.hasComponentSnapshot || flags.hasMarketCap) &&
+    !flags.hasEligibility
+  ) {
+    warnings.add("ELIGIBILITY_OR_RANK_GAP");
+  }
+
+  const score =
+    nameMatch.score +
+    (hasRegionContext ? 80 : 0) +
+    (flags.hasExternalId ? 40 : 0) +
+    (flags.hasTradeClean ? 20 : 0) +
+    (flags.hasPriceSnapshot || flags.hasComponentSnapshot ? 20 : 0);
+
+  return {
+    passes: score >= (hasRegionContext ? 140 : 180),
+    score,
+    warnings: Array.from(warnings),
+  };
+}
+
+async function fetchDiscoveryCandidateIds(
+  supabase: ReturnType<typeof createDiscoverySupabase>,
+  q: string,
+) {
+  const candidateIds = new Set<string>();
+  const nameTerms = getDiscoveryNameTerms(q);
+  const locationTerms = getDiscoveryLocationTerms(q);
+
+  for (const term of nameTerms) {
+    const [complexResult, aliasResult] = await Promise.all([
+      supabase
+        .from("apt_complex")
+        .select("complex_id")
+        .ilike("apt_name_ko", `%${term}%`)
+        .order("complex_id", { ascending: true })
+        .limit(SEARCH_DISCOVERY_NAME_SOURCE_LIMIT),
+      supabase
+        .from("complex_name_alias")
+        .select("complex_id")
+        .ilike("alias_name", `%${term}%`)
+        .order("complex_id", { ascending: true })
+        .limit(SEARCH_DISCOVERY_NAME_SOURCE_LIMIT),
+    ]);
+
+    if (complexResult.error) {
+      console.info("[API /api/search] discovery complex-name probe skipped", {
+        queryLength: q.length,
+        message: complexResult.error.message,
+      });
+    }
+
+    if (aliasResult.error) {
+      console.info("[API /api/search] discovery alias-name probe skipped", {
+        queryLength: q.length,
+        message: aliasResult.error.message,
+      });
+    }
+
+    for (const id of complexIdSetFromRows(complexResult.data)) {
+      candidateIds.add(id);
+    }
+    for (const id of complexIdSetFromRows(aliasResult.data)) {
+      candidateIds.add(id);
+    }
+  }
+
+  for (const term of locationTerms) {
+    const regionResult = await supabase
+      .from("koaptix_complex_region_map")
+      .select("complex_id")
+      .or(`umd_nm.ilike.%${term}%,sigungu_name.ilike.%${term}%`)
+      .order("complex_id", { ascending: true })
+      .limit(SEARCH_DISCOVERY_REGION_SOURCE_LIMIT);
+
+    if (regionResult.error) {
+      console.info("[API /api/search] discovery region probe skipped", {
+        queryLength: q.length,
+        message: regionResult.error.message,
+      });
+      continue;
+    }
+
+    for (const id of complexIdSetFromRows(regionResult.data)) {
+      candidateIds.add(id);
+    }
+  }
+
+  return Array.from(candidateIds).slice(0, SEARCH_DISCOVERY_HYDRATION_LIMIT);
+}
+
+function mergeDiscoverySeeds(seeds: DiscoverySeed[]) {
+  const byId = new Map<string, DiscoverySeed>();
+
+  for (const seed of seeds) {
+    const existing = byId.get(seed.complexId);
+    if (!existing || seed.matchScore > existing.matchScore) {
+      byId.set(seed.complexId, {
+        ...seed,
+        warnings: Array.from(
+          new Set([...(existing?.warnings ?? []), ...seed.warnings]),
+        ),
+      });
+    } else {
+      byId.set(seed.complexId, {
+        ...existing,
+        warnings: Array.from(
+          new Set([...existing.warnings, ...seed.warnings]),
+        ),
+      });
+    }
+  }
+
+  return Array.from(byId.values()).sort(
+    (a, b) => b.matchScore - a.matchScore || a.complexId.localeCompare(b.complexId),
   );
 }
 
@@ -250,6 +585,184 @@ async function fetchDiscoveryEvidenceSet(
   return complexIdSetFromRows(data);
 }
 
+async function fetchDiscoveryLatestBoardSet(
+  supabase: ReturnType<typeof createDiscoverySupabase>,
+  complexIds: string[],
+) {
+  if (complexIds.length === 0) return new Set<string>();
+
+  const { data, error } = await supabase
+    .from("v_koaptix_latest_universe_rank_board_u")
+    .select("complex_id")
+    .in("complex_id", complexIds)
+    .limit(complexIds.length * 4);
+
+  if (error) {
+    console.info("[API /api/search] discovery latest-board evidence skipped", {
+      message: error.message,
+    });
+    return new Set<string>();
+  }
+
+  return complexIdSetFromRows(data);
+}
+
+async function loadGenericDiscoverySeeds(
+  supabase: ReturnType<typeof createDiscoverySupabase>,
+  q: string,
+  universeCode: string,
+  alreadyRankedIds: Set<string>,
+): Promise<DiscoverySeed[]> {
+  if (!universeCode) return [];
+
+  const normalizedQuery = normalizeSearchToken(q);
+  if (normalizedQuery.length < 2) return [];
+
+  const candidateIds = await fetchDiscoveryCandidateIds(supabase, q);
+  if (candidateIds.length === 0) return [];
+
+  const [
+    complexResult,
+    regionMapResult,
+    aliasResult,
+    externalIdResult,
+    areaHouseholdIds,
+    tradeCleanIds,
+    priceSnapshotIds,
+    componentSnapshotIds,
+    marketCapIds,
+    eligibilityIds,
+    latestBoardIds,
+    detailIds,
+  ] = await Promise.all([
+    supabase
+      .from("apt_complex")
+      .select("complex_id, apt_name_ko, region_id, address_jibun")
+      .in("complex_id", candidateIds)
+      .limit(candidateIds.length),
+    supabase
+      .from("koaptix_complex_region_map")
+      .select("complex_id, lawd_cd, sgg_cd, sigungu_name, umd_nm")
+      .in("complex_id", candidateIds)
+      .limit(candidateIds.length),
+    supabase
+      .from("complex_name_alias")
+      .select("complex_id, alias_name")
+      .in("complex_id", candidateIds)
+      .limit(candidateIds.length * 4),
+    supabase
+      .from("complex_external_id")
+      .select("complex_id, source_system, external_id")
+      .in("complex_id", candidateIds)
+      .limit(candidateIds.length * 4),
+    fetchDiscoveryEvidenceSet(
+      supabase,
+      "apt_complex_area_cluster_household",
+      candidateIds,
+    ),
+    fetchDiscoveryEvidenceSet(supabase, "apt_trade_clean", candidateIds),
+    fetchDiscoveryEvidenceSet(
+      supabase,
+      "apt_area_cluster_price_snapshot",
+      candidateIds,
+    ),
+    fetchDiscoveryEvidenceSet(
+      supabase,
+      "apt_market_cap_cluster_component_snapshot",
+      candidateIds,
+    ),
+    fetchDiscoveryEvidenceSet(supabase, "apt_market_cap_snapshot", candidateIds),
+    fetchDiscoveryEvidenceSet(
+      supabase,
+      "complex_eligibility_snapshot",
+      candidateIds,
+    ),
+    fetchDiscoveryLatestBoardSet(supabase, candidateIds),
+    fetchDiscoveryEvidenceSet(
+      supabase,
+      "v_koaptix_complex_detail_sheet",
+      candidateIds,
+    ),
+  ]);
+
+  if (complexResult.error) throw complexResult.error;
+  if (regionMapResult.error) throw regionMapResult.error;
+
+  if (aliasResult.error) {
+    console.info("[API /api/search] discovery generic alias evidence skipped", {
+      message: aliasResult.error.message,
+    });
+  }
+
+  if (externalIdResult.error) {
+    console.info("[API /api/search] discovery generic external-id evidence skipped", {
+      message: externalIdResult.error.message,
+    });
+  }
+
+  const complexById = keyRowsByComplexId(
+    (complexResult.data ?? []) as DiscoveryAptComplexRow[],
+  );
+  const regionMapById = keyRowsByComplexId(
+    (regionMapResult.data ?? []) as DiscoveryRegionMapRow[],
+  );
+  const aliasesById = groupRowsByComplexId(
+    (aliasResult.data ?? []) as DiscoveryAliasRow[],
+  );
+  const externalIdIds = complexIdSetFromRows(
+    ((externalIdResult.data ?? []) as DiscoveryExternalIdRow[]).filter((row) =>
+      String(row.source_system ?? "").toLowerCase().includes("kapt"),
+    ),
+  );
+
+  return candidateIds
+    .map((complexId): DiscoverySeed | null => {
+      if (alreadyRankedIds.has(complexId)) return null;
+
+      const complex = complexById.get(complexId) ?? null;
+      const regionMap = regionMapById.get(complexId) ?? null;
+      const aliases = aliasesById.get(complexId) ?? [];
+      const flags = {
+        hasAlias: aliases.length > 0,
+        hasExternalId: externalIdIds.has(complexId),
+        hasAreaHousehold: areaHouseholdIds.has(complexId),
+        hasTradeClean: tradeCleanIds.has(complexId),
+        hasPriceSnapshot: priceSnapshotIds.has(complexId),
+        hasComponentSnapshot: componentSnapshotIds.has(complexId),
+        hasMarketCap: marketCapIds.has(complexId),
+        hasEligibility: eligibilityIds.has(complexId),
+        hasLatestBoard: latestBoardIds.has(complexId),
+        hasDetail: detailIds.has(complexId),
+      };
+      const assessment = assessDiscoveryCandidate(
+        q,
+        complex,
+        regionMap,
+        aliases,
+        flags,
+      );
+
+      if (!assessment.passes || !complex || !regionMap) return null;
+
+      const regionLabel =
+        [regionMap.sigungu_name ?? null, regionMap.umd_nm ?? null]
+          .filter(Boolean)
+          .join(" ") || "지역 확인";
+
+      return {
+        complexId,
+        fallbackName: complex.apt_name_ko ?? "관측 후보",
+        fallbackRegionLabel: regionLabel,
+        warnings: assessment.warnings,
+        matchScore: assessment.score,
+        source: "generic",
+      };
+    })
+    .filter((seed): seed is DiscoverySeed => seed !== null)
+    .sort((a, b) => b.matchScore - a.matchScore || a.complexId.localeCompare(b.complexId))
+    .slice(0, SEARCH_DISCOVERY_CANDIDATE_LIMIT);
+}
+
 function buildDiscoveryCopy(warnings: DiscoveryWarning[]) {
   const hasSourceWarning = warnings.includes("SOURCE_IDENTITY_AMBIGUOUS");
 
@@ -268,11 +781,25 @@ async function loadDiscoveryCandidates(
   universeCode: string,
   alreadyRankedIds: Set<string>,
 ): Promise<DiscoveryCandidate[]> {
-  const seeds = getDiscoveryFixtureSeeds(q, universeCode);
-  if (seeds.length === 0) return [];
-
   try {
     const supabase = createDiscoverySupabase();
+    const fixtureSeeds: DiscoverySeed[] = getDiscoveryFixtureSeeds(
+      q,
+      universeCode,
+    ).map((seed) => ({
+      ...seed,
+      matchScore: 10_000,
+      source: "fixture",
+    }));
+    const genericSeeds = await loadGenericDiscoverySeeds(
+      supabase,
+      q,
+      universeCode,
+      alreadyRankedIds,
+    );
+    const seeds = mergeDiscoverySeeds([...fixtureSeeds, ...genericSeeds]);
+    if (seeds.length === 0) return [];
+
     const candidateIds = seeds.map((seed) => seed.complexId);
 
     const [
@@ -282,8 +809,11 @@ async function loadDiscoveryCandidates(
       externalIdResult,
       areaHouseholdIds,
       tradeCleanIds,
+      priceSnapshotIds,
+      componentSnapshotIds,
       marketCapIds,
       eligibilityIds,
+      latestBoardIds,
       detailIds,
     ] = await Promise.all([
       supabase
@@ -308,12 +838,23 @@ async function loadDiscoveryCandidates(
         candidateIds,
       ),
       fetchDiscoveryEvidenceSet(supabase, "apt_trade_clean", candidateIds),
+      fetchDiscoveryEvidenceSet(
+        supabase,
+        "apt_area_cluster_price_snapshot",
+        candidateIds,
+      ),
+      fetchDiscoveryEvidenceSet(
+        supabase,
+        "apt_market_cap_cluster_component_snapshot",
+        candidateIds,
+      ),
       fetchDiscoveryEvidenceSet(supabase, "apt_market_cap_snapshot", candidateIds),
       fetchDiscoveryEvidenceSet(
         supabase,
         "complex_eligibility_snapshot",
         candidateIds,
       ),
+      fetchDiscoveryLatestBoardSet(supabase, candidateIds),
       fetchDiscoveryEvidenceSet(
         supabase,
         "v_koaptix_complex_detail_sheet",
@@ -362,7 +903,8 @@ async function loadDiscoveryCandidates(
 
         const hasRank = alreadyRankedIds.has(complexId);
         const hasDetail = detailIds.has(complexId);
-        if (hasRank || hasDetail) return null;
+        const hasLatestBoard = latestBoardIds.has(complexId);
+        if (hasRank || hasLatestBoard || hasDetail) return null;
 
         const sigunguName = regionMap.sigungu_name ?? null;
         const umdName = regionMap.umd_nm ?? null;
@@ -386,9 +928,12 @@ async function loadDiscoveryCandidates(
             hasRegionMap: true,
             hasAreaHousehold: areaHouseholdIds.has(complexId),
             hasTradeClean: tradeCleanIds.has(complexId),
+            hasPriceSnapshot: priceSnapshotIds.has(complexId),
+            hasComponentSnapshot: componentSnapshotIds.has(complexId),
             hasMarketCap: marketCapIds.has(complexId),
             hasEligibility: eligibilityIds.has(complexId),
             hasRank,
+            hasLatestBoard,
             hasDetail,
           },
           warnings,
