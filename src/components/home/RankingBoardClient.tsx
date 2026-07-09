@@ -3,7 +3,11 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import { RankingCard } from "./RankingCard";
-import type { RankingItem, ComplexDetail } from "../../lib/koaptix/types";
+import type {
+  DiscoveryCandidate,
+  RankingItem,
+  ComplexDetail,
+} from "../../lib/koaptix/types";
 import type { UniverseOption } from "../../lib/koaptix/universes";
 import { useBookmarks } from "../../hooks/useBookmarks";
 import ComparisonSheet from "./ComparisonSheet";
@@ -54,6 +58,12 @@ type RankingsApiResponse = {
   reason?: string | null;
   count?: number;
   items?: RankingItem[];
+  message?: string;
+};
+
+type DiscoverySearchApiResponse = {
+  ok?: boolean;
+  discoveryCandidates?: DiscoveryCandidate[];
   message?: string;
 };
 
@@ -221,6 +231,19 @@ const COMPLEX_DETAIL_API = (id: string) =>
   `/api/complex-detail?complexId=${encodeURIComponent(id)}`;
 
 const KOREA_ALL_HOME_BOARD_LIMIT = 12;
+const RANKING_DISCOVERY_SEARCH_LIMIT = 8;
+const RANKING_DISCOVERY_SEARCH_MIN_QUERY_LENGTH = 2;
+const RANKING_DISCOVERY_SEARCH_DEBOUNCE_MS = 250;
+const RANKING_DISCOVERY_SEARCH_TIMEOUT_MS = 4500;
+
+const DISCOVERY_SEARCH_API = (
+  query: string,
+  universeCode: string,
+  limit = RANKING_DISCOVERY_SEARCH_LIMIT,
+) =>
+  `/api/search?q=${encodeURIComponent(query)}&universe_code=${encodeURIComponent(
+    universeCode,
+  )}&limit=${limit}`;
 
 function getHomeBoardRequestLimit(
   apiBasePath: string,
@@ -268,6 +291,27 @@ async function readApiData<T>(
   }
 
   return (json ?? null) as T | null;
+}
+
+async function readDiscoveryCandidates(
+  input: string,
+  signal: AbortSignal,
+): Promise<DiscoveryCandidate[]> {
+  const response = await fetch(input, {
+    method: "GET",
+    cache: "no-store",
+    signal,
+  });
+
+  const json = (await response.json()) as DiscoverySearchApiResponse;
+
+  if (!response.ok || json.ok === false) {
+    throw new Error(
+      json.message ?? `Request failed: ${response.status} ${input}`,
+    );
+  }
+
+  return json.discoveryCandidates ?? [];
 }
 
 async function readRankingPayload(
@@ -370,6 +414,12 @@ export function RankingBoardClient({
   );
 
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+  const [discoveryCandidates, setDiscoveryCandidates] = useState<
+    DiscoveryCandidate[]
+  >([]);
+  const [selectedDiscoveryCandidate, setSelectedDiscoveryCandidate] =
+    useState<DiscoveryCandidate | null>(null);
+  const [isDiscoverySearchPending, setIsDiscoverySearchPending] = useState(false);
   const [selectedTierFilter, setSelectedTierFilter] =
     useState<TierFilterKey>(initialSelectedTierFilter);
 
@@ -394,6 +444,7 @@ export function RankingBoardClient({
   const inflightBoardRef = useRef<
     Partial<Record<string, Promise<RankingBoardPayload>>>
   >({});
+  const discoverySearchCacheRef = useRef<Record<string, DiscoveryCandidate[]>>({});
 
   const getBoardCacheKey = useCallback(
     (universeCode: UniverseCodeValue) => {
@@ -503,6 +554,87 @@ export function RankingBoardClient({
     syncRankingUrlState,
     replaceUrlParams,
   ]);
+
+  useEffect(() => {
+    const rawQuery = searchQuery.trim();
+    const normalizedQuery = rawQuery.toLowerCase();
+
+    if (normalizedQuery.length < RANKING_DISCOVERY_SEARCH_MIN_QUERY_LENGTH) {
+      const resetId = window.setTimeout(() => {
+        setDiscoveryCandidates([]);
+        setSelectedDiscoveryCandidate(null);
+        setIsDiscoverySearchPending(false);
+      }, 0);
+
+      return () => window.clearTimeout(resetId);
+    }
+
+    const cacheKey = `${boardUniverseCode}::${normalizedQuery}`;
+    const cached = discoverySearchCacheRef.current[cacheKey];
+
+    if (cached) {
+      const cacheId = window.setTimeout(() => {
+        setDiscoveryCandidates(cached);
+        setSelectedDiscoveryCandidate(null);
+        setIsDiscoverySearchPending(false);
+      }, 0);
+
+      return () => window.clearTimeout(cacheId);
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+    let timedOut = false;
+    let timeoutId: number | undefined;
+
+    const debounceId = window.setTimeout(async () => {
+      setIsDiscoverySearchPending(true);
+
+      timeoutId = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, RANKING_DISCOVERY_SEARCH_TIMEOUT_MS);
+
+      try {
+        const nextCandidates = await readDiscoveryCandidates(
+          DISCOVERY_SEARCH_API(rawQuery, boardUniverseCode),
+          controller.signal,
+        );
+
+        if (cancelled) return;
+
+        discoverySearchCacheRef.current[cacheKey] = nextCandidates;
+        setDiscoveryCandidates(nextCandidates);
+        setSelectedDiscoveryCandidate(null);
+      } catch (error) {
+        if (!timedOut && (cancelled || isAbortError(error))) return;
+
+        console.warn("[RankingBoardClient] discovery search skipped", {
+          boardUniverseCode,
+          queryLength: rawQuery.length,
+          timedOut,
+          message:
+            error instanceof Error
+              ? error.message
+              : "discovery_search_unavailable",
+        });
+        setDiscoveryCandidates([]);
+        setSelectedDiscoveryCandidate(null);
+      } finally {
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+        if (!cancelled) {
+          setIsDiscoverySearchPending(false);
+        }
+      }
+    }, RANKING_DISCOVERY_SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(debounceId);
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [boardUniverseCode, searchQuery]);
 
   const fetchBoardUniverse = useCallback(
     async (universeCode: UniverseCodeValue, signal?: AbortSignal) => {
@@ -882,6 +1014,32 @@ export function RankingBoardClient({
     bookmarks,
     isLoaded,
   ]);
+
+  const visibleDiscoveryCandidates = useMemo(() => {
+    if (searchQuery.trim().length < RANKING_DISCOVERY_SEARCH_MIN_QUERY_LENGTH) {
+      return [];
+    }
+
+    const rankedComplexIds = new Set(
+      boardItems
+        .map((item) => String(item.complexId ?? "").trim())
+        .filter(Boolean),
+    );
+
+    return discoveryCandidates
+      .filter((candidate) => {
+        if (candidate.discoveryStatus !== "OBSERVATION_READY") return false;
+
+        const complexId = String(candidate.complexId ?? "").trim();
+        if (!complexId || rankedComplexIds.has(complexId)) return false;
+
+        return true;
+      })
+      .slice(0, RANKING_DISCOVERY_SEARCH_LIMIT);
+  }, [boardItems, discoveryCandidates, searchQuery]);
+
+  const hasDiscoveryCandidates = visibleDiscoveryCandidates.length > 0;
+
   const activeDistrictLabel = useMemo(() => {
     if (!districtQueryLocal) return "";
 
@@ -907,6 +1065,84 @@ export function RankingBoardClient({
       : liveBoardError
         ? "degraded"
         : "ready";
+  const renderDiscoveryCandidatesSection = () => {
+    if (!hasDiscoveryCandidates) return null;
+
+    const selectedCandidateVisible = visibleDiscoveryCandidates.some(
+      (candidate) =>
+        candidate.discoveryId === selectedDiscoveryCandidate?.discoveryId,
+    );
+
+    return (
+      <div
+        data-testid="ranking-discovery-section"
+        className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-3 text-left sm:px-4"
+      >
+        <div className="mb-3 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.16em] text-amber-200/80">
+          <span>랭킹 산정 전 후보</span>
+          <span>{visibleDiscoveryCandidates.length} ITEMS</span>
+        </div>
+
+        <div className="space-y-2">
+          {visibleDiscoveryCandidates.map((candidate) => {
+            const isSelected =
+              selectedDiscoveryCandidate?.discoveryId === candidate.discoveryId;
+
+            return (
+              <button
+                key={candidate.discoveryId}
+                type="button"
+                data-testid="ranking-discovery-candidate"
+                data-complex-id={candidate.complexId}
+                onClick={() => setSelectedDiscoveryCandidate(candidate)}
+                className={`w-full rounded-xl border px-3 py-3 text-left transition focus:outline-none ${
+                  isSelected
+                    ? "border-amber-300/60 bg-amber-500/15"
+                    : "border-amber-400/25 bg-black/20 hover:border-amber-300/50 hover:bg-amber-500/15 focus:border-amber-300/50 focus:bg-amber-500/15"
+                }`}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                    관측 준비중
+                  </span>
+                  <span className="min-w-0 truncate text-sm font-semibold text-slate-100">
+                    {candidate.displayName}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-[11px] text-slate-500">
+                  {candidate.regionLabel}
+                </p>
+                <p className="mt-2 text-[12px] leading-relaxed text-amber-100/80">
+                  {candidate.copy.message}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedCandidateVisible && selectedDiscoveryCandidate && (
+          <div className="mt-3 rounded-xl border border-amber-300/20 bg-black/25 px-3 py-3 text-[12px] leading-relaxed text-slate-300">
+            <p className="font-semibold text-amber-100">
+              {selectedDiscoveryCandidate.displayName}
+            </p>
+            <p className="mt-1 text-slate-500">
+              {selectedDiscoveryCandidate.regionLabel}
+            </p>
+            <p className="mt-2">{selectedDiscoveryCandidate.copy.helperText}</p>
+            <p className="mt-2 text-slate-500">
+              랭킹 상세는 아직 열리지 않습니다.
+            </p>
+          </div>
+        )}
+
+        {isDiscoverySearchPending && (
+          <p className="mt-3 text-[11px] text-amber-100/60">
+            관측 후보를 확인하는 중입니다.
+          </p>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -1123,6 +1359,21 @@ export function RankingBoardClient({
                     }}
                   />
                 ))}
+                {renderDiscoveryCandidatesSection()}
+              </div>
+            ) : hasDiscoveryCandidates ? (
+              <div className="flex flex-col gap-3 pb-2">
+                <div className="rounded-2xl border border-slate-800 bg-black/20 px-4 py-4 text-sm leading-relaxed text-slate-400">
+                  <p className="font-semibold text-slate-200">
+                    현재 공개 랭킹 보드에는 일치하는 행이 없습니다.
+                  </p>
+                  <p className="mt-2">
+                    단지 이름과 지역 정보가 확인된 관측 준비 후보만 별도로
+                    표시합니다. 랭킹 편입, 시가총액, 상세 차트는 아직 열리지
+                    않습니다.
+                  </p>
+                </div>
+                {renderDiscoveryCandidatesSection()}
               </div>
             ) : (
               <div className="flex h-32 flex-col items-center justify-center gap-2 text-slate-500">

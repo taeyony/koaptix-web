@@ -3,7 +3,7 @@
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Map, CustomOverlayMap, useKakaoLoader } from "react-kakao-maps-sdk";
-import type { RankingItem } from "../../lib/koaptix/types";
+import type { DiscoveryCandidate, RankingItem } from "../../lib/koaptix/types";
 import {
   DEFAULT_UNIVERSE_CODE,
   getUniverseLabel,
@@ -60,7 +60,13 @@ type MapSearchApiResponse = {
   ok?: boolean;
   localItems?: RankingItem[];
   globalItems?: RankingItem[];
+  discoveryCandidates?: DiscoveryCandidate[];
   message?: string;
+};
+
+type MapSearchResultPayload = {
+  items: RankingItem[];
+  discoveryCandidates: DiscoveryCandidate[];
 };
 
 type MapDeliveryState = {
@@ -454,7 +460,7 @@ function includesMapSearchText(value: unknown, normalizedQuery: string) {
 async function readMapSearchItems(
   input: string,
   signal: AbortSignal,
-): Promise<RankingItem[]> {
+): Promise<MapSearchResultPayload> {
   const response = await fetch(input, {
     method: "GET",
     cache: "no-store",
@@ -469,7 +475,10 @@ async function readMapSearchItems(
     );
   }
 
-  return [...(json.localItems ?? []), ...(json.globalItems ?? [])];
+  return {
+    items: [...(json.localItems ?? []), ...(json.globalItems ?? [])],
+    discoveryCandidates: json.discoveryCandidates ?? [],
+  };
 }
 
 function buildFallbackAggregate(items: RankingItem[]): DistrictAggregate[] {
@@ -665,8 +674,13 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   const [mapSearchQuery, setMapSearchQuery] = useState("");
   const [isMapSearchOpen, setIsMapSearchOpen] = useState(false);
   const [mapSearchRemoteItems, setMapSearchRemoteItems] = useState<RankingItem[]>([]);
+  const [mapSearchDiscoveryCandidates, setMapSearchDiscoveryCandidates] = useState<
+    DiscoveryCandidate[]
+  >([]);
+  const [selectedMapDiscoveryCandidate, setSelectedMapDiscoveryCandidate] =
+    useState<DiscoveryCandidate | null>(null);
   const [isMapSearchRemotePending, setIsMapSearchRemotePending] = useState(false);
-  const mapSearchRemoteCacheRef = useRef<Record<string, RankingItem[]>>({});
+  const mapSearchRemoteCacheRef = useRef<Record<string, MapSearchResultPayload>>({});
 
   const fallbackMapItems = useMemo(
     () => buildFallbackAggregate(items),
@@ -696,6 +710,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     ) {
       const resetId = window.setTimeout(() => {
         setMapSearchRemoteItems([]);
+        setMapSearchDiscoveryCandidates([]);
+        setSelectedMapDiscoveryCandidate(null);
         setIsMapSearchRemotePending(false);
       }, 0);
 
@@ -709,7 +725,9 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
     if (cached) {
       const cacheId = window.setTimeout(() => {
-        setMapSearchRemoteItems(cached);
+        setMapSearchRemoteItems(cached.items);
+        setMapSearchDiscoveryCandidates(cached.discoveryCandidates);
+        setSelectedMapDiscoveryCandidate(null);
         setIsMapSearchRemotePending(false);
       }, 0);
 
@@ -732,15 +750,17 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       }, MAP_LOCAL_SEARCH_REMOTE_TIMEOUT_MS);
 
       try {
-        const remoteItems = await readMapSearchItems(
+        const remotePayload = await readMapSearchItems(
           MAP_SEARCH_API(rawQuery, currentUniverseCode),
           controller.signal,
         );
 
         if (cancelled) return;
 
-        mapSearchRemoteCacheRef.current[cacheKey] = remoteItems;
-        setMapSearchRemoteItems(remoteItems);
+        mapSearchRemoteCacheRef.current[cacheKey] = remotePayload;
+        setMapSearchRemoteItems(remotePayload.items);
+        setMapSearchDiscoveryCandidates(remotePayload.discoveryCandidates);
+        setSelectedMapDiscoveryCandidate(null);
       } catch (searchError) {
         if (!timedOut && (cancelled || controller.signal.aborted)) return;
 
@@ -754,6 +774,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               : "search_bridge_unavailable",
         });
         setMapSearchRemoteItems([]);
+        setMapSearchDiscoveryCandidates([]);
+        setSelectedMapDiscoveryCandidate(null);
       } finally {
         if (timeoutId !== undefined) window.clearTimeout(timeoutId);
         if (!cancelled) {
@@ -1155,6 +1177,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       return {
         complexes: [] as MapLocalSearchSuggestion[],
         districts: [] as MapLocalSearchSuggestion[],
+        discoveryCandidates: [] as DiscoveryCandidate[],
       };
     }
 
@@ -1287,16 +1310,36 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         district,
       }));
 
+    const discoveryCandidates = mapSearchDiscoveryCandidates
+      .filter((candidate) => {
+        if (candidate.discoveryStatus !== "OBSERVATION_READY") return false;
+
+        const complexId = String(candidate.complexId ?? "").trim();
+        if (!complexId || seenComplexIds.has(complexId)) return false;
+
+        return true;
+      })
+      .slice(0, 5);
+
     return {
       complexes,
       districts,
+      discoveryCandidates,
     };
-  }, [items, mapItems, mapSearchQuery, mapSearchRemoteItems, currentUniverseCode]);
+  }, [
+    items,
+    mapItems,
+    mapSearchQuery,
+    mapSearchRemoteItems,
+    mapSearchDiscoveryCandidates,
+    currentUniverseCode,
+  ]);
 
   const hasMapSearchQuery = mapSearchQuery.trim().length > 0;
   const hasMapSearchSuggestions =
     mapSearchSuggestions.complexes.length > 0 ||
-    mapSearchSuggestions.districts.length > 0;
+    mapSearchSuggestions.districts.length > 0 ||
+    mapSearchSuggestions.discoveryCandidates.length > 0;
   const firstMapSearchSuggestion =
     mapSearchSuggestions.complexes[0] ?? mapSearchSuggestions.districts[0] ?? null;
 
@@ -1365,6 +1408,69 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     },
     [currentUniverseCode],
   );
+
+  const handleMapDiscoverySelect = useCallback((candidate: DiscoveryCandidate) => {
+    setSelectedMapDiscoveryCandidate(candidate);
+  }, []);
+
+  const renderMapDiscoveryCandidatesSection = () => {
+    if (mapSearchSuggestions.discoveryCandidates.length === 0) return null;
+
+    return (
+      <div>
+        <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-200/80">
+          랭킹 산정 전 후보
+        </p>
+        <div className="space-y-1">
+          {mapSearchSuggestions.discoveryCandidates.map((candidate) => {
+            const isSelected =
+              selectedMapDiscoveryCandidate?.discoveryId === candidate.discoveryId;
+
+            return (
+              <button
+                key={candidate.discoveryId}
+                type="button"
+                data-testid="neon-map-local-search-discovery-candidate"
+                data-complex-id={candidate.complexId}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => handleMapDiscoverySelect(candidate)}
+                className={`w-full min-w-0 rounded-xl border px-2.5 py-2 text-left transition focus:outline-none ${
+                  isSelected
+                    ? "border-amber-300/60 bg-amber-500/15"
+                    : "border-amber-400/25 bg-amber-500/10 hover:border-amber-300/50 hover:bg-amber-500/15 focus:border-amber-300/50 focus:bg-amber-500/15"
+                }`}
+              >
+                <span className="flex min-w-0 items-start justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="mb-1 inline-flex rounded-full border border-amber-300/40 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                      관측 준비중
+                    </span>
+                    <span className="block truncate font-semibold text-slate-100">
+                      {candidate.displayName}
+                    </span>
+                    <span className="block truncate text-[11px] text-slate-500">
+                      {candidate.regionLabel}
+                    </span>
+                  </span>
+                </span>
+                <span className="mt-2 block text-[11px] leading-relaxed text-amber-100/80">
+                  {candidate.copy.message}
+                </span>
+                {isSelected && (
+                  <span className="mt-2 block rounded-lg border border-amber-300/20 bg-black/20 px-2 py-2 text-[11px] leading-relaxed text-slate-300">
+                    {candidate.copy.helperText}
+                    <span className="mt-1 block text-slate-500">
+                      랭킹 상세는 아직 열리지 않습니다.
+                    </span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   const handleMapSearchKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
@@ -1534,6 +1640,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                           </div>
                         </div>
                       )}
+
+                      {renderMapDiscoveryCandidatesSection()}
                     </div>
                   ) : (
                     <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-3 text-[12px] leading-relaxed text-slate-400">
@@ -1756,6 +1864,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                           </div>
                         </div>
                       )}
+
+                      {renderMapDiscoveryCandidatesSection()}
                     </div>
                   ) : (
                     <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-3 text-[12px] leading-relaxed text-slate-400">
