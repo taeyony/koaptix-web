@@ -4,6 +4,11 @@ import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState }
 import { useSearchParams } from "next/navigation";
 import { Map, CustomOverlayMap, useKakaoLoader } from "react-kakao-maps-sdk";
 import type { DiscoveryCandidate, RankingItem } from "../../lib/koaptix/types";
+import type {
+  RegionAliasApiMetadata,
+  RegionClarificationChoice,
+  RegionResolutionResult,
+} from "../../lib/koaptix/regionAliasV1.types";
 import {
   DEFAULT_UNIVERSE_CODE,
   getUniverseLabel,
@@ -56,7 +61,7 @@ type MapApiResponse = {
   message?: string;
 };
 
-type MapSearchApiResponse = {
+type MapSearchApiResponse = RegionAliasApiMetadata & {
   ok?: boolean;
   localItems?: RankingItem[];
   globalItems?: RankingItem[];
@@ -67,6 +72,9 @@ type MapSearchApiResponse = {
 type MapSearchResultPayload = {
   items: RankingItem[];
   discoveryCandidates: DiscoveryCandidate[];
+  regionResolution: RegionResolutionResult | null;
+  clarificationChoices: RegionClarificationChoice[];
+  warnings: string[];
 };
 
 type MapDeliveryState = {
@@ -478,6 +486,9 @@ async function readMapSearchItems(
   return {
     items: [...(json.localItems ?? []), ...(json.globalItems ?? [])],
     discoveryCandidates: json.discoveryCandidates ?? [],
+    regionResolution: json.regionResolution ?? null,
+    clarificationChoices: json.clarificationChoices ?? [],
+    warnings: json.warnings ?? [],
   };
 }
 
@@ -679,6 +690,13 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   >([]);
   const [selectedMapDiscoveryCandidate, setSelectedMapDiscoveryCandidate] =
     useState<DiscoveryCandidate | null>(null);
+  const [mapSearchRegionResolution, setMapSearchRegionResolution] =
+    useState<RegionResolutionResult | null>(null);
+  const [mapSearchClarificationChoices, setMapSearchClarificationChoices] =
+    useState<RegionClarificationChoice[]>([]);
+  const [mapSearchRegionWarnings, setMapSearchRegionWarnings] = useState<
+    string[]
+  >([]);
   const [isMapSearchRemotePending, setIsMapSearchRemotePending] = useState(false);
   const mapSearchRemoteCacheRef = useRef<Record<string, MapSearchResultPayload>>({});
 
@@ -712,6 +730,9 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         setMapSearchRemoteItems([]);
         setMapSearchDiscoveryCandidates([]);
         setSelectedMapDiscoveryCandidate(null);
+        setMapSearchRegionResolution(null);
+        setMapSearchClarificationChoices([]);
+        setMapSearchRegionWarnings([]);
         setIsMapSearchRemotePending(false);
       }, 0);
 
@@ -727,6 +748,9 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       const cacheId = window.setTimeout(() => {
         setMapSearchRemoteItems(cached.items);
         setMapSearchDiscoveryCandidates(cached.discoveryCandidates);
+        setMapSearchRegionResolution(cached.regionResolution);
+        setMapSearchClarificationChoices(cached.clarificationChoices);
+        setMapSearchRegionWarnings(cached.warnings);
         setSelectedMapDiscoveryCandidate(null);
         setIsMapSearchRemotePending(false);
       }, 0);
@@ -760,6 +784,9 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         mapSearchRemoteCacheRef.current[cacheKey] = remotePayload;
         setMapSearchRemoteItems(remotePayload.items);
         setMapSearchDiscoveryCandidates(remotePayload.discoveryCandidates);
+        setMapSearchRegionResolution(remotePayload.regionResolution);
+        setMapSearchClarificationChoices(remotePayload.clarificationChoices);
+        setMapSearchRegionWarnings(remotePayload.warnings);
         setSelectedMapDiscoveryCandidate(null);
       } catch (searchError) {
         if (!timedOut && (cancelled || controller.signal.aborted)) return;
@@ -776,6 +803,9 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         setMapSearchRemoteItems([]);
         setMapSearchDiscoveryCandidates([]);
         setSelectedMapDiscoveryCandidate(null);
+        setMapSearchRegionResolution(null);
+        setMapSearchClarificationChoices([]);
+        setMapSearchRegionWarnings([]);
       } finally {
         if (timeoutId !== undefined) window.clearTimeout(timeoutId);
         if (!cancelled) {
@@ -1170,10 +1200,16 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     ).length;
   }, [visualizedMapData]);
 
+  const hasMapSearchRegionBlock =
+    mapSearchRegionResolution?.state === "AMBIGUOUS" ||
+    mapSearchRegionResolution?.state === "UNIVERSE_CONFLICT";
+  const shouldSuppressMapSearchSuggestions =
+    hasMapSearchRegionBlock || isMapSearchRemotePending;
+
   const mapSearchSuggestions = useMemo(() => {
     const normalizedQuery = normalizeMapSearchText(mapSearchQuery);
 
-    if (!normalizedQuery) {
+    if (!normalizedQuery || shouldSuppressMapSearchSuggestions) {
       return {
         complexes: [] as MapLocalSearchSuggestion[],
         districts: [] as MapLocalSearchSuggestion[],
@@ -1333,6 +1369,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     mapSearchRemoteItems,
     mapSearchDiscoveryCandidates,
     currentUniverseCode,
+    shouldSuppressMapSearchSuggestions,
   ]);
 
   const hasMapSearchQuery = mapSearchQuery.trim().length > 0;
@@ -1412,6 +1449,52 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   const handleMapDiscoverySelect = useCallback((candidate: DiscoveryCandidate) => {
     setSelectedMapDiscoveryCandidate(candidate);
   }, []);
+
+  const handleMapClarificationSelect = useCallback(
+    (choice: RegionClarificationChoice) => {
+      if (choice.compatibility === "INCOMPATIBLE") return;
+      setMapSearchQuery(choice.replacementQuery);
+    },
+    [],
+  );
+
+  const renderMapRegionResolutionNotice = () => {
+    if (!hasMapSearchRegionBlock && mapSearchRegionWarnings.length === 0) {
+      return null;
+    }
+
+    return (
+      <div
+        data-testid="neon-map-region-resolution"
+        className="mb-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-3 text-[12px] text-amber-100"
+      >
+        <p className="font-semibold">
+          {mapSearchRegionResolution?.state === "UNIVERSE_CONFLICT"
+            ? "입력한 지역이 현재 지도 범위와 다릅니다."
+            : mapSearchRegionResolution?.state === "AMBIGUOUS"
+              ? "표시할 지역을 구체적으로 선택해 주세요."
+              : "지역 해석 없이 기존 검색을 사용합니다."}
+        </p>
+        {mapSearchClarificationChoices.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {mapSearchClarificationChoices.map((choice) => (
+              <button
+                key={choice.canonicalRegionCode}
+                type="button"
+                disabled={choice.compatibility === "INCOMPATIBLE"}
+                aria-label={`${choice.qualifiedNameKo} 지역으로 지도 검색어 구체화`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => handleMapClarificationSelect(choice)}
+                className="rounded-lg border border-amber-300/30 px-2 py-1 text-left text-[11px] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {choice.qualifiedNameKo}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderMapDiscoveryCandidatesSection = () => {
     if (mapSearchSuggestions.discoveryCandidates.length === 0) return null;
@@ -1574,6 +1657,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   data-testid="neon-map-local-search-suggestions"
                   className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-700/80 bg-[#101720] p-2 text-sm shadow-2xl"
                 >
+                  {renderMapRegionResolutionNotice()}
                   {hasMapSearchSuggestions ? (
                     <div className="space-y-2">
                       {mapSearchSuggestions.complexes.length > 0 && (
@@ -1798,6 +1882,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   data-testid="neon-map-local-search-suggestions"
                   className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-700/80 bg-[#101720] p-2 text-sm shadow-2xl"
                 >
+                  {renderMapRegionResolutionNotice()}
                   {hasMapSearchSuggestions ? (
                     <div className="space-y-2">
                       {mapSearchSuggestions.complexes.length > 0 && (

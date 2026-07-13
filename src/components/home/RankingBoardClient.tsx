@@ -8,6 +8,11 @@ import type {
   RankingItem,
   ComplexDetail,
 } from "../../lib/koaptix/types";
+import type {
+  RegionAliasApiMetadata,
+  RegionClarificationChoice,
+  RegionResolutionResult,
+} from "../../lib/koaptix/regionAliasV1.types";
 import type { UniverseOption } from "../../lib/koaptix/universes";
 import { useBookmarks } from "../../hooks/useBookmarks";
 import ComparisonSheet from "./ComparisonSheet";
@@ -61,10 +66,17 @@ type RankingsApiResponse = {
   message?: string;
 };
 
-type DiscoverySearchApiResponse = {
+type DiscoverySearchApiResponse = RegionAliasApiMetadata & {
   ok?: boolean;
   discoveryCandidates?: DiscoveryCandidate[];
   message?: string;
+};
+
+type DiscoverySearchPayload = {
+  discoveryCandidates: DiscoveryCandidate[];
+  regionResolution: RegionResolutionResult | null;
+  clarificationChoices: RegionClarificationChoice[];
+  warnings: string[];
 };
 
 type RankingBoardDeliveryMeta = {
@@ -296,7 +308,7 @@ async function readApiData<T>(
 async function readDiscoveryCandidates(
   input: string,
   signal: AbortSignal,
-): Promise<DiscoveryCandidate[]> {
+): Promise<DiscoverySearchPayload> {
   const response = await fetch(input, {
     method: "GET",
     cache: "no-store",
@@ -311,7 +323,12 @@ async function readDiscoveryCandidates(
     );
   }
 
-  return json.discoveryCandidates ?? [];
+  return {
+    discoveryCandidates: json.discoveryCandidates ?? [],
+    regionResolution: json.regionResolution ?? null,
+    clarificationChoices: json.clarificationChoices ?? [],
+    warnings: json.warnings ?? [],
+  };
 }
 
 async function readRankingPayload(
@@ -419,6 +436,12 @@ export function RankingBoardClient({
   >([]);
   const [selectedDiscoveryCandidate, setSelectedDiscoveryCandidate] =
     useState<DiscoveryCandidate | null>(null);
+  const [searchRegionResolution, setSearchRegionResolution] =
+    useState<RegionResolutionResult | null>(null);
+  const [searchClarificationChoices, setSearchClarificationChoices] = useState<
+    RegionClarificationChoice[]
+  >([]);
+  const [searchRegionWarnings, setSearchRegionWarnings] = useState<string[]>([]);
   const [isDiscoverySearchPending, setIsDiscoverySearchPending] = useState(false);
   const [selectedTierFilter, setSelectedTierFilter] =
     useState<TierFilterKey>(initialSelectedTierFilter);
@@ -444,7 +467,7 @@ export function RankingBoardClient({
   const inflightBoardRef = useRef<
     Partial<Record<string, Promise<RankingBoardPayload>>>
   >({});
-  const discoverySearchCacheRef = useRef<Record<string, DiscoveryCandidate[]>>({});
+  const discoverySearchCacheRef = useRef<Record<string, DiscoverySearchPayload>>({});
 
   const getBoardCacheKey = useCallback(
     (universeCode: UniverseCodeValue) => {
@@ -563,6 +586,9 @@ export function RankingBoardClient({
       const resetId = window.setTimeout(() => {
         setDiscoveryCandidates([]);
         setSelectedDiscoveryCandidate(null);
+        setSearchRegionResolution(null);
+        setSearchClarificationChoices([]);
+        setSearchRegionWarnings([]);
         setIsDiscoverySearchPending(false);
       }, 0);
 
@@ -574,7 +600,10 @@ export function RankingBoardClient({
 
     if (cached) {
       const cacheId = window.setTimeout(() => {
-        setDiscoveryCandidates(cached);
+        setDiscoveryCandidates(cached.discoveryCandidates);
+        setSearchRegionResolution(cached.regionResolution);
+        setSearchClarificationChoices(cached.clarificationChoices);
+        setSearchRegionWarnings(cached.warnings);
         setSelectedDiscoveryCandidate(null);
         setIsDiscoverySearchPending(false);
       }, 0);
@@ -596,15 +625,18 @@ export function RankingBoardClient({
       }, RANKING_DISCOVERY_SEARCH_TIMEOUT_MS);
 
       try {
-        const nextCandidates = await readDiscoveryCandidates(
+        const nextPayload = await readDiscoveryCandidates(
           DISCOVERY_SEARCH_API(rawQuery, boardUniverseCode),
           controller.signal,
         );
 
         if (cancelled) return;
 
-        discoverySearchCacheRef.current[cacheKey] = nextCandidates;
-        setDiscoveryCandidates(nextCandidates);
+        discoverySearchCacheRef.current[cacheKey] = nextPayload;
+        setDiscoveryCandidates(nextPayload.discoveryCandidates);
+        setSearchRegionResolution(nextPayload.regionResolution);
+        setSearchClarificationChoices(nextPayload.clarificationChoices);
+        setSearchRegionWarnings(nextPayload.warnings);
         setSelectedDiscoveryCandidate(null);
       } catch (error) {
         if (!timedOut && (cancelled || isAbortError(error))) return;
@@ -620,6 +652,9 @@ export function RankingBoardClient({
         });
         setDiscoveryCandidates([]);
         setSelectedDiscoveryCandidate(null);
+        setSearchRegionResolution(null);
+        setSearchClarificationChoices([]);
+        setSearchRegionWarnings([]);
       } finally {
         if (timeoutId !== undefined) window.clearTimeout(timeoutId);
         if (!cancelled) {
@@ -971,7 +1006,16 @@ export function RankingBoardClient({
     setDistrictQueryLocal("");
   }, [replaceUrlParams]);
 
+  const hasSearchRegionBlock =
+    searchRegionResolution?.state === "AMBIGUOUS" ||
+    searchRegionResolution?.state === "UNIVERSE_CONFLICT";
+  const shouldSuppressSearchResults =
+    hasSearchRegionBlock ||
+    (searchQuery.trim().length >= RANKING_DISCOVERY_SEARCH_MIN_QUERY_LENGTH &&
+      isDiscoverySearchPending);
+
   const filteredItems = useMemo(() => {
+    if (shouldSuppressSearchResults) return [];
     let result = boardItems;
 
     if (enableTierFilters && selectedTierFilter !== "ALL") {
@@ -1013,6 +1057,7 @@ export function RankingBoardClient({
     showBookmarksOnly,
     bookmarks,
     isLoaded,
+    shouldSuppressSearchResults,
   ]);
 
   const visibleDiscoveryCandidates = useMemo(() => {
@@ -1139,6 +1184,41 @@ export function RankingBoardClient({
           <p className="mt-3 text-[11px] text-amber-100/60">
             관측 후보를 확인하는 중입니다.
           </p>
+        )}
+      </div>
+    );
+  };
+
+  const renderRegionResolutionNotice = () => {
+    if (!hasSearchRegionBlock && searchRegionWarnings.length === 0) return null;
+
+    return (
+      <div
+        data-testid="ranking-region-resolution"
+        className="mb-3 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+      >
+        <p className="font-semibold">
+          {searchRegionResolution?.state === "UNIVERSE_CONFLICT"
+            ? "입력한 지역이 현재 선택한 랭킹 범위와 다릅니다."
+            : searchRegionResolution?.state === "AMBIGUOUS"
+              ? "검색할 지역을 구체적으로 선택해 주세요."
+              : "지역 해석 없이 기존 검색을 사용합니다."}
+        </p>
+        {searchClarificationChoices.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {searchClarificationChoices.map((choice) => (
+              <button
+                key={choice.canonicalRegionCode}
+                type="button"
+                disabled={choice.compatibility === "INCOMPATIBLE"}
+                aria-label={`${choice.qualifiedNameKo} 지역으로 랭킹 검색어 구체화`}
+                onClick={() => setSearchQuery(choice.replacementQuery)}
+                className="rounded-lg border border-amber-300/30 px-3 py-1.5 text-left text-xs disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {choice.qualifiedNameKo}
+              </button>
+            ))}
+          </div>
         )}
       </div>
     );
@@ -1330,6 +1410,7 @@ export function RankingBoardClient({
               : "h-auto overflow-visible"
               }`}
           >
+            {renderRegionResolutionNotice()}
             {isBoardLoading && boardItems.length === 0 ? (
               <div className="flex h-32 flex-col items-center justify-center gap-2 text-slate-500">
                 <span className="text-2xl opacity-50">📡</span>

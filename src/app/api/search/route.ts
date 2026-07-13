@@ -9,6 +9,27 @@ import {
 } from "../../../lib/koaptix/universes";
 import { getLatestRankBoard } from "../../../lib/koaptix/queries";
 import { getKoaptixCurrentnessHeaders } from "../../../lib/koaptix/currentness";
+import {
+  createRegionAliasSourceUnavailableResolution,
+  resolveRegionAliasV1,
+} from "../../../lib/koaptix/regionAliasV1";
+import { getRegionAliasV1Source } from "../../../lib/koaptix/regionAliasV1.server";
+import type {
+  EffectiveRegionScope,
+  RegionAliasApiMetadata,
+  RegionResolutionResult,
+} from "../../../lib/koaptix/regionAliasV1.types";
+import {
+  LEGACY_DISCOVERY_ACCEPTANCE_SEEDS as DISCOVERY_ACCEPTANCE_SEEDS,
+  LEGACY_DISCOVERY_ACCEPTANCE_TERMS as DISCOVERY_ACCEPTANCE_TERMS,
+  LEGACY_DISCOVERY_BROAD_GENERIC_BASE_TERMS as DISCOVERY_BROAD_GENERIC_BASE_TERMS,
+  LEGACY_DISCOVERY_COMPATIBLE_UNIVERSE_CODES as DISCOVERY_COMPATIBLE_UNIVERSE_CODES,
+  LEGACY_DISCOVERY_REGION_CONTEXT_TERMS as DISCOVERY_REGION_CONTEXT_TERMS,
+  LEGACY_OPERATIONAL_MACRO_SGG_PREFIX as DISCOVERY_MACRO_SGG_PREFIX,
+  LEGACY_REGION_AUXILIARY_CANDIDATES as REGION_AUXILIARY_CANDIDATES,
+  getLegacyOperationalMacroRegionCodePrefix,
+  type LegacyDiscoveryFixtureSeed,
+} from "../../../lib/koaptix/regionAliasLegacyCompatibility";
 import type {
   DiscoveryCandidate,
   DiscoveryWarning,
@@ -102,14 +123,7 @@ type DiscoveryExternalIdRow = {
   external_id?: string | null;
 };
 
-type DiscoveryFixtureSeed = {
-  complexId: string;
-  fallbackName: string;
-  fallbackRegionLabel: string;
-  warnings: DiscoveryWarning[];
-};
-
-type DiscoverySeed = DiscoveryFixtureSeed & {
+type DiscoverySeed = LegacyDiscoveryFixtureSeed & {
   matchScore: number;
   source: "fixture" | "generic";
 };
@@ -151,97 +165,6 @@ const searchSourceCache = new Map<
   }
 >();
 const searchSourceInflight = new Map<string, Promise<RankingItem[]>>();
-
-const DISCOVERY_ACCEPTANCE_SEEDS: DiscoveryFixtureSeed[] = [
-  {
-    complexId: "168804",
-    fallbackName: "진월한국아델리움",
-    fallbackRegionLabel: "광주 남구 진월동",
-    warnings: ["SOURCE_IDENTITY_AMBIGUOUS"],
-  },
-  {
-    complexId: "168810",
-    fallbackName: "진월한국아델리움",
-    fallbackRegionLabel: "광주 남구 진월동",
-    warnings: ["SOURCE_IDENTITY_AMBIGUOUS", "AREA_HOUSEHOLD_GAP"],
-  },
-  {
-    complexId: "168815",
-    fallbackName: "진월한국아델리움",
-    fallbackRegionLabel: "광주 남구 진월동",
-    warnings: ["SOURCE_IDENTITY_AMBIGUOUS", "AREA_HOUSEHOLD_GAP"],
-  },
-];
-
-const DISCOVERY_ACCEPTANCE_TERMS = [
-  "한국아델리움",
-  "한국 아델리움",
-  "아델리움",
-  "진월한국아델리움",
-  "진월 한국아델리움",
-  "진월동한국아델리움",
-  "진월동 한국아델리움",
-  "한국아델리움1차",
-  "진월동한국아델리움1차",
-  "진월동 한국아델리움1차",
-  "진월2차한국아델리움",
-  "진월2차 한국아델리움",
-  "진월한국아델리움57",
-  "한국아델리움57",
-  "아델리움57",
-];
-
-const DISCOVERY_COMPATIBLE_UNIVERSE_CODES = new Set([
-  DEFAULT_UNIVERSE_CODE,
-  "GWANGJU_ALL",
-]);
-
-const DISCOVERY_MACRO_SGG_PREFIX: Record<string, string> = {
-  SEOUL_ALL: "11",
-  BUSAN_ALL: "26",
-  DAEGU_ALL: "27",
-  INCHEON_ALL: "28",
-  GWANGJU_ALL: "29",
-  DAEJEON_ALL: "30",
-  ULSAN_ALL: "31",
-  SEJONG_ALL: "36",
-  GYEONGGI_ALL: "41",
-  GANGWON_ALL: "42",
-  CHUNGBUK_ALL: "43",
-  CHUNGNAM_ALL: "44",
-  JEONBUK_ALL: "52",
-  JEONNAM_ALL: "46",
-  GYEONGBUK_ALL: "47",
-  GYEONGNAM_ALL: "48",
-  JEJU_ALL: "50",
-};
-
-const DISCOVERY_REGION_CONTEXT_TERMS = [
-  "광주",
-  "광주광역시",
-  "광주특별시",
-  "전남광주",
-  "전남광주통합특별시",
-  "전남",
-  "전라남도",
-  "남구",
-  "진월동",
-  "진월",
-];
-
-const DISCOVERY_BROAD_GENERIC_BASE_TERMS = new Set([
-  "새한",
-  "현대",
-  "우성",
-  "주공",
-  "자이",
-  "푸르지오",
-  "래미안",
-  "아이파크",
-  "더샵",
-  "롯데캐슬",
-  "힐스테이트",
-]);
 
 function parseLimit(value: string | null, fallback = 12, min = 5, max = 20) {
   if (!value) return fallback;
@@ -557,14 +480,23 @@ function sggPrefixForDiscoveryUniverse(universeCode: string) {
 function regionMapMatchesDiscoveryScope(
   regionMap: DiscoveryRegionMapRow | null,
   universeCode: string,
+  effectiveRegionCode: string | null = null,
 ) {
-  if (!regionMap || universeCode === DEFAULT_UNIVERSE_CODE) return true;
-
-  const scopeCode = sggPrefixForDiscoveryUniverse(universeCode);
-  if (!scopeCode) return true;
+  if (!regionMap) return false;
 
   const sggCode = normalizeSearchToken(regionMap.sgg_cd);
   const lawdCode = normalizeSearchToken(regionMap.lawd_cd);
+
+  if (effectiveRegionCode) {
+    return (
+      sggCode === effectiveRegionCode || lawdCode.startsWith(effectiveRegionCode)
+    );
+  }
+
+  if (universeCode === DEFAULT_UNIVERSE_CODE) return true;
+
+  const scopeCode = sggPrefixForDiscoveryUniverse(universeCode);
+  if (!scopeCode) return true;
 
   if (/^SGG_\d{5}$/.test(universeCode)) {
     return sggCode === scopeCode || lawdCode.startsWith(scopeCode);
@@ -811,8 +743,20 @@ function mergeDiscoverySeeds(seeds: DiscoverySeed[]) {
   );
 }
 
-function getDiscoveryFixtureSeeds(q: string, universeCode: string) {
-  if (!DISCOVERY_COMPATIBLE_UNIVERSE_CODES.has(universeCode)) return [];
+function getDiscoveryFixtureSeeds(
+  q: string,
+  universeCode: string,
+  effectiveRegionCode: string | null,
+) {
+  const selectedSggCode = /^SGG_(\d{5})$/.exec(universeCode)?.[1] ?? null;
+  const hasCompatibleCanonicalSggScope =
+    selectedSggCode !== null && effectiveRegionCode === selectedSggCode;
+  if (
+    !DISCOVERY_COMPATIBLE_UNIVERSE_CODES.has(universeCode) &&
+    !hasCompatibleCanonicalSggScope
+  ) {
+    return [];
+  }
 
   const normalizedQuery = normalizeSearchToken(q);
   if (normalizedQuery.length < 2) return [];
@@ -880,6 +824,7 @@ async function loadGenericDiscoverySeeds(
   universeCode: string,
   alreadyRankedIds: Set<string>,
   classification: SearchQueryClassification,
+  effectiveRegionCode: string | null,
 ): Promise<DiscoverySeed[]> {
   if (!universeCode) return [];
   if (!shouldLoadGenericDiscoverySeeds(classification)) return [];
@@ -994,7 +939,15 @@ async function loadGenericDiscoverySeeds(
 
       const complex = complexById.get(complexId) ?? null;
       const regionMap = regionMapById.get(complexId) ?? null;
-      if (!regionMapMatchesDiscoveryScope(regionMap, universeCode)) return null;
+      if (
+        !regionMapMatchesDiscoveryScope(
+          regionMap,
+          universeCode,
+          effectiveRegionCode,
+        )
+      ) {
+        return null;
+      }
 
       const aliases = aliasesById.get(complexId) ?? [];
       const flags = {
@@ -1056,6 +1009,7 @@ async function loadDiscoveryCandidates(
   universeCode: string,
   alreadyRankedIds: Set<string>,
   classification: SearchQueryClassification,
+  effectiveRegionScope: EffectiveRegionScope | null,
 ): Promise<DiscoveryCandidate[]> {
   if (classification.discoveryMode === "DISABLED_FOR_BROAD_NATIONAL") {
     return [];
@@ -1066,6 +1020,7 @@ async function loadDiscoveryCandidates(
     const fixtureSeeds: DiscoverySeed[] = getDiscoveryFixtureSeeds(
       q,
       universeCode,
+      effectiveRegionScope?.regionCode ?? null,
     ).map((seed) => ({
       ...seed,
       matchScore: 10_000,
@@ -1077,6 +1032,7 @@ async function loadDiscoveryCandidates(
       universeCode,
       alreadyRankedIds,
       classification,
+      effectiveRegionScope?.regionCode ?? null,
     );
     const seeds = mergeDiscoverySeeds([...fixtureSeeds, ...genericSeeds]);
     if (seeds.length === 0) return [];
@@ -1181,6 +1137,15 @@ async function loadDiscoveryCandidates(
         const complex = complexById.get(complexId) ?? null;
         const regionMap = regionMapById.get(complexId) ?? null;
         if (!complex || !regionMap) return null;
+        if (
+          !regionMapMatchesDiscoveryScope(
+            regionMap,
+            universeCode,
+            effectiveRegionScope?.regionCode ?? null,
+          )
+        ) {
+          return null;
+        }
 
         const hasRank = alreadyRankedIds.has(complexId);
         const hasDetail = detailIds.has(complexId);
@@ -1246,13 +1211,6 @@ function getSearchSourceLimit() {
   return 80;
 }
 
-type RegionAuxiliaryCandidate = {
-  universeCode: string;
-  aliases: string[];
-  broadAliases?: string[];
-  fallbackSearchTerms?: string[];
-};
-
 type RegionalNameCompanionIntent = {
   normalizedNameTerms: string[];
   normalizedLocationTerms: string[];
@@ -1265,163 +1223,6 @@ type ScoredRegionalNameCompanionItem = {
   universeIndex: number;
   sourceIndex: number;
 };
-
-const REGION_AUXILIARY_CANDIDATES: RegionAuxiliaryCandidate[] = [
-  {
-    universeCode: "SEOUL_ALL",
-    aliases: ["\uC11C\uC6B8", "\uC11C\uC6B8\uD2B9\uBCC4\uC2DC", "seoul"],
-    broadAliases: ["\uC11C\uC6B8", "\uC11C\uC6B8\uD2B9\uBCC4\uC2DC", "seoul"],
-  },
-  {
-    universeCode: "BUSAN_ALL",
-    aliases: [
-      "\uBD80\uC0B0",
-      "\uBD80\uC0B0\uAD11\uC5ED\uC2DC",
-      "\uD574\uC6B4\uB300",
-      "\uD574\uC6B4\uB300\uAD6C",
-      "\uBD80\uC0B0\uC9C4",
-      "\uBD80\uC0B0\uC9C4\uAD6C",
-      "\uC218\uC601",
-      "\uC218\uC601\uAD6C",
-      "\uB3D9\uB798",
-      "\uB3D9\uB798\uAD6C",
-      "\uC6B0\uB3D9",
-      "\uC911\uB3D9",
-      "\uC7A5\uC804\uB3D9",
-      "busan",
-      "haeundae",
-    ],
-    broadAliases: ["\uBD80\uC0B0", "\uBD80\uC0B0\uAD11\uC5ED\uC2DC", "busan"],
-  },
-  {
-    universeCode: "BUSAN_ALL",
-    aliases: ["\uB9C8\uB9B0\uC2DC\uD2F0"],
-    fallbackSearchTerms: ["\uC6B0\uB3D9", "\uD574\uC6B4\uB300"],
-  },
-  {
-    universeCode: "DAEGU_ALL",
-    aliases: [
-      "\uB300\uAD6C",
-      "\uB300\uAD6C\uAD11\uC5ED\uC2DC",
-      "\uC218\uC131",
-      "\uC218\uC131\uAD6C",
-      "\uB2EC\uC11C",
-      "\uB2EC\uC11C\uAD6C",
-      "\uBC94\uC5B4",
-      "\uBC94\uC5B4\uB3D9",
-      "daegu",
-    ],
-    broadAliases: ["\uB300\uAD6C", "\uB300\uAD6C\uAD11\uC5ED\uC2DC", "daegu"],
-  },
-  {
-    universeCode: "INCHEON_ALL",
-    aliases: [
-      "\uC778\uCC9C",
-      "\uC778\uCC9C\uAD11\uC5ED\uC2DC",
-      "\uBBF8\uCD94\uD640",
-      "\uBBF8\uCD94\uD640\uAD6C",
-      "\uC5F0\uC218",
-      "\uC5F0\uC218\uAD6C",
-      "\uBD80\uD3C9",
-      "\uBD80\uD3C9\uAD6C",
-      "\uC1A1\uB3C4",
-      "\uC1A1\uB3C4\uB3D9",
-      "\uCCAD\uB77C",
-      "incheon",
-    ],
-    broadAliases: ["\uC778\uCC9C", "\uC778\uCC9C\uAD11\uC5ED\uC2DC", "incheon"],
-  },
-  {
-    universeCode: "GWANGJU_ALL",
-    aliases: [
-      "\uAD11\uC8FC",
-      "\uAD11\uC8FC\uAD11\uC5ED\uC2DC",
-      "\uAD11\uC0B0",
-      "\uAD11\uC0B0\uAD6C",
-      "\uBD09\uC120",
-      "\uBD09\uC120\uB3D9",
-      "gwangju",
-    ],
-    broadAliases: ["\uAD11\uC8FC", "\uAD11\uC8FC\uAD11\uC5ED\uC2DC", "gwangju"],
-  },
-  {
-    universeCode: "DAEJEON_ALL",
-    aliases: [
-      "\uB300\uC804",
-      "\uB300\uC804\uAD11\uC5ED\uC2DC",
-      "\uB454\uC0B0",
-      "\uB454\uC0B0\uB3D9",
-      "\uC720\uC131",
-      "\uC720\uC131\uAD6C",
-      "daejeon",
-    ],
-    broadAliases: ["\uB300\uC804", "\uB300\uC804\uAD11\uC5ED\uC2DC", "daejeon"],
-  },
-  {
-    universeCode: "SEJONG_ALL",
-    aliases: [
-      "\uC138\uC885",
-      "\uC138\uC885\uC2DC",
-      "\uC138\uC885\uD2B9\uBCC4\uC790\uCE58\uC2DC",
-      "sejong",
-    ],
-    broadAliases: [
-      "\uC138\uC885",
-      "\uC138\uC885\uC2DC",
-      "\uC138\uC885\uD2B9\uBCC4\uC790\uCE58\uC2DC",
-      "sejong",
-    ],
-  },
-  {
-    universeCode: "GYEONGGI_ALL",
-    aliases: [
-      "\uACBD\uAE30",
-      "\uACBD\uAE30\uB3C4",
-      "\uC218\uC6D0",
-      "\uC218\uC6D0\uC2DC",
-      "\uACE0\uC591",
-      "\uACE0\uC591\uC2DC",
-      "\uC77C\uC0B0",
-      "\uC77C\uC0B0\uB3D9\uAD6C",
-      "\uC77C\uC0B0\uC11C\uAD6C",
-      "\uC131\uB0A8",
-      "\uC131\uB0A8\uC2DC",
-      "\uBD84\uB2F9",
-      "\uBD84\uB2F9\uAD6C",
-      "\uC815\uC790",
-      "\uC815\uC790\uB3D9",
-      "\uD310\uAD50",
-      "\uD310\uAD50\uB3D9",
-      "\uB9C8\uB450",
-      "\uB9C8\uB450\uB3D9",
-      "\uC6A9\uC778",
-      "\uC6A9\uC778\uC2DC",
-      "\uD654\uC131",
-      "\uD654\uC131\uC2DC",
-      "\uBD80\uCC9C",
-      "\uBD80\uCC9C\uC2DC",
-      "\uC548\uC591",
-      "\uC548\uC591\uC2DC",
-      "\uB0A8\uC591\uC8FC",
-      "\uB0A8\uC591\uC8FC\uC2DC",
-      "\uAE40\uD3EC",
-      "\uAE40\uD3EC\uC2DC",
-      "\uD30C\uC8FC",
-      "\uD30C\uC8FC\uC2DC",
-      "\uAD11\uC8FC",
-      "\uAD11\uC8FC\uC2DC",
-      "\uACBD\uAE30\uAD11\uC8FC",
-      "gyeonggi",
-      "suwon",
-      "goyang",
-    ],
-    broadAliases: ["\uACBD\uAE30", "\uACBD\uAE30\uB3C4", "gyeonggi"],
-  },
-  {
-    universeCode: "SEJONG_ALL",
-    aliases: ["\uC5B4\uC9C4", "\uC5B4\uC9C4\uB3D9"],
-  },
-];
 
 const SUPPORTED_MACRO_AUXILIARY_UNIVERSE_CODES = Array.from(
   new Set(
@@ -2510,6 +2311,44 @@ async function loadGlobalAuxiliaryItems(
   }
 }
 
+function buildRegionAliasResponseMetadata(
+  resolution: RegionResolutionResult,
+  sourceWarning: string | null,
+): RegionAliasApiMetadata {
+  return {
+    regionResolution: resolution,
+    clarificationChoices: resolution.candidateChoices,
+    selectedUniverse: resolution.selectedUniverse,
+    effectiveSearchScope: resolution.effectiveRegionScope,
+    warnings: Array.from(
+      new Set([resolution.warning, sourceWarning].filter(Boolean) as string[]),
+    ),
+  };
+}
+
+function buildRegionAliasFailClosedPayload(
+  universeCode: string,
+  limit: number,
+  metadata: RegionAliasApiMetadata,
+) {
+  return {
+    ok: true,
+    universeCode,
+    requestedUniverseCode: universeCode,
+    renderedUniverseCode: universeCode,
+    requestedLimit: limit,
+    resultCount: 0,
+    source: "empty_degraded",
+    cacheState: "bypassed",
+    fallbackMode: "same_universe_empty_degraded",
+    resultOrder: ["localItems", "globalItems"],
+    localItems: [],
+    globalItems: [],
+    discoveryCandidates: [],
+    ...metadata,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
 
@@ -2563,14 +2402,55 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const queryClassification = classifySearchQuery(q, requestedUniverseCode);
+    const regionAliasSource = await getRegionAliasV1Source();
+    const regionResolution = regionAliasSource.index
+      ? resolveRegionAliasV1(q, regionAliasSource.index, {
+          selectedUniverseCode: requestedUniverseCode,
+          macroRegionCodePrefix:
+            getLegacyOperationalMacroRegionCodePrefix(requestedUniverseCode),
+        })
+      : createRegionAliasSourceUnavailableResolution(q, requestedUniverseCode);
+    const regionAliasMetadata = buildRegionAliasResponseMetadata(
+      regionResolution,
+      regionAliasSource.warning,
+    );
+
+    if (
+      regionResolution.state === "AMBIGUOUS" ||
+      regionResolution.state === "UNIVERSE_CONFLICT" ||
+      !regionResolution.rankedSearchAllowed ||
+      !regionResolution.discoverySearchAllowed
+    ) {
+      return NextResponse.json(
+        buildRegionAliasFailClosedPayload(
+          requestedUniverseCode,
+          limit,
+          regionAliasMetadata,
+        ),
+        {
+          headers: {
+            "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL,
+            ...getKoaptixCurrentnessHeaders(),
+          },
+        },
+      );
+    }
+
+    const effectiveQuery =
+      regionResolution.effectiveRegionScope && regionResolution.residualQuery
+        ? regionResolution.residualQuery
+        : q;
+    const queryClassification = classifySearchQuery(
+      effectiveQuery,
+      requestedUniverseCode,
+    );
     const localSource = await loadSourceItems(requestedUniverseCode);
-    let matchedLocalItems = filterItemsByQuery(localSource.items, q);
+    let matchedLocalItems = filterItemsByQuery(localSource.items, effectiveQuery);
     let rankVisibleFallbackItems: RankingItem[] = [];
 
     if (matchedLocalItems.length === 0) {
       const localFallbackTerms = getRegionAuxiliaryFallbackSearchTerms(
-        q,
+        effectiveQuery,
         requestedUniverseCode,
       );
       matchedLocalItems = mergeUniqueByComplexId(
@@ -2587,7 +2467,7 @@ export async function GET(request: NextRequest) {
       try {
         rankVisibleFallbackItems = await fetchRankVisibleFallbackItems(
           requestedUniverseCode,
-          q,
+          effectiveQuery,
         );
       } catch (fallbackError) {
         console.info("[API /api/search] rank-visible fallback skipped", {
@@ -2598,18 +2478,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const localItems = mergeUniqueByComplexId([
-      ...rankVisibleFallbackItems,
-      ...matchedLocalItems,
-    ]).slice(0, limit);
-    const globalItems = await loadGlobalAuxiliaryItems(
-      q,
-      requestedUniverseCode,
-      localItems,
-      limit,
-    );
+    const suppressUnscopedKoreaRankedResults =
+      requestedUniverseCode === DEFAULT_UNIVERSE_CODE &&
+      regionResolution.effectiveRegionScope !== null;
+    const localItems = suppressUnscopedKoreaRankedResults
+      ? []
+      : mergeUniqueByComplexId([
+          ...rankVisibleFallbackItems,
+          ...matchedLocalItems,
+        ]).slice(0, limit);
+    const globalItems =
+      regionResolution.effectiveRegionScope ||
+      !regionResolution.globalFallbackAllowed
+        ? []
+        : await loadGlobalAuxiliaryItems(
+            effectiveQuery,
+            requestedUniverseCode,
+            localItems,
+            limit,
+          );
     const discoveryCandidates = await loadDiscoveryCandidates(
-      q,
+      effectiveQuery,
       requestedUniverseCode,
       new Set(
         [...localItems, ...globalItems]
@@ -2617,6 +2506,7 @@ export async function GET(request: NextRequest) {
           .filter(Boolean),
       ),
       queryClassification,
+      regionResolution.effectiveRegionScope,
     );
 
     return NextResponse.json(
@@ -2634,6 +2524,7 @@ export async function GET(request: NextRequest) {
         localItems,
         globalItems,
         discoveryCandidates,
+        ...regionAliasMetadata,
       },
       {
         headers: {

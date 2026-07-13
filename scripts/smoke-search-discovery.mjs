@@ -129,12 +129,155 @@ if (typeof fetch !== "function") {
   process.exit(1);
 }
 
+const regionAliasFixtures = [
+  {
+    id: "REGION_ALIAS_PARENT_QUALIFIED_FULL",
+    query: "광주광역시 남구 한국아델리움",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["EXACT_CANONICAL", "EXACT_QUALIFIED"],
+    expectedScope: "29155",
+    expectedResidual: "한국아델리움",
+    requiredIds: ADEL_IDS,
+  },
+  {
+    id: "REGION_ALIAS_PARENT_QUALIFIED_SHORT",
+    query: "광주 남구 한국아델리움",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["SAFE_VARIANT_UNIQUE"],
+    expectedScope: "29155",
+    expectedResidual: "한국아델리움",
+    requiredIds: ADEL_IDS,
+  },
+  {
+    id: "REGION_ALIAS_PARENT_COMPACT",
+    query: "광주남구 한국아델리움",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["SAFE_VARIANT_UNIQUE", "EXACT_QUALIFIED"],
+    expectedScope: "29155",
+    expectedResidual: "한국아델리움",
+    requiredIds: ADEL_IDS,
+  },
+  ...["남구", "중구", "동구"].map((query) => ({
+    id: `REGION_ALIAS_NATIONWIDE_AMBIGUOUS_${query}`,
+    query,
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["AMBIGUOUS"],
+    expectedRankedCount: 0,
+    expectDiscoveryCount: 0,
+  })),
+  {
+    id: "REGION_ALIAS_SGG29155_CONTEXT",
+    query: "남구 진월동 한국아델리움",
+    paramName: "universe_code",
+    universe: "SGG_29155",
+    classification: "strict-region-alias",
+    expectedStates: ["CONTEXT_UNIQUE"],
+    expectedScope: "29155",
+    expectedResidual: "진월동 한국아델리움",
+    requiredIds: ["168804", "168810"],
+    optionalIds: ["168815"],
+  },
+  {
+    id: "REGION_ALIAS_GWANGJU_MACRO_CONTEXT",
+    query: "남구 한국아델리움",
+    paramName: "universe_code",
+    universe: "GWANGJU_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["CONTEXT_UNIQUE"],
+    expectedScope: "29155",
+    expectedResidual: "한국아델리움",
+    requiredIds: ADEL_IDS,
+  },
+  {
+    id: "REGION_ALIAS_SGG29155_COMPATIBLE_ANCESTOR",
+    query: "광주광역시 한국아델리움",
+    paramName: "universe_code",
+    universe: "SGG_29155",
+    classification: "strict-region-alias",
+    expectedStates: ["EXACT_CANONICAL"],
+    expectedScope: "29155",
+    expectedResidual: "한국아델리움",
+    requiredIds: ["168804", "168810"],
+    optionalIds: ["168815"],
+  },
+  {
+    id: "REGION_ALIAS_UNIVERSE_CONFLICT",
+    query: "광주 남구",
+    paramName: "universe_code",
+    universe: "BUSAN_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["UNIVERSE_CONFLICT"],
+    expectedRankedCount: 0,
+    expectDiscoveryCount: 0,
+  },
+  {
+    id: "REGION_ALIAS_NFC_EQUIVALENCE",
+    query: "광주광역시 남구 한국아델리움".normalize("NFD"),
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["EXACT_CANONICAL", "EXACT_QUALIFIED"],
+    expectedScope: "29155",
+    expectedResidual: "한국아델리움",
+    requiredIds: ADEL_IDS,
+  },
+  {
+    id: "REGION_ALIAS_WHITESPACE_NORMALIZATION",
+    query: "  광주광역시   남구   한국아델리움  ",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["EXACT_CANONICAL", "EXACT_QUALIFIED"],
+    expectedScope: "29155",
+    expectedResidual: "한국아델리움",
+    requiredIds: ADEL_IDS,
+  },
+  {
+    id: "REGION_ALIAS_NO_FUZZY_GUARD",
+    query: "광쥬광역시 남구 한국아델리움",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["NO_REGION_RESOLUTION"],
+  },
+  {
+    id: "REGION_ALIAS_MULTIPLE_EXPLICIT_REGIONS",
+    query: "부산광역시 광주광역시 남구",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["AMBIGUOUS"],
+    expectedReason: "MULTIPLE_EXPLICIT_REGION_TOKENS",
+    expectedRankedCount: 0,
+    expectDiscoveryCount: 0,
+  },
+  {
+    id: "REGION_ALIAS_LOCALITY_WITHOUT_PARENT",
+    query: "진월동",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["NO_REGION_RESOLUTION"],
+    expectedReason: "LOCALITY_WITHOUT_DETERMINISTIC_PARENT",
+  },
+];
+
 const results = [];
 
 console.log("KOAPTIX Search Discovery Smoke");
 console.log(`base_url=${formatBaseUrlForOutput(baseUrl)}`);
 console.log(`mode=${smokeMode}`);
-console.log(`fixture_count=${singleFixtures.length + parityFixtures.length}`);
+console.log(
+  `fixture_count=${singleFixtures.length + parityFixtures.length + regionAliasFixtures.length}`,
+);
 
 for (const fixture of singleFixtures) {
   const result = await runSingleFixture(fixture);
@@ -144,6 +287,12 @@ for (const fixture of singleFixtures) {
 
 for (const fixture of parityFixtures) {
   const result = await runParityFixture(fixture);
+  results.push(result);
+  printFixtureResult(result);
+}
+
+for (const fixture of regionAliasFixtures) {
+  const result = await runSingleFixture(fixture);
   results.push(result);
   printFixtureResult(result);
 }
@@ -319,6 +468,10 @@ function normalizeSearchResponse(result) {
     discoveryCount: discoveryCandidates.length,
     discoveryIds,
     currentnessOk,
+    regionState: body.regionResolution?.state ?? null,
+    regionReason: body.regionResolution?.reasonCode ?? null,
+    regionResidual: body.regionResolution?.residualQuery ?? null,
+    effectiveRegionCode: body.effectiveSearchScope?.regionCode ?? null,
   };
 }
 
@@ -358,6 +511,65 @@ function evaluateFixture({ fixture, response }) {
 
   const transportOutcome = evaluateTransport(fixture.classification, response);
   if (transportOutcome) return { ...base, ...transportOutcome };
+
+  if (fixture.classification === "strict-region-alias") {
+    const details = [];
+    if (
+      fixture.expectedStates?.length &&
+      !fixture.expectedStates.includes(response.regionState)
+    ) {
+      details.push(
+        `expected_state=${fixture.expectedStates.join(",")};actual=${response.regionState}`,
+      );
+    }
+    if (fixture.expectedReason && response.regionReason !== fixture.expectedReason) {
+      details.push(
+        `expected_reason=${fixture.expectedReason};actual=${response.regionReason}`,
+      );
+    }
+    if (
+      fixture.expectedResidual !== undefined &&
+      response.regionResidual !== fixture.expectedResidual
+    ) {
+      details.push(
+        `expected_residual=${fixture.expectedResidual};actual=${response.regionResidual}`,
+      );
+    }
+    if (
+      fixture.expectedScope !== undefined &&
+      response.effectiveRegionCode !== fixture.expectedScope
+    ) {
+      details.push(
+        `expected_scope=${fixture.expectedScope};actual=${response.effectiveRegionCode}`,
+      );
+    }
+    if (
+      fixture.expectedRankedCount !== undefined &&
+      response.rankedCount !== fixture.expectedRankedCount
+    ) {
+      details.push(
+        `expected_ranked_count=${fixture.expectedRankedCount};actual=${response.rankedCount}`,
+      );
+    }
+    if (
+      fixture.expectDiscoveryCount !== undefined &&
+      response.discoveryCount !== fixture.expectDiscoveryCount
+    ) {
+      details.push(
+        `expected_discovery_count=${fixture.expectDiscoveryCount};actual=${response.discoveryCount}`,
+      );
+    }
+    const missingRequiredIds = getMissingIds(
+      fixture.requiredIds,
+      response.discoveryIds,
+    );
+    if (missingRequiredIds.length > 0) {
+      details.push(`missing_ids=${missingRequiredIds.join(",")}`);
+    }
+    return details.length === 0
+      ? { ...base, outcome: "PASS" }
+      : { ...base, outcome: "FAIL", details, missingRequiredIds };
+  }
 
   if (fixture.classification === "strict-negative") {
     if (response.discoveryCount === fixture.expectDiscoveryCount) {
@@ -589,6 +801,7 @@ function buildSummary(items) {
       item.classification === "strict" ||
       item.classification === "strict-partial" ||
       item.classification === "strict-negative"
+      || item.classification === "strict-region-alias"
     ) {
       summary.strictPass += 1;
     }

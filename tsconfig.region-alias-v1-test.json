@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": ".next/region-alias-v1-tests",
+    "rootDir": ".",
+    "noEmit": false,
+    "incremental": false,
+    "isolatedModules": false,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": [
+    "src/lib/koaptix/regionAliasV1.types.ts",
+    "src/lib/koaptix/regionAliasV1.ts",
+    "tests/regionAliasV1.test.ts"
+  ]
+}

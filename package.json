@@ -9,6 +9,7 @@
     "smoke:regional": "node scripts/smoke-regional-identity.mjs",
     "smoke:browser": "node scripts/smoke-browser-regional-identity.mjs",
     "smoke:search-discovery": "node scripts/smoke-search-discovery.mjs",
+    "test:region-alias-v1": "node -e \"const fs=require('fs'),cp=require('child_process'),out='.next/region-alias-v1-tests';fs.rmSync(out,{recursive:true,force:true});let code=cp.spawnSync(process.execPath,[require.resolve('typescript/bin/tsc'),'-p','tsconfig.region-alias-v1-test.json'],{stdio:'inherit'}).status??1;if(code===0)code=cp.spawnSync(process.execPath,['--test',out+'/tests/regionAliasV1.test.js'],{stdio:'inherit'}).status??1;fs.rmSync(out,{recursive:true,force:true});process.exit(code)\"",
     "audit:sgg": "node scripts/audit-sgg-readiness.mjs",
     "diagnose:sgg-direct": "node scripts/diagnose-sgg-direct-read.mjs",
     "gate:sgg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sgg-release-gate.ps1",

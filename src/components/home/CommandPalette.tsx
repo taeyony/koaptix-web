@@ -7,6 +7,11 @@ import type {
   DiscoveryWarning,
   RankingItem,
 } from "../../lib/koaptix/types";
+import type {
+  RegionAliasApiMetadata,
+  RegionClarificationChoice,
+  RegionResolutionResult,
+} from "../../lib/koaptix/regionAliasV1.types";
 import { BetaDisclosure } from "./BetaDisclosure";
 import {
   DEFAULT_UNIVERSE_CODE,
@@ -20,7 +25,7 @@ interface CommandPaletteProps {
   initialUniverseCode?: string;
 }
 
-type SearchApiResponse = {
+type SearchApiResponse = RegionAliasApiMetadata & {
   ok?: boolean;
   universeCode?: string;
   localItems?: RankingItem[];
@@ -33,6 +38,9 @@ type SearchResultPayload = {
   localItems: RankingItem[];
   globalItems: RankingItem[];
   discoveryCandidates: DiscoveryCandidate[];
+  regionResolution: RegionResolutionResult | null;
+  clarificationChoices: RegionClarificationChoice[];
+  warnings: string[];
 };
 
 type RegionSearchResult = {
@@ -230,6 +238,9 @@ async function readSearchResult(
     localItems: json.localItems ?? [],
     globalItems: json.globalItems ?? [],
     discoveryCandidates: json.discoveryCandidates ?? [],
+    regionResolution: json.regionResolution ?? null,
+    clarificationChoices: json.clarificationChoices ?? [],
+    warnings: json.warnings ?? [],
   };
 }
 
@@ -254,6 +265,12 @@ export function CommandPalette({
   >([]);
   const [selectedDiscoveryCandidate, setSelectedDiscoveryCandidate] =
     useState<DiscoveryCandidate | null>(null);
+  const [regionResolution, setRegionResolution] =
+    useState<RegionResolutionResult | null>(null);
+  const [clarificationChoices, setClarificationChoices] = useState<
+    RegionClarificationChoice[]
+  >([]);
+  const [regionWarnings, setRegionWarnings] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
@@ -384,6 +401,9 @@ export function CommandPalette({
       setGlobalItems([]);
       setDiscoveryCandidates([]);
       setSelectedDiscoveryCandidate(null);
+      setRegionResolution(null);
+      setClarificationChoices([]);
+      setRegionWarnings([]);
       setSearchError(null);
       setIsSearching(false);
       return;
@@ -395,6 +415,9 @@ export function CommandPalette({
       setLocalItems(cached.localItems);
       setGlobalItems(cached.globalItems);
       setDiscoveryCandidates(cached.discoveryCandidates);
+      setRegionResolution(cached.regionResolution);
+      setClarificationChoices(cached.clarificationChoices);
+      setRegionWarnings(cached.warnings);
       setSelectedDiscoveryCandidate(null);
       setSearchError(null);
       setIsSearching(false);
@@ -429,6 +452,9 @@ export function CommandPalette({
       setLocalItems(next.localItems);
       setGlobalItems(next.globalItems);
       setDiscoveryCandidates(next.discoveryCandidates);
+      setRegionResolution(next.regionResolution);
+      setClarificationChoices(next.clarificationChoices);
+      setRegionWarnings(next.warnings);
       setSelectedDiscoveryCandidate(null);
     } catch (error) {
       if (!timedOut && (controller.signal.aborted || cancelled)) return;
@@ -457,6 +483,9 @@ export function CommandPalette({
       setGlobalItems([]);
       setDiscoveryCandidates([]);
       setSelectedDiscoveryCandidate(null);
+      setRegionResolution(null);
+      setClarificationChoices([]);
+      setRegionWarnings([]);
     } finally {
       if (fetchTimeoutId !== undefined) window.clearTimeout(fetchTimeoutId);
       if (!cancelled) {
@@ -550,6 +579,19 @@ export function CommandPalette({
     },
     [],
   );
+
+  const handleSelectClarification = useCallback(
+    (choice: RegionClarificationChoice) => {
+      if (choice.compatibility === "INCOMPATIBLE") return;
+      setQuery(choice.replacementQuery);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+    [],
+  );
+
+  const hasRegionResolutionBlock =
+    regionResolution?.state === "AMBIGUOUS" ||
+    regionResolution?.state === "UNIVERSE_CONFLICT";
 
   const getDiscoveryWarningLabel = (warning: DiscoveryWarning) => {
     if (warning === "SOURCE_IDENTITY_AMBIGUOUS") return "원천 연결 추가 확인";
@@ -765,7 +807,10 @@ export function CommandPalette({
                 </div>
               )}
 
-              {query.trim().length >= 2 && regionSearchResults.length > 0 && (
+              {query.trim().length >= 2 &&
+                regionSearchResults.length > 0 &&
+                !isSearching &&
+                !hasRegionResolutionBlock && (
                 <div className="mb-4">
                   <div className="mb-3 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-emerald-300/80">
                     <span>지역 바로가기</span>
@@ -776,6 +821,38 @@ export function CommandPalette({
                   </div>
                 </div>
               )}
+
+              {query.trim().length >= 2 &&
+                (hasRegionResolutionBlock || regionWarnings.length > 0) && (
+                  <div
+                    data-testid="command-palette-region-resolution"
+                    className="mb-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+                  >
+                    <p className="font-semibold">
+                      {regionResolution?.state === "UNIVERSE_CONFLICT"
+                        ? "입력한 지역이 현재 선택한 검색 범위와 다릅니다."
+                        : regionResolution?.state === "AMBIGUOUS"
+                          ? "어느 지역인지 한 번 더 선택해 주세요."
+                          : "지역 해석 없이 기존 검색 결과를 표시합니다."}
+                    </p>
+                    {clarificationChoices.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {clarificationChoices.map((choice) => (
+                          <button
+                            key={choice.canonicalRegionCode}
+                            type="button"
+                            disabled={choice.compatibility === "INCOMPATIBLE"}
+                            aria-label={`${choice.qualifiedNameKo} 지역으로 검색어 구체화`}
+                            onClick={() => handleSelectClarification(choice)}
+                            className="rounded-lg border border-amber-300/30 px-3 py-1.5 text-left text-xs text-amber-50 transition hover:bg-amber-300/10 disabled:cursor-not-allowed disabled:opacity-45"
+                          >
+                            {choice.qualifiedNameKo}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
               {isSearching ? (
                 <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
