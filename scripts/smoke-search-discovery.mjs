@@ -11,6 +11,7 @@
 const DEFAULT_BASE_URL = "https://www.koaptix.com";
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_LIMIT = 12;
+const LOCAL_REQUEST_DELAY_MS = 250;
 
 const rawBaseUrl = process.env.KOAPTIX_SMOKE_BASE_URL || DEFAULT_BASE_URL;
 const timeoutMs = readPositiveIntEnv(
@@ -270,13 +271,100 @@ const regionAliasFixtures = [
   },
 ];
 
+const fallbackDiscoveryFixtures = [
+  {
+    id: "FALLBACK_DISCOVERY_SEOUL_JUNGGU_10511",
+    query: "서울특별시 중구 늘해랑주택",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-fallback-discovery",
+    expectedScope: "11140",
+    expectedComplexId: "10511",
+    expectedRegionEvidence: "APT_COMPLEX_REGION_FALLBACK",
+    expectedRegionLabelTerm: "중구",
+    expectedHasRegionMap: false,
+  },
+  {
+    id: "FALLBACK_DISCOVERY_BUSAN_GANGSEO_126703",
+    query: "부산광역시 강서구 행복빌라",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-fallback-discovery",
+    expectedScope: "26440",
+    expectedComplexId: "126703",
+    expectedRegionEvidence: "APT_COMPLEX_REGION_FALLBACK",
+    expectedRegionLabelTerm: "강서구",
+    expectedHasRegionMap: false,
+  },
+  {
+    id: "FALLBACK_DISCOVERY_GYEONGGI_YEONCHEON_262677",
+    query: "경기도 연천군 형제주택(2층)",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-fallback-discovery",
+    expectedScope: "41800",
+    expectedComplexId: "262677",
+    expectedRegionEvidence: "APT_COMPLEX_REGION_FALLBACK",
+    expectedRegionLabelTerm: "연천군",
+    expectedHasRegionMap: false,
+  },
+  {
+    id: "FALLBACK_DISCOVERY_JEONNAM_SINAN_278060",
+    query: "전라남도 신안군 압해팰리스파크",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-fallback-discovery",
+    expectedScope: "46910",
+    expectedComplexId: "278060",
+    expectedRegionEvidence: "APT_COMPLEX_REGION_FALLBACK",
+    expectedRegionLabelTerm: "신안군",
+    expectedHasRegionMap: false,
+  },
+  {
+    id: "FALLBACK_DISCOVERY_GYEONGBUK_ULLEUNG_287224",
+    query: "경상북도 울릉군 드림팔래스",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-fallback-discovery",
+    expectedScope: "47940",
+    expectedComplexId: "287224",
+    expectedRegionEvidence: "APT_COMPLEX_REGION_FALLBACK",
+    expectedRegionLabelTerm: "울릉군",
+    expectedHasRegionMap: false,
+  },
+  {
+    id: "FALLBACK_DISCOVERY_JEJU_SEOGWIPO_302345",
+    query: "제주특별자치도 서귀포시 상지카일룸까사J동",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-fallback-discovery",
+    expectedScope: "50130",
+    expectedComplexId: "302345",
+    expectedRegionEvidence: "APT_COMPLEX_REGION_FALLBACK",
+    expectedRegionLabelTerm: "서귀포시",
+    expectedHasRegionMap: false,
+  },
+  {
+    id: "FALLBACK_DISCOVERY_MAP_CONTROL_GANGNEUNG_303421",
+    query: "강원특별자치도 강릉시 우산",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-fallback-discovery",
+    expectedScope: "51150",
+    expectedComplexId: "303421",
+    expectedRegionEvidence: "REGION_MAP",
+    expectedRegionLabelTerm: "강릉시",
+    expectedHasRegionMap: true,
+  },
+];
+
 const results = [];
 
 console.log("KOAPTIX Search Discovery Smoke");
 console.log(`base_url=${formatBaseUrlForOutput(baseUrl)}`);
 console.log(`mode=${smokeMode}`);
 console.log(
-  `fixture_count=${singleFixtures.length + parityFixtures.length + regionAliasFixtures.length}`,
+  `fixture_count=${singleFixtures.length + parityFixtures.length + regionAliasFixtures.length + fallbackDiscoveryFixtures.length}`,
 );
 
 for (const fixture of singleFixtures) {
@@ -292,6 +380,12 @@ for (const fixture of parityFixtures) {
 }
 
 for (const fixture of regionAliasFixtures) {
+  const result = await runSingleFixture(fixture);
+  results.push(result);
+  printFixtureResult(result);
+}
+
+for (const fixture of fallbackDiscoveryFixtures) {
   const result = await runSingleFixture(fixture);
   results.push(result);
   printFixtureResult(result);
@@ -441,6 +535,9 @@ async function fetchSearch({ fixtureId, query, paramName, universe }) {
     };
   } finally {
     clearTimeout(timer);
+    if (smokeMode === "local") {
+      await new Promise((resolve) => setTimeout(resolve, LOCAL_REQUEST_DELAY_MS));
+    }
   }
 }
 
@@ -455,6 +552,24 @@ function normalizeSearchResponse(result) {
   const discoveryIds = uniqueStrings(
     discoveryCandidates.map(extractDiscoveryId).filter(Boolean),
   );
+  const rankedIds = uniqueStrings(
+    [...localItems, ...globalItems, ...results, ...items]
+      .map(extractComplexId)
+      .filter(Boolean),
+  );
+  const discoveryDetails = discoveryCandidates.map((candidate) => ({
+    complexId: extractDiscoveryId(candidate),
+    regionEvidence:
+      candidate && typeof candidate === "object"
+        ? candidate.regionEvidence ?? null
+        : null,
+    regionLabel:
+      candidate && typeof candidate === "object"
+        ? String(candidate.regionLabel ?? "")
+        : "",
+    hasRegionMap: Boolean(candidate?.evidenceFlags?.hasRegionMap),
+    inventedFields: getInventedDiscoveryFields(candidate),
+  }));
 
   const currentnessOk =
     smokeMode !== "production" ||
@@ -467,6 +582,8 @@ function normalizeSearchResponse(result) {
     rankedCount: localItems.length + globalItems.length + results.length + items.length,
     discoveryCount: discoveryCandidates.length,
     discoveryIds,
+    discoveryDetails,
+    rankedIds,
     currentnessOk,
     regionState: body.regionResolution?.state ?? null,
     regionReason: body.regionResolution?.reasonCode ?? null,
@@ -493,6 +610,29 @@ function extractDiscoveryId(item) {
   return String(raw).trim();
 }
 
+function extractComplexId(item) {
+  if (!item || typeof item !== "object") return "";
+  return String(item.complexId ?? item.complex_id ?? item.id ?? "").trim();
+}
+
+function getInventedDiscoveryFields(item) {
+  if (!item || typeof item !== "object") return [];
+  return [
+    "rank",
+    "rankAll",
+    "rank_all",
+    "tier",
+    "tierBadges",
+    "marketCapKrw",
+    "market_cap_krw",
+    "rankDelta7d",
+    "rank_delta_w",
+    "chartData",
+    "chartReady",
+    "boardReady",
+  ].filter((field) => item[field] !== undefined && item[field] !== null);
+}
+
 function uniqueStrings(values) {
   return Array.from(new Set(values.map((value) => String(value).trim()).filter(Boolean)));
 }
@@ -511,6 +651,52 @@ function evaluateFixture({ fixture, response }) {
 
   const transportOutcome = evaluateTransport(fixture.classification, response);
   if (transportOutcome) return { ...base, ...transportOutcome };
+
+  if (fixture.classification === "strict-fallback-discovery") {
+    const details = [];
+    const candidate = response.discoveryDetails.find(
+      (row) => row.complexId === fixture.expectedComplexId,
+    );
+    if (!candidate) details.push(`missing_discovery_id=${fixture.expectedComplexId}`);
+    if (response.rankedIds.includes(fixture.expectedComplexId)) {
+      details.push(`unexpected_ranked_id=${fixture.expectedComplexId}`);
+    }
+    if (response.effectiveRegionCode !== fixture.expectedScope) {
+      details.push(
+        `expected_scope=${fixture.expectedScope};actual=${response.effectiveRegionCode}`,
+      );
+    }
+    if (candidate?.regionEvidence !== fixture.expectedRegionEvidence) {
+      details.push(
+        `expected_region_evidence=${fixture.expectedRegionEvidence};actual=${candidate?.regionEvidence ?? "missing"}`,
+      );
+    }
+    if (
+      candidate &&
+      candidate.hasRegionMap !== fixture.expectedHasRegionMap
+    ) {
+      details.push(
+        `expected_has_region_map=${fixture.expectedHasRegionMap};actual=${candidate.hasRegionMap}`,
+      );
+    }
+    if (
+      candidate &&
+      !candidate.regionLabel.includes(fixture.expectedRegionLabelTerm)
+    ) {
+      details.push(`region_label_missing=${fixture.expectedRegionLabelTerm}`);
+    }
+    if (candidate?.inventedFields.length) {
+      details.push(`invented_fields=${candidate.inventedFields.join(",")}`);
+    }
+    return details.length === 0
+      ? { ...base, outcome: "PASS" }
+      : {
+          ...base,
+          outcome: "FAIL",
+          details,
+          missingRequiredIds: candidate ? [] : [fixture.expectedComplexId],
+        };
+  }
 
   if (fixture.classification === "strict-region-alias") {
     const details = [];
@@ -802,6 +988,7 @@ function buildSummary(items) {
       item.classification === "strict-partial" ||
       item.classification === "strict-negative"
       || item.classification === "strict-region-alias"
+      || item.classification === "strict-fallback-discovery"
     ) {
       summary.strictPass += 1;
     }

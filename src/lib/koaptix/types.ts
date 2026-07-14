@@ -1,3 +1,5 @@
+import type { DiscoveryRegionEvidenceSource } from "./discoverySearch";
+
 export type NullableNumberLike = number | string | null;
 
 export type WeeklyDeltaWindow = "7d";
@@ -91,6 +93,7 @@ export type DiscoveryCandidate = {
   regionLabel: string;
   sigunguName?: string | null;
   umdName?: string | null;
+  regionEvidence?: DiscoveryRegionEvidenceSource;
   discoveryStatus: DiscoveryStatus;
   evidenceFlags: {
     hasComplex: boolean;

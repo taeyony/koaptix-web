@@ -607,7 +607,11 @@ export function CommandPalette({
       selectedDiscoveryCandidate?.discoveryId === candidate.discoveryId;
     const evidenceLabels = [
       candidate.evidenceFlags.hasComplex ? "단지명 확인" : null,
-      candidate.evidenceFlags.hasRegionMap ? "지역 확인" : null,
+      candidate.regionEvidence === "APT_COMPLEX_REGION_FALLBACK"
+        ? "기본 지역 확인"
+        : candidate.evidenceFlags.hasRegionMap
+          ? "지역 확인"
+          : null,
       candidate.evidenceFlags.hasAlias ? "별칭 확인" : null,
       candidate.evidenceFlags.hasExternalId ? "외부 ID 확인" : null,
     ].filter((label): label is string => Boolean(label));

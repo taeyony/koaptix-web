@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": ".next/discovery-search-tests",
+    "rootDir": ".",
+    "noEmit": false,
+    "incremental": false,
+    "isolatedModules": false,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": [
+    "src/lib/koaptix/discoverySearch.ts",
+    "src/lib/koaptix/discoverySearch.server.ts",
+    "tests/discoverySearch.test.ts",
+    "tests/searchDiscoveryRouteContract.test.ts"
+  ]
+}

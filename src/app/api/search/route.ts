@@ -20,6 +20,17 @@ import type {
   RegionResolutionResult,
 } from "../../../lib/koaptix/regionAliasV1.types";
 import {
+  DISCOVERY_REGION_FALLBACK_CANDIDATE_CAP,
+  dedupeDiscoveryByComplexId,
+  getDiscoveryRegionEvidencePriority,
+  getMissingDiscoveryRegionComplexIds,
+  isDiscoveryOnlyEligible,
+  mergeDiscoveryRegionEvidence,
+  prioritizeExistingFullExactDiscoveryTerm,
+  type DiscoveryRegionEvidence,
+} from "../../../lib/koaptix/discoverySearch";
+import { hydrateDiscoveryRegionFallbacks } from "../../../lib/koaptix/discoverySearch.server";
+import {
   LEGACY_DISCOVERY_ACCEPTANCE_SEEDS as DISCOVERY_ACCEPTANCE_SEEDS,
   LEGACY_DISCOVERY_ACCEPTANCE_TERMS as DISCOVERY_ACCEPTANCE_TERMS,
   LEGACY_DISCOVERY_BROAD_GENERIC_BASE_TERMS as DISCOVERY_BROAD_GENERIC_BASE_TERMS,
@@ -126,6 +137,7 @@ type DiscoveryExternalIdRow = {
 type DiscoverySeed = LegacyDiscoveryFixtureSeed & {
   matchScore: number;
   source: "fixture" | "generic";
+  regionEvidence?: DiscoveryRegionEvidence;
 };
 
 type DiscoveryMatchAssessment = {
@@ -205,6 +217,43 @@ function keyRowsByComplexId<T extends { complex_id?: number | string | null }>(
     }
   }
   return result;
+}
+
+function toDiscoveryRegionMapEvidence(
+  row: DiscoveryRegionMapRow,
+): DiscoveryRegionEvidence | null {
+  const complexId = String(row.complex_id ?? "").trim();
+  if (!complexId) return null;
+
+  const lawdCode = String(row.lawd_cd ?? "").trim() || null;
+  const sggCode = String(row.sgg_cd ?? "").trim() || null;
+  const sigunguName = String(row.sigungu_name ?? "").trim() || null;
+  const umdName = String(row.umd_nm ?? "").trim() || null;
+
+  return {
+    complexId,
+    regionCode: sggCode ?? lawdCode?.slice(0, 5) ?? null,
+    lawdCode,
+    sggCode,
+    sigunguName,
+    umdName,
+    qualifiedRegionName: sigunguName,
+    source: "REGION_MAP",
+  };
+}
+
+function toDiscoveryRegionMapRow(
+  evidence: DiscoveryRegionEvidence | null,
+): DiscoveryRegionMapRow | null {
+  if (!evidence) return null;
+
+  return {
+    complex_id: evidence.complexId,
+    lawd_cd: evidence.lawdCode ?? evidence.regionCode,
+    sgg_cd: evidence.sggCode ?? evidence.regionCode,
+    sigungu_name: evidence.sigunguName,
+    umd_nm: evidence.umdName,
+  };
 }
 
 function groupRowsByComplexId<T extends { complex_id?: number | string | null }>(
@@ -450,7 +499,7 @@ function getDiscoveryNameSourceLimit(classification: SearchQueryClassification) 
   if (classification.discoveryMode === "DISABLED_FOR_BROAD_NATIONAL") return 0;
   if (classification.isContextRichIntent) return SEARCH_DISCOVERY_NAME_SOURCE_LIMIT;
   if (classification.discoveryMode === "SCOPED_ONLY") return 32;
-  return 48;
+  return DISCOVERY_REGION_FALLBACK_CANDIDATE_CAP;
 }
 
 function getDiscoveryRegionSourceLimit(classification: SearchQueryClassification) {
@@ -463,7 +512,10 @@ function getDiscoveryRegionSourceLimit(classification: SearchQueryClassification
 function getDiscoveryHydrationLimit(classification: SearchQueryClassification) {
   if (classification.discoveryMode === "DISABLED_FOR_BROAD_NATIONAL") return 0;
   if (classification.isContextRichIntent) {
-    return Math.min(48, SEARCH_DISCOVERY_HYDRATION_LIMIT);
+    return Math.min(
+      DISCOVERY_REGION_FALLBACK_CANDIDATE_CAP,
+      SEARCH_DISCOVERY_HYDRATION_LIMIT,
+    );
   }
   if (classification.discoveryMode === "SCOPED_ONLY") {
     return Math.min(32, SEARCH_DISCOVERY_HYDRATION_LIMIT);
@@ -558,6 +610,7 @@ function assessDiscoveryCandidate(
   complex: DiscoveryAptComplexRow | null,
   regionMap: DiscoveryRegionMapRow | null,
   aliases: DiscoveryAliasRow[],
+  effectiveRegionCode: string | null,
   flags: {
     hasAlias: boolean;
     hasExternalId: boolean;
@@ -578,7 +631,16 @@ function assessDiscoveryCandidate(
   const nameMatch = scoreDiscoveryNameMatch(q, complex, aliases);
   if (!nameMatch.matched) return { passes: false, score: 0, warnings: [] };
 
-  const hasRegionContext = hasStrongDiscoveryContext(q, regionMap);
+  const hasRegionContext =
+    hasStrongDiscoveryContext(q, regionMap) ||
+    Boolean(
+      effectiveRegionCode &&
+        regionMapMatchesDiscoveryScope(
+          regionMap,
+          DEFAULT_UNIVERSE_CODE,
+          effectiveRegionCode,
+        ),
+    );
   const normalizedQuery = normalizeSearchToken(q);
   const broadNameOnly = normalizedQuery.length <= 4 && !hasRegionContext;
   const downstreamEvidence =
@@ -632,7 +694,10 @@ async function fetchDiscoveryCandidateIds(
   const candidateIds = new Set<string>();
   const nameCandidateIds = new Set<string>();
   const locationCandidateIds = new Set<string>();
-  const nameTerms = getDiscoveryNameTerms(q);
+  const nameTerms = prioritizeExistingFullExactDiscoveryTerm(
+    getDiscoveryNameTerms(q),
+    q,
+  );
   const locationTerms = getDiscoveryLocationTerms(q);
   const nameSourceLimit = getDiscoveryNameSourceLimit(classification);
   const regionSourceLimit = getDiscoveryRegionSourceLimit(classification);
@@ -739,7 +804,11 @@ function mergeDiscoverySeeds(seeds: DiscoverySeed[]) {
   }
 
   return Array.from(byId.values()).sort(
-    (a, b) => b.matchScore - a.matchScore || a.complexId.localeCompare(b.complexId),
+    (a, b) =>
+      b.matchScore - a.matchScore ||
+      getDiscoveryRegionEvidencePriority(a.regionEvidence?.source) -
+        getDiscoveryRegionEvidencePriority(b.regionEvidence?.source) ||
+      a.complexId.localeCompare(b.complexId),
   );
 }
 
@@ -924,6 +993,35 @@ async function loadGenericDiscoverySeeds(
   const regionMapById = keyRowsByComplexId(
     (regionMapResult.data ?? []) as DiscoveryRegionMapRow[],
   );
+  const mapEvidence = ((regionMapResult.data ?? []) as DiscoveryRegionMapRow[])
+    .map(toDiscoveryRegionMapEvidence)
+    .filter((row): row is DiscoveryRegionEvidence => row !== null);
+  const missingRegionIds = getMissingDiscoveryRegionComplexIds(
+    candidateIds,
+    mapEvidence,
+  );
+  const fallbackHydration = await hydrateDiscoveryRegionFallbacks(
+    supabase,
+    missingRegionIds,
+  );
+  if (fallbackHydration.failure) {
+    console.info("[API /api/search] discovery region fallback skipped", {
+      failure: fallbackHydration.failure,
+      candidateCount: missingRegionIds.length,
+    });
+  } else if (
+    missingRegionIds.length > 0 &&
+    fallbackHydration.evidence.length === 0
+  ) {
+    console.info("[API /api/search] discovery region fallback unresolved", {
+      candidateCount: missingRegionIds.length,
+    });
+  }
+  const resolvedRegionById = mergeDiscoveryRegionEvidence(
+    candidateIds,
+    mapEvidence,
+    fallbackHydration.evidence,
+  );
   const aliasesById = groupRowsByComplexId(
     (aliasResult.data ?? []) as DiscoveryAliasRow[],
   );
@@ -938,7 +1036,8 @@ async function loadGenericDiscoverySeeds(
       if (alreadyRankedIds.has(complexId)) return null;
 
       const complex = complexById.get(complexId) ?? null;
-      const regionMap = regionMapById.get(complexId) ?? null;
+      const regionEvidence = resolvedRegionById.get(complexId) ?? null;
+      const regionMap = toDiscoveryRegionMapRow(regionEvidence);
       if (
         !regionMapMatchesDiscoveryScope(
           regionMap,
@@ -967,10 +1066,20 @@ async function loadGenericDiscoverySeeds(
         complex,
         regionMap,
         aliases,
+        effectiveRegionCode,
         flags,
       );
 
-      if (!assessment.passes || !complex || !regionMap) return null;
+      if (!assessment.passes || !complex || !regionMap) {
+        if (regionEvidence?.source === "APT_COMPLEX_REGION_FALLBACK") {
+          console.info("[API /api/search] discovery fallback assessment excluded", {
+            score: assessment.score,
+            hasLatestBoard: flags.hasLatestBoard,
+            hasDetail: flags.hasDetail,
+          });
+        }
+        return null;
+      }
 
       const regionLabel =
         [regionMap.sigungu_name ?? null, regionMap.umd_nm ?? null]
@@ -984,6 +1093,7 @@ async function loadGenericDiscoverySeeds(
         warnings: assessment.warnings,
         matchScore: assessment.score,
         source: "generic",
+        regionEvidence: regionEvidence ?? undefined,
       };
     })
     .filter((seed): seed is DiscoverySeed => seed !== null)
@@ -1108,6 +1218,19 @@ async function loadDiscoveryCandidates(
     const regionMapById = keyRowsByComplexId(
       (regionMapResult.data ?? []) as DiscoveryRegionMapRow[],
     );
+    const mapEvidence = ((regionMapResult.data ?? []) as DiscoveryRegionMapRow[])
+      .map(toDiscoveryRegionMapEvidence)
+      .filter((row): row is DiscoveryRegionEvidence => row !== null);
+    const resolvedRegionById = mergeDiscoveryRegionEvidence(
+      candidateIds,
+      mapEvidence,
+      seeds
+        .map((seed) => seed.regionEvidence ?? null)
+        .filter(
+          (row): row is DiscoveryRegionEvidence =>
+            row?.source === "APT_COMPLEX_REGION_FALLBACK",
+        ),
+    );
     const aliasIds = complexIdSetFromRows(
       (aliasResult.data ?? []) as DiscoveryAliasRow[],
     );
@@ -1129,13 +1252,14 @@ async function loadDiscoveryCandidates(
       });
     }
 
-    return seeds
+    return dedupeDiscoveryByComplexId(
+      seeds
       .map((seed): DiscoveryCandidate | null => {
         const complexId = seed.complexId;
-        if (alreadyRankedIds.has(complexId)) return null;
 
         const complex = complexById.get(complexId) ?? null;
-        const regionMap = regionMapById.get(complexId) ?? null;
+        const regionEvidence = resolvedRegionById.get(complexId) ?? null;
+        const regionMap = toDiscoveryRegionMapRow(regionEvidence);
         if (!complex || !regionMap) return null;
         if (
           !regionMapMatchesDiscoveryScope(
@@ -1150,7 +1274,23 @@ async function loadDiscoveryCandidates(
         const hasRank = alreadyRankedIds.has(complexId);
         const hasDetail = detailIds.has(complexId);
         const hasLatestBoard = latestBoardIds.has(complexId);
-        if (hasRank || hasLatestBoard || hasDetail) return null;
+        if (
+          !isDiscoveryOnlyEligible(
+            complexId,
+            alreadyRankedIds,
+            latestBoardIds,
+            detailIds,
+          )
+        ) {
+          if (regionEvidence?.source === "APT_COMPLEX_REGION_FALLBACK") {
+            console.info("[API /api/search] discovery fallback partition excluded", {
+              hasRank,
+              hasLatestBoard,
+              hasDetail,
+            });
+          }
+          return null;
+        }
 
         const sigunguName = regionMap.sigungu_name ?? null;
         const umdName = regionMap.umd_nm ?? null;
@@ -1166,12 +1306,13 @@ async function loadDiscoveryCandidates(
           regionLabel,
           sigunguName,
           umdName,
+          regionEvidence: regionEvidence?.source,
           discoveryStatus: "OBSERVATION_READY",
           evidenceFlags: {
             hasComplex: true,
             hasAlias: aliasIds.has(complexId),
             hasExternalId: externalIdIds.has(complexId),
-            hasRegionMap: true,
+            hasRegionMap: regionEvidence?.source === "REGION_MAP",
             hasAreaHousehold: areaHouseholdIds.has(complexId),
             hasTradeClean: tradeCleanIds.has(complexId),
             hasPriceSnapshot: priceSnapshotIds.has(complexId),
@@ -1192,7 +1333,9 @@ async function loadDiscoveryCandidates(
           },
         };
       })
-      .filter((candidate): candidate is DiscoveryCandidate => candidate !== null)
+      .filter((candidate): candidate is DiscoveryCandidate => candidate !== null),
+      alreadyRankedIds,
+    )
       .slice(0, SEARCH_DISCOVERY_CANDIDATE_LIMIT);
   } catch (error) {
     console.info("[API /api/search] discovery candidates skipped", {
@@ -2441,7 +2584,7 @@ export async function GET(request: NextRequest) {
         ? regionResolution.residualQuery
         : q;
     const queryClassification = classifySearchQuery(
-      effectiveQuery,
+      regionResolution.effectiveRegionScope ? q.normalize("NFC") : effectiveQuery,
       requestedUniverseCode,
     );
     const localSource = await loadSourceItems(requestedUniverseCode);
