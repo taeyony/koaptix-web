@@ -15,6 +15,11 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.sh text eol=lf
+tooling/koaptix/wp02_o01_validation/run_validation.py text eol=lf
+tooling/koaptix/wp02_o01_validation/fixtures.json text eol=lf
+tooling/koaptix/wp02_o01_validation/metadata_queries.sql text eol=lf
+tooling/koaptix/wp02_o01_validation/result_schema.json text eol=lf
+tooling/koaptix/wp02_o01_validation/artifact_safety.py text eol=lf
 
 *.bat text eol=crlf
 *.cmd text eol=crlf
