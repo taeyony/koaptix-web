@@ -1,0 +1,2561 @@
+{
+  "schema_version": 1,
+  "migration_sha256": "0E89D75A6ED437A64FA9DD7BFF62CD32DF246F0C29DA38FAA2CD49CD60C047A6",
+  "positive_fixtures": [
+    {
+      "fixture_id": "POS-001",
+      "category": "POSITIVE",
+      "description": "Minimal accepted synthetic row",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "minimal"
+      ]
+    },
+    {
+      "fixture_id": "POS-002",
+      "category": "POSITIVE",
+      "description": "Maximum 64-character code family",
+      "input": {
+        "code_family": {
+          "kind": "repeat",
+          "character": "A",
+          "count": 64
+        },
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "code_family",
+        "maximum"
+      ]
+    },
+    {
+      "fixture_id": "POS-003",
+      "category": "POSITIVE",
+      "description": "Maximum 64-character code",
+      "input": {
+        "code_family": "A",
+        "code": {
+          "kind": "repeat",
+          "character": "B",
+          "count": 64
+        },
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "code",
+        "maximum"
+      ]
+    },
+    {
+      "fixture_id": "POS-004",
+      "category": "POSITIVE",
+      "description": "Code permits an underscore after the first character",
+      "input": {
+        "code_family": "A",
+        "code": "A_",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "code",
+        "underscore"
+      ]
+    },
+    {
+      "fixture_id": "POS-005",
+      "category": "POSITIVE",
+      "description": "Code permits consecutive underscores",
+      "input": {
+        "code_family": "A",
+        "code": "A__B",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "code",
+        "underscore"
+      ]
+    },
+    {
+      "fixture_id": "POS-006",
+      "category": "POSITIVE",
+      "description": "Code permits digits after the first character",
+      "input": {
+        "code_family": "A",
+        "code": "A123",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "code",
+        "digits"
+      ]
+    },
+    {
+      "fixture_id": "POS-007",
+      "category": "POSITIVE",
+      "description": "Label permits deterministic Korean text",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "가상 표시명",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "label",
+        "unicode"
+      ]
+    },
+    {
+      "fixture_id": "POS-008",
+      "category": "POSITIVE",
+      "description": "Label permits an internal ordinary space",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "internal_control",
+          "control": "SPACE",
+          "left": "A",
+          "right": "B"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "label",
+        "internal_control"
+      ]
+    },
+    {
+      "fixture_id": "POS-009",
+      "category": "POSITIVE",
+      "description": "Label permits an internal tab",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "internal_control",
+          "control": "TAB",
+          "left": "A",
+          "right": "B"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "label",
+        "internal_control"
+      ]
+    },
+    {
+      "fixture_id": "POS-010",
+      "category": "POSITIVE",
+      "description": "Label permits an internal line feed",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "internal_control",
+          "control": "LF",
+          "left": "A",
+          "right": "B"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "label",
+        "internal_control"
+      ]
+    },
+    {
+      "fixture_id": "POS-011",
+      "category": "POSITIVE",
+      "description": "Label accepts exactly 160 characters",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "repeat",
+          "character": "X",
+          "count": 160
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "label",
+        "maximum"
+      ]
+    },
+    {
+      "fixture_id": "POS-012",
+      "category": "POSITIVE",
+      "description": "Description permits null",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "description",
+        "null"
+      ]
+    },
+    {
+      "fixture_id": "POS-013",
+      "category": "POSITIVE",
+      "description": "Description permits one character",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": "X",
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "description",
+        "minimum"
+      ]
+    },
+    {
+      "fixture_id": "POS-014",
+      "category": "POSITIVE",
+      "description": "Description permits internal ordinary spaces",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "internal_control",
+          "control": "SPACE",
+          "left": "A",
+          "right": "B"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "description",
+        "internal_control"
+      ]
+    },
+    {
+      "fixture_id": "POS-015",
+      "category": "POSITIVE",
+      "description": "Description permits an internal tab",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "internal_control",
+          "control": "TAB",
+          "left": "A",
+          "right": "B"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "description",
+        "internal_control"
+      ]
+    },
+    {
+      "fixture_id": "POS-016",
+      "category": "POSITIVE",
+      "description": "Description permits an internal line feed",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "internal_control",
+          "control": "LF",
+          "left": "A",
+          "right": "B"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "description",
+        "internal_control"
+      ]
+    },
+    {
+      "fixture_id": "POS-017",
+      "category": "POSITIVE",
+      "description": "Description permits an internal carriage return",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "internal_control",
+          "control": "CR",
+          "left": "A",
+          "right": "B"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "description",
+        "internal_control"
+      ]
+    },
+    {
+      "fixture_id": "POS-018",
+      "category": "POSITIVE",
+      "description": "Description accepts exactly 2000 characters",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "repeat",
+          "character": "D",
+          "count": 2000
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "description",
+        "maximum"
+      ]
+    },
+    {
+      "fixture_id": "POS-019",
+      "category": "POSITIVE",
+      "description": "Inactive rows are accepted",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": false,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "is_active"
+      ]
+    },
+    {
+      "fixture_id": "POS-020",
+      "category": "POSITIVE",
+      "description": "Retired timestamp may equal created timestamp",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        }
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "timestamp",
+        "equal"
+      ]
+    },
+    {
+      "fixture_id": "POS-021",
+      "category": "POSITIVE",
+      "description": "Retired timestamp may follow created timestamp",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:01Z"
+        }
+      },
+      "omitted_fields": [],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "timestamp",
+        "ordered"
+      ]
+    },
+    {
+      "fixture_id": "POS-022",
+      "category": "POSITIVE",
+      "description": "Omitted fields use accepted defaults",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "retired_at": null
+      },
+      "omitted_fields": [
+        "sort_order",
+        "is_active",
+        "created_at"
+      ],
+      "expected_outcome": "ACCEPT_AND_ROLLBACK",
+      "expected_sqlstate": null,
+      "expected_constraint": null,
+      "expected_column": null,
+      "expected_defaults": {
+        "sort_order": 100,
+        "is_active": true,
+        "created_at": "NON_NULL_CURRENT_TIMESTAMP"
+      },
+      "expected_cleanup": "ROLLBACK_AND_ZERO_ROWS",
+      "tags": [
+        "positive",
+        "defaults"
+      ]
+    }
+  ],
+  "negative_fixtures": [
+    {
+      "fixture_id": "NEG-001",
+      "category": "NEGATIVE",
+      "description": "Null code family violates nullability",
+      "input": {
+        "code_family": null,
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23502",
+      "expected_constraint": null,
+      "expected_column": "code_family",
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code_family",
+        "null"
+      ]
+    },
+    {
+      "fixture_id": "NEG-002",
+      "category": "NEGATIVE",
+      "description": "Empty code family violates format check",
+      "input": {
+        "code_family": "",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_family_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code_family",
+        "empty"
+      ]
+    },
+    {
+      "fixture_id": "NEG-003",
+      "category": "NEGATIVE",
+      "description": "Code family over 64 characters violates format check",
+      "input": {
+        "code_family": {
+          "kind": "repeat",
+          "character": "A",
+          "count": 65
+        },
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_family_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code_family",
+        "over_maximum"
+      ]
+    },
+    {
+      "fixture_id": "NEG-004",
+      "category": "NEGATIVE",
+      "description": "Lowercase code family violates format check",
+      "input": {
+        "code_family": "a",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_family_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code_family",
+        "lowercase"
+      ]
+    },
+    {
+      "fixture_id": "NEG-005",
+      "category": "NEGATIVE",
+      "description": "Digit-first code family violates format check",
+      "input": {
+        "code_family": "1A",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_family_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code_family",
+        "digit_first"
+      ]
+    },
+    {
+      "fixture_id": "NEG-006",
+      "category": "NEGATIVE",
+      "description": "Underscore-first code family violates format check",
+      "input": {
+        "code_family": "_A",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_family_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code_family",
+        "underscore_first"
+      ]
+    },
+    {
+      "fixture_id": "NEG-007",
+      "category": "NEGATIVE",
+      "description": "Korean code family violates ASCII token format",
+      "input": {
+        "code_family": "가",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_family_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code_family",
+        "unicode"
+      ]
+    },
+    {
+      "fixture_id": "NEG-008",
+      "category": "NEGATIVE",
+      "description": "Hyphenated code family violates format check",
+      "input": {
+        "code_family": "A-B",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_family_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code_family",
+        "hyphen"
+      ]
+    },
+    {
+      "fixture_id": "NEG-009",
+      "category": "NEGATIVE",
+      "description": "Spaced code family violates format check",
+      "input": {
+        "code_family": "A B",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_family_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code_family",
+        "space"
+      ]
+    },
+    {
+      "fixture_id": "NEG-010",
+      "category": "NEGATIVE",
+      "description": "Null code violates nullability",
+      "input": {
+        "code_family": "A",
+        "code": null,
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23502",
+      "expected_constraint": null,
+      "expected_column": "code",
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code",
+        "null"
+      ]
+    },
+    {
+      "fixture_id": "NEG-011",
+      "category": "NEGATIVE",
+      "description": "Empty code violates format check",
+      "input": {
+        "code_family": "A",
+        "code": "",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code",
+        "empty"
+      ]
+    },
+    {
+      "fixture_id": "NEG-012",
+      "category": "NEGATIVE",
+      "description": "Code over 64 characters violates format check",
+      "input": {
+        "code_family": "A",
+        "code": {
+          "kind": "repeat",
+          "character": "A",
+          "count": 65
+        },
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code",
+        "over_maximum"
+      ]
+    },
+    {
+      "fixture_id": "NEG-013",
+      "category": "NEGATIVE",
+      "description": "Lowercase code violates format check",
+      "input": {
+        "code_family": "A",
+        "code": "a",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code",
+        "lowercase"
+      ]
+    },
+    {
+      "fixture_id": "NEG-014",
+      "category": "NEGATIVE",
+      "description": "Digit-first code violates format check",
+      "input": {
+        "code_family": "A",
+        "code": "1A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code",
+        "digit_first"
+      ]
+    },
+    {
+      "fixture_id": "NEG-015",
+      "category": "NEGATIVE",
+      "description": "Dot in code violates format check",
+      "input": {
+        "code_family": "A",
+        "code": "A.B",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code",
+        "dot"
+      ]
+    },
+    {
+      "fixture_id": "NEG-016",
+      "category": "NEGATIVE",
+      "description": "Slash in code violates format check",
+      "input": {
+        "code_family": "A",
+        "code": "A/B",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code",
+        "slash"
+      ]
+    },
+    {
+      "fixture_id": "NEG-017",
+      "category": "NEGATIVE",
+      "description": "Korean code violates ASCII token format",
+      "input": {
+        "code_family": "A",
+        "code": "가",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_code_format_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "code",
+        "unicode"
+      ]
+    },
+    {
+      "fixture_id": "NEG-018",
+      "category": "NEGATIVE",
+      "description": "Duplicate composite key is rejected in one bounded transaction",
+      "input": {
+        "kind": "duplicate_pair",
+        "rows": [
+          {
+            "code_family": "A",
+            "code": "A",
+            "label": "X",
+            "description": null,
+            "sort_order": 0,
+            "is_active": true,
+            "created_at": {
+              "kind": "timestamp",
+              "value": "2026-07-16T00:00:00Z"
+            },
+            "retired_at": null
+          },
+          {
+            "code_family": "A",
+            "code": "A",
+            "label": "X",
+            "description": null,
+            "sort_order": 0,
+            "is_active": true,
+            "created_at": {
+              "kind": "timestamp",
+              "value": "2026-07-16T00:00:00Z"
+            },
+            "retired_at": null
+          }
+        ]
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23505",
+      "expected_constraint": "koaptix_identity_reference_code_pkey",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "primary_key",
+        "duplicate_pair"
+      ]
+    },
+    {
+      "fixture_id": "NEG-019",
+      "category": "NEGATIVE",
+      "description": "Null label violates nullability",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": null,
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23502",
+      "expected_constraint": null,
+      "expected_column": "label",
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "null"
+      ]
+    },
+    {
+      "fixture_id": "NEG-020",
+      "category": "NEGATIVE",
+      "description": "Empty label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "empty"
+      ]
+    },
+    {
+      "fixture_id": "NEG-021",
+      "category": "NEGATIVE",
+      "description": "Label over 160 characters violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "repeat",
+          "character": "X",
+          "count": 161
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "over_maximum"
+      ]
+    },
+    {
+      "fixture_id": "NEG-022",
+      "category": "NEGATIVE",
+      "description": "Ordinary-space-only label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "SPACE",
+          "position": "only",
+          "value": ""
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "space_only"
+      ]
+    },
+    {
+      "fixture_id": "NEG-023",
+      "category": "NEGATIVE",
+      "description": "Tab-only label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "TAB",
+          "position": "only",
+          "value": ""
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "tab_only"
+      ]
+    },
+    {
+      "fixture_id": "NEG-024",
+      "category": "NEGATIVE",
+      "description": "Line-feed-only label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "LF",
+          "position": "only",
+          "value": ""
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "line_feed_only"
+      ]
+    },
+    {
+      "fixture_id": "NEG-025",
+      "category": "NEGATIVE",
+      "description": "Leading ordinary space in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "SPACE",
+          "position": "leading",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-026",
+      "category": "NEGATIVE",
+      "description": "Trailing ordinary space in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "SPACE",
+          "position": "trailing",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-027",
+      "category": "NEGATIVE",
+      "description": "Leading tab in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "TAB",
+          "position": "leading",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-028",
+      "category": "NEGATIVE",
+      "description": "Trailing tab in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "TAB",
+          "position": "trailing",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-029",
+      "category": "NEGATIVE",
+      "description": "Leading line feed in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "LF",
+          "position": "leading",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-030",
+      "category": "NEGATIVE",
+      "description": "Trailing line feed in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "LF",
+          "position": "trailing",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-031",
+      "category": "NEGATIVE",
+      "description": "Leading carriage return in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "CR",
+          "position": "leading",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-032",
+      "category": "NEGATIVE",
+      "description": "Trailing carriage return in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "CR",
+          "position": "trailing",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-033",
+      "category": "NEGATIVE",
+      "description": "Leading vertical tab in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "VT",
+          "position": "leading",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-034",
+      "category": "NEGATIVE",
+      "description": "Trailing vertical tab in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "VT",
+          "position": "trailing",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-035",
+      "category": "NEGATIVE",
+      "description": "Leading form feed in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "FF",
+          "position": "leading",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-036",
+      "category": "NEGATIVE",
+      "description": "Trailing form feed in label violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": {
+          "kind": "boundary_control",
+          "control": "FF",
+          "position": "trailing",
+          "value": "X"
+        },
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_label_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "label",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-037",
+      "category": "NEGATIVE",
+      "description": "Empty description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": "",
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "empty"
+      ]
+    },
+    {
+      "fixture_id": "NEG-038",
+      "category": "NEGATIVE",
+      "description": "Description over 2000 characters violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "repeat",
+          "character": "D",
+          "count": 2001
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "over_maximum"
+      ]
+    },
+    {
+      "fixture_id": "NEG-039",
+      "category": "NEGATIVE",
+      "description": "Ordinary-space-only description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "SPACE",
+          "position": "only",
+          "value": ""
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "space_only"
+      ]
+    },
+    {
+      "fixture_id": "NEG-040",
+      "category": "NEGATIVE",
+      "description": "Tab-only description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "TAB",
+          "position": "only",
+          "value": ""
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "tab_only"
+      ]
+    },
+    {
+      "fixture_id": "NEG-041",
+      "category": "NEGATIVE",
+      "description": "Line-feed-only description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "LF",
+          "position": "only",
+          "value": ""
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "line_feed_only"
+      ]
+    },
+    {
+      "fixture_id": "NEG-042",
+      "category": "NEGATIVE",
+      "description": "Leading ordinary space in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "SPACE",
+          "position": "leading",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-043",
+      "category": "NEGATIVE",
+      "description": "Trailing ordinary space in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "SPACE",
+          "position": "trailing",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-044",
+      "category": "NEGATIVE",
+      "description": "Leading tab in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "TAB",
+          "position": "leading",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-045",
+      "category": "NEGATIVE",
+      "description": "Trailing tab in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "TAB",
+          "position": "trailing",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-046",
+      "category": "NEGATIVE",
+      "description": "Leading line feed in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "LF",
+          "position": "leading",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-047",
+      "category": "NEGATIVE",
+      "description": "Trailing line feed in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "LF",
+          "position": "trailing",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-048",
+      "category": "NEGATIVE",
+      "description": "Leading carriage return in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "CR",
+          "position": "leading",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-049",
+      "category": "NEGATIVE",
+      "description": "Trailing carriage return in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "CR",
+          "position": "trailing",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-050",
+      "category": "NEGATIVE",
+      "description": "Leading vertical tab in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "VT",
+          "position": "leading",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-051",
+      "category": "NEGATIVE",
+      "description": "Trailing vertical tab in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "VT",
+          "position": "trailing",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-052",
+      "category": "NEGATIVE",
+      "description": "Leading form feed in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "FF",
+          "position": "leading",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "leading_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-053",
+      "category": "NEGATIVE",
+      "description": "Trailing form feed in description violates boundary check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": {
+          "kind": "boundary_control",
+          "control": "FF",
+          "position": "trailing",
+          "value": "D"
+        },
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_description_boundary_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "description",
+        "trailing_boundary"
+      ]
+    },
+    {
+      "fixture_id": "NEG-054",
+      "category": "NEGATIVE",
+      "description": "Negative sort order violates nonnegative check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": -1,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": null
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_sort_order_nonnegative_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "sort_order",
+        "negative"
+      ]
+    },
+    {
+      "fixture_id": "NEG-055",
+      "category": "NEGATIVE",
+      "description": "Retired timestamp before created timestamp violates ordering check",
+      "input": {
+        "code_family": "A",
+        "code": "A",
+        "label": "X",
+        "description": null,
+        "sort_order": 0,
+        "is_active": true,
+        "created_at": {
+          "kind": "timestamp",
+          "value": "2026-07-16T00:00:00Z"
+        },
+        "retired_at": {
+          "kind": "timestamp",
+          "value": "2026-07-15T23:59:59Z"
+        }
+      },
+      "omitted_fields": [],
+      "expected_outcome": "REJECT",
+      "expected_sqlstate": "23514",
+      "expected_constraint": "koaptix_identity_reference_code_retired_at_not_before_created_chk",
+      "expected_column": null,
+      "expected_defaults": {},
+      "expected_cleanup": "FAILED_TRANSACTION_AND_ZERO_ROWS",
+      "tags": [
+        "negative",
+        "timestamp",
+        "reverse_order"
+      ]
+    }
+  ]
+}

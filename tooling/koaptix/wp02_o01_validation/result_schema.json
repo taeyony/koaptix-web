@@ -1,0 +1,530 @@
+{
+  "type": "object",
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "pattern": "^wp02-o01-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$"
+    },
+    "validation_lane": {
+      "type": "string",
+      "const": "P-KOAPTIX-CANONICAL-LIFECYCLE-AND-IDENTITY-METADATA-WP02-O01-DISPOSABLE-VALIDATION-EXECUTION.0"
+    },
+    "status": {
+      "type": "string",
+      "pattern": "^(PASS_WP02_O01_DISPOSABLE_VALIDATION_COMPLETE_NO_PRODUCTION_EFFECT|BLOCKED_[A-Z0-9_]+|FAILED_[A-Z0-9_]+)$"
+    },
+    "validation_classification": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]+$"
+    },
+    "environment_type": {
+      "type": "string",
+      "const": "DISPOSABLE_LOCAL_DOCKER_POSTGRES_UPSTREAM_COMPATIBILITY_ONLY"
+    },
+    "isolation_status": {
+      "type": "string",
+      "enum": [
+        "PASS_PRODUCTION_ISOLATED",
+        "BLOCKED_ISOLATION_NOT_PROVEN",
+        "FAILED_ISOLATION"
+      ]
+    },
+    "production_project_reference_present": {
+      "type": "boolean",
+      "const": false
+    },
+    "production_credential_present": {
+      "type": "boolean",
+      "const": false
+    },
+    "immutable_image_reference": {
+      "type": "string",
+      "const": "docker.io/library/postgres:15.18-bookworm@sha256:b0c5bab0fbba8e0c221f73b1dc6359ec35f8650074377e727299df248fc8ad51"
+    },
+    "image_index_digest": {
+      "type": "string",
+      "const": "sha256:b0c5bab0fbba8e0c221f73b1dc6359ec35f8650074377e727299df248fc8ad51"
+    },
+    "selected_platform": {
+      "type": "string",
+      "const": "linux/amd64"
+    },
+    "expected_platform_manifest_digest": {
+      "type": "string",
+      "const": "sha256:fafb7480959eeeb7f1e43b479e642ffef2aa0f067242a1954ab41f2d764e2786"
+    },
+    "verified_platform_manifest_digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "sha256:fafb7480959eeeb7f1e43b479e642ffef2aa0f067242a1954ab41f2d764e2786",
+        null
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "expected_image_config_digest": {
+      "type": "string",
+      "const": "sha256:14cd37850629c85ffa07818ca9a02568289a360aded79d54aee9401cb684667f"
+    },
+    "verified_image_config_digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "sha256:14cd37850629c85ffa07818ca9a02568289a360aded79d54aee9401cb684667f",
+        null
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "PostgreSQL_server_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "PostgreSQL_server_version_num": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]+$"
+    },
+    "psql_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "database_encoding": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "client_encoding": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lc_collate": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lc_ctype": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "locale_provider": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "migration_path": {
+      "type": "string",
+      "const": "supabase/migrations/20260716_koaptix_identity_reference_code_catalog.sql"
+    },
+    "migration_sha256": {
+      "type": "string",
+      "const": "0e89d75a6ed437a64fa9dd7bff62cd32df246f0c29da38faa2cd49cd60c047a6"
+    },
+    "migration_apply_exit_code": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 255
+    },
+    "migration_apply_SQLSTATE": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9A-Z]{5}$"
+    },
+    "table_exists": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "table_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "column_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 8
+    },
+    "exact_columns": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "properties": {
+          "ordinal_position": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "column_name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "data_type": {
+            "type": "string"
+          },
+          "not_null": {
+            "type": "boolean"
+          },
+          "default_expression": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "identity_kind": {
+            "type": "string"
+          },
+          "generated_kind": {
+            "type": "string"
+          },
+          "collation_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "ordinal_position",
+          "column_name",
+          "data_type",
+          "not_null",
+          "default_expression",
+          "identity_kind",
+          "generated_kind",
+          "collation_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "primary_key_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "primary_key_columns": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 2,
+      "items": {
+        "type": "string",
+        "enum": [
+          "code_family",
+          "code"
+        ]
+      }
+    },
+    "check_constraint_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 6
+    },
+    "exact_check_constraints": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "properties": {
+          "constraint_name": {
+            "type": "string",
+            "pattern": "^koaptix_identity_reference_code_[a-z0-9_]+$"
+          },
+          "normalized_definition": {
+            "type": "string"
+          },
+          "validated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "constraint_name",
+          "normalized_definition",
+          "validated"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "PK_backed_index_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "explicit_secondary_index_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "noninternal_trigger_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "policy_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "RLS_enabled": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "forced_RLS_enabled": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "foreign_key_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "dependent_view_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "dependent_materialized_view_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "unexpected_dependency_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "row_count_after_apply": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "positive_fixture_total": {
+      "type": "integer",
+      "const": 22
+    },
+    "positive_fixture_passed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 22
+    },
+    "negative_fixture_total": {
+      "type": "integer",
+      "const": 55
+    },
+    "negative_fixture_passed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 55
+    },
+    "unexpected_fixture_successes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 55
+    },
+    "unexpected_fixture_failures": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 77
+    },
+    "row_count_after_fixtures": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "first_metadata_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "clean_reapply_metadata_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "metadata_hashes_match": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "first_environment_destroyed": {
+      "type": "boolean"
+    },
+    "second_environment_destroyed": {
+      "type": "boolean"
+    },
+    "first_network_destroyed": {
+      "type": "boolean"
+    },
+    "second_network_destroyed": {
+      "type": "boolean"
+    },
+    "first_volume_destroyed": {
+      "type": "boolean"
+    },
+    "second_volume_destroyed": {
+      "type": "boolean"
+    },
+    "temporary_root_removed": {
+      "type": "boolean"
+    },
+    "sha256_manifest_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifact_integrity_root": {
+      "type": "string",
+      "const": "RESULT_JSON_SHA256_RECORDED_OUTSIDE_ARTIFACT_SET"
+    },
+    "prohibited_actions_confirmed": {
+      "type": "boolean"
+    },
+    "production_migration_authority_created": {
+      "type": "boolean",
+      "const": false
+    },
+    "one_line_conclusion": {
+      "type": "string",
+      "pattern": "^[^\\r\\n]{1,512}$"
+    }
+  },
+  "required": [
+    "run_id",
+    "validation_lane",
+    "status",
+    "validation_classification",
+    "environment_type",
+    "isolation_status",
+    "production_project_reference_present",
+    "production_credential_present",
+    "immutable_image_reference",
+    "image_index_digest",
+    "selected_platform",
+    "expected_platform_manifest_digest",
+    "verified_platform_manifest_digest",
+    "expected_image_config_digest",
+    "verified_image_config_digest",
+    "PostgreSQL_server_version",
+    "PostgreSQL_server_version_num",
+    "psql_version",
+    "database_encoding",
+    "client_encoding",
+    "lc_collate",
+    "lc_ctype",
+    "locale_provider",
+    "migration_path",
+    "migration_sha256",
+    "migration_apply_exit_code",
+    "migration_apply_SQLSTATE",
+    "table_exists",
+    "table_count",
+    "column_count",
+    "exact_columns",
+    "primary_key_count",
+    "primary_key_columns",
+    "check_constraint_count",
+    "exact_check_constraints",
+    "PK_backed_index_count",
+    "explicit_secondary_index_count",
+    "noninternal_trigger_count",
+    "policy_count",
+    "RLS_enabled",
+    "forced_RLS_enabled",
+    "foreign_key_count",
+    "dependent_view_count",
+    "dependent_materialized_view_count",
+    "unexpected_dependency_count",
+    "row_count_after_apply",
+    "positive_fixture_total",
+    "positive_fixture_passed",
+    "negative_fixture_total",
+    "negative_fixture_passed",
+    "unexpected_fixture_successes",
+    "unexpected_fixture_failures",
+    "row_count_after_fixtures",
+    "first_metadata_sha256",
+    "clean_reapply_metadata_sha256",
+    "metadata_hashes_match",
+    "first_environment_destroyed",
+    "second_environment_destroyed",
+    "first_network_destroyed",
+    "second_network_destroyed",
+    "first_volume_destroyed",
+    "second_volume_destroyed",
+    "temporary_root_removed",
+    "sha256_manifest_sha256",
+    "artifact_integrity_root",
+    "prohibited_actions_confirmed",
+    "production_migration_authority_created",
+    "one_line_conclusion"
+  ],
+  "additionalProperties": false
+}
