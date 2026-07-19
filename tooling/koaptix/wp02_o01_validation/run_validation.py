@@ -88,6 +88,10 @@ PLATFORM_MANIFEST_DIGEST = (
 IMAGE_CONFIG_DIGEST = (
     "sha256:14cd37850629c85ffa07818ca9a02568289a360aded79d54aee9401cb684667f"
 )
+CANONICAL_SHA256_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+REPOSITORY_DIGEST_RE = re.compile(
+    r"^(?:[^@\s]+@)?(?P<digest>sha256:[0-9a-f]{64})$"
+)
 DATABASE_USER = "koaptix_validator"
 DATABASE_NAME = "koaptix_wp02_o01_validation"
 TARGET_TABLE = "public.koaptix_identity_reference_code"
@@ -1235,8 +1239,12 @@ def _build_image_pull() -> list[str]:
     return ["docker", "pull", "--platform", PLATFORM, IMMUTABLE_IMAGE]
 
 
-def _build_image_inspect() -> list[str]:
-    return ["docker", "image", "inspect", IMMUTABLE_IMAGE]
+def _build_image_inspect(*, platform_specific: bool = False) -> list[str]:
+    command = ["docker", "image", "inspect"]
+    if platform_specific:
+        command.extend(["--platform", PLATFORM])
+    command.append(IMMUTABLE_IMAGE)
+    return command
 
 
 def _validate_resource_name(name: str) -> str:
@@ -1400,28 +1408,123 @@ def _verify_registry_metadata(state: ExecutionState) -> None:
         raise HarnessFailure("BLOCKED_IMMUTABLE_IMAGE_METADATA", "registry digest mismatch")
 
 
-def _verify_local_image(state: ExecutionState) -> None:
-    result = _run_command(
-        _build_image_inspect(),
-        "local_image_inspect",
-        state.subprocess_environment,
-        state.transcript,
-        state.redaction_values,
-        30,
-    )
-    if result.returncode != 0:
-        raise HarnessFailure("BLOCKED_IMMUTABLE_IMAGE_LOCAL_IDENTITY", "image inspect failed")
-    try:
-        image_records = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise HarnessFailure("BLOCKED_IMMUTABLE_IMAGE_LOCAL_IDENTITY", "image inspect invalid") from exc
+def _classify_local_image_id(observed_id: Any) -> str:
     if (
-        not isinstance(image_records, list)
-        or len(image_records) != 1
-        or image_records[0].get("Id") != IMAGE_CONFIG_DIGEST
-        or IMAGE_INDEX_DIGEST not in image_records[0].get("RepoDigests", [])
+        not isinstance(observed_id, str)
+        or CANONICAL_SHA256_DIGEST_RE.fullmatch(observed_id) is None
     ):
-        raise HarnessFailure("BLOCKED_IMMUTABLE_IMAGE_LOCAL_IDENTITY", "local image mismatch")
+        return "UNKNOWN_OR_UNEXPECTED_ID"
+    if observed_id == IMAGE_CONFIG_DIGEST:
+        return "LEGACY_CONFIG_ID"
+    if observed_id == PLATFORM_MANIFEST_DIGEST:
+        return "CONTAINERD_PLATFORM_MANIFEST_ID"
+    if observed_id == IMAGE_INDEX_DIGEST:
+        return "CONTAINERD_INDEX_ID"
+    return "UNKNOWN_OR_UNEXPECTED_ID"
+
+
+def _verify_local_image(state: ExecutionState) -> None:
+    records: dict[str, dict[str, Any]] = {}
+    for context, command, command_class in (
+        ("default", _build_image_inspect(), "local_image_inspect_default"),
+        (
+            "platform",
+            _build_image_inspect(platform_specific=True),
+            "local_image_inspect_platform",
+        ),
+    ):
+        result = _run_command(
+            command,
+            command_class,
+            state.subprocess_environment,
+            state.transcript,
+            state.redaction_values,
+            30,
+        )
+        if result.returncode != 0:
+            raise HarnessFailure(
+                "BLOCKED_IMMUTABLE_IMAGE_LOCAL_IDENTITY",
+                f"{context} image inspect failed",
+            )
+        try:
+            image_records = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise HarnessFailure(
+                "BLOCKED_IMMUTABLE_IMAGE_LOCAL_IDENTITY",
+                f"{context} image inspect invalid",
+            ) from exc
+        if (
+            not isinstance(image_records, list)
+            or len(image_records) != 1
+            or not isinstance(image_records[0], dict)
+        ):
+            raise HarnessFailure(
+                "BLOCKED_IMMUTABLE_IMAGE_LOCAL_IDENTITY",
+                f"{context} image inspect cardinality mismatch",
+            )
+        records[context] = image_records[0]
+
+    default_record = records["default"]
+    platform_record = records["platform"]
+    default_id_class = _classify_local_image_id(default_record.get("Id"))
+    platform_id_class = _classify_local_image_id(platform_record.get("Id"))
+    accepted_pairs = {
+        ("LEGACY_CONFIG_ID", "LEGACY_CONFIG_ID"): "LEGACY_CONFIG_PAIR",
+        (
+            "CONTAINERD_INDEX_ID",
+            "CONTAINERD_PLATFORM_MANIFEST_ID",
+        ): "DOCKER29_CONTAINERD_PAIR",
+    }
+    pair_mode = accepted_pairs.get((default_id_class, platform_id_class))
+
+    repo_digests_match = True
+    os_match = True
+    architecture_match = True
+    for record in (default_record, platform_record):
+        repo_digests = record.get("RepoDigests")
+        parsed_digests: list[str] = []
+        if isinstance(repo_digests, list) and repo_digests:
+            for repository_digest in repo_digests:
+                match = (
+                    REPOSITORY_DIGEST_RE.fullmatch(repository_digest)
+                    if isinstance(repository_digest, str)
+                    else None
+                )
+                if match is None:
+                    parsed_digests = []
+                    break
+                parsed_digests.append(match.group("digest"))
+        if IMAGE_INDEX_DIGEST not in parsed_digests:
+            repo_digests_match = False
+        if record.get("Os") != "linux":
+            os_match = False
+        if record.get("Architecture") != "amd64":
+            architecture_match = False
+
+    complete_tuple_pass = (
+        pair_mode is not None
+        and repo_digests_match
+        and os_match
+        and architecture_match
+    )
+    state.transcript.append(
+        {
+            "event": "local_image_identity_tuple",
+            "default_id_class": default_id_class,
+            "platform_id_class": platform_id_class,
+            "pair_mode": pair_mode,
+            "pair_validation": "PASS" if pair_mode is not None else "FAIL",
+            "repo_digest_match": repo_digests_match,
+            "os_match": os_match,
+            "architecture_match": architecture_match,
+            "complete_tuple_pass": complete_tuple_pass,
+        }
+    )
+    if not complete_tuple_pass:
+        raise HarnessFailure(
+            "BLOCKED_IMMUTABLE_IMAGE_LOCAL_IDENTITY",
+            "local image identity tuple mismatch",
+        )
 
 
 def _assert_resource_absent(state: ExecutionState, kind: str, name: str) -> None:
