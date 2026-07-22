@@ -1,7 +1,7 @@
 # KOAPTIX Confirmed Decisions
 
 - Document status: `CANONICAL_CONTEXT_RECORD`
-- Last updated: `2026-07-21`
+- Last updated: `2026-07-22`
 
 ## Purpose
 
@@ -258,6 +258,26 @@ Superseded scope: 2026-06-30 historical `Minimal File Sprawl Continuity Model` �
 - Not approved: 이 문서에 의한 recovery lane 자동 승인, Codex의 conflicting candidate 자의 선택.
 - Revisit condition: 사용자가 exact recovery 또는 fresh requalification lane을 명시적으로 승인할 때.
 - Source references: [WP-02/O-01 Checkpoint](../workstreams/wp02_o01/CHECKPOINT.md), [Continuity and Handoff Protocol](KOAPTIX_CONTINUITY_AND_HANDOFF_PROTOCOL.md).
+
+### Supabase target V2 authority
+
+- Decision ID: `KOAPTIX-SUPABASE-TARGET-AUTHORITY-V2-20260722`
+- Status: `CONFIRMED_ACTIVE`
+- Date recorded: `2026-07-22`
+- Decision: `KOAPTIX_SUPABASE_TARGET_V2` is the active canonical authority for target-connection identity validation in future KOAPTIX administrator DSN secure-binding and provisioning lanes.
+- Authority schema: the exact schema body is `outputs/koaptix/nationwide_downstream_completeness/P-KOAPTIX-ND-ADMIN-TARGET-SERIALIZER-AUDIT-20260722-01/07_v2_target_contract_candidate.json`, SHA-256 `A33D546E8D601B09F074281378B4DD755F414E06D3C02C2CEC1C1167DFC44430`.
+- Target identity: accepted target-contract SHA-256 `C93C2FB90D96EDC09FDD018BFA23768573ED70D8DB32B032219C1C17981870CF`, expected serialized byte length `267`, accepted production project-reference SHA-256 `F67504EE337BA4E064FCB8BE1C9CF0B8A14591A657D0143910929B506779419B`.
+- Serialization contract: fixed insertion-order compact JSON; separators `,` and `:`; no whitespace outside strings; JSON-standard ASCII-safe escaping; lowercase ASCII alphanumeric project reference; UTF-8; no BOM; no trailing newline.
+- Included semantic boundary: provider class, production project reference, direct-host class, PostgreSQL port, database, pooler policy, and connection class.
+- Excluded semantic boundary: username, password, complete DSN, credential encoding, input formatting, `sslmode`, connect timeout, application name, options, runtime session settings, administrator capability, and role or grant authority.
+- Independent evidence: Python reference SHA-256 `7136D1C7B96FAA37F3D1627CD49D18900386C53F033A289AE0A2FDEC159172CD` and Node reference SHA-256 `CBA61E5A0C76AB179060AC04FF73CE497BB37EE3F342C50A280A535739EE32E7` agree on the exact 267-byte V2 serialization and target-contract SHA-256.
+- Fixture evidence: secret-free positive fixtures `7/7 PASS` and negative fixtures `7/7 PASS`; fixture matrix SHA-256 `DC106BDCA7995A7E1F38234D576EE435A67FC34E7D58EF7E9099B9A1672D6773`.
+- Approval marker: `P-KOAPTIX-NATIONWIDE-DOWNSTREAM-SUPABASE-TARGET-V2-AUTHORITY-ADOPTION.0`, approved by exact decision `APPROVE_KOAPTIX_SUPABASE_TARGET_V2_AUTHORITY`.
+- V1 treatment: `KOAPTIX_SUPABASE_TARGET_V1` is `HISTORICAL_DEPRECATED_NONREPRODUCIBLE`; historical SHA-256 `8D839FBBF5214031D99DD6856D2064D36B2E6797229FA475BFC0DB5841BA055A` is preserved as evidence but is not an active gate, must not be reconstructed from its hash, and must not be rewritten to equal V2.
+- Prior-attempt interpretation: previous V1-based DSN validation failures do not establish that the supplied credential was invalid. Previously supplied credentials are not retained and must not be reused.
+- Safety boundary: this decision does not authorize secret entry, DPAPI binding, DB access, SQL, role or grant mutation, currentness query-pack execution, stage, commit, push, or deploy.
+- Future workflow: fixture-proven V2 secure binding requires fresh approval; corrected dedicated role provisioning requires a separate fresh approval after binding PASS; currentness query execution requires another separate fresh approval after provisioning PASS.
+- Revisit condition: a replacement target-identity authority must be independently reproducible, fixture-proven, and separately approved without rewriting this historical decision.
 
 ## Maintenance Rule
 
