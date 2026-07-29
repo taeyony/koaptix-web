@@ -31,6 +31,14 @@ import {
 } from "../../../lib/koaptix/discoverySearch";
 import { hydrateDiscoveryRegionFallbacks } from "../../../lib/koaptix/discoverySearch.server";
 import {
+  buildBoundedKoreaRankAuthoritySeedPlan,
+  fetchBoundedKoreaRankAuthorityRows,
+  filterRankedSearchCandidatesByRegionScope,
+  mergeKoreaRankedAuthorityCandidates,
+  shouldCollectScopedKoreaRankAuthoritySeeds,
+  shouldHydrateScopedKoreaRankedCandidates,
+} from "../../../lib/koaptix/rankedSearchRegionScope.server";
+import {
   LEGACY_DISCOVERY_ACCEPTANCE_SEEDS as DISCOVERY_ACCEPTANCE_SEEDS,
   LEGACY_DISCOVERY_ACCEPTANCE_TERMS as DISCOVERY_ACCEPTANCE_TERMS,
   LEGACY_DISCOVERY_BROAD_GENERIC_BASE_TERMS as DISCOVERY_BROAD_GENERIC_BASE_TERMS,
@@ -2621,15 +2629,130 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    let rankedCandidateItems = mergeUniqueByComplexId([
+      ...rankVisibleFallbackItems,
+      ...matchedLocalItems,
+    ]);
+    let scopedRankAuthorityFailure: string | null = null;
+    let scopedRankedSupabase:
+      | ReturnType<typeof createDiscoverySupabase>
+      | null = null;
+
+    if (
+      shouldCollectScopedKoreaRankAuthoritySeeds({
+        requestedUniverseCode: universeResolution.requestedUniverseCode,
+        renderedUniverseCode: universeResolution.renderedUniverseCode,
+        regionState: regionResolution.state,
+        rankedSearchAllowed: regionResolution.rankedSearchAllowed,
+        effectiveRegionScope: regionResolution.effectiveRegionScope,
+        residualQuery: regionResolution.residualQuery,
+      })
+    ) {
+      try {
+        const regionalCompanionSeedItems =
+          await loadRegionalNameCompanionItems(
+            q,
+            rankedCandidateItems,
+            limit,
+          );
+        const seedPlan = buildBoundedKoreaRankAuthoritySeedPlan(
+          rankedCandidateItems,
+          regionalCompanionSeedItems,
+        );
+
+        if (seedPlan.failure) {
+          scopedRankAuthorityFailure = seedPlan.failure;
+        } else {
+          scopedRankedSupabase = createDiscoverySupabase();
+          const authorityResult = await fetchBoundedKoreaRankAuthorityRows(
+            scopedRankedSupabase,
+            seedPlan.authorityLookupIds,
+          );
+
+          if (authorityResult.failure) {
+            scopedRankAuthorityFailure = authorityResult.failure;
+          } else {
+            const recoveredKoreaItems = authorityResult.rows.map((row) =>
+              toRankingItem(row, DEFAULT_UNIVERSE_CODE),
+            );
+            rankedCandidateItems = mergeKoreaRankedAuthorityCandidates(
+              rankedCandidateItems,
+              recoveredKoreaItems,
+            );
+          }
+        }
+
+        if (scopedRankAuthorityFailure) {
+          console.info("[API /api/search] scoped KOREA authority skipped", {
+            universeCode: requestedUniverseCode,
+            candidateCount: seedPlan.stats.sharedUniqueCandidateCount,
+            lookupCount: seedPlan.stats.authorityLookupIdCount,
+            failure: scopedRankAuthorityFailure,
+          });
+        }
+      } catch {
+        scopedRankAuthorityFailure =
+          "KOREA_RANK_AUTHORITY_LOOKUP_FAILED";
+        console.info("[API /api/search] scoped KOREA authority skipped", {
+          universeCode: requestedUniverseCode,
+          candidateCount: rankedCandidateItems.length,
+          failure: scopedRankAuthorityFailure,
+        });
+      }
+    }
+
     const suppressUnscopedKoreaRankedResults =
       requestedUniverseCode === DEFAULT_UNIVERSE_CODE &&
       regionResolution.effectiveRegionScope !== null;
-    const localItems = suppressUnscopedKoreaRankedResults
+    let localItems: RankingItem[] = suppressUnscopedKoreaRankedResults
       ? []
-      : mergeUniqueByComplexId([
-          ...rankVisibleFallbackItems,
-          ...matchedLocalItems,
-        ]).slice(0, limit);
+      : rankedCandidateItems.slice(0, limit);
+
+    if (
+      scopedRankAuthorityFailure === null &&
+      shouldHydrateScopedKoreaRankedCandidates({
+        requestedUniverseCode: universeResolution.requestedUniverseCode,
+        renderedUniverseCode: universeResolution.renderedUniverseCode,
+        regionState: regionResolution.state,
+        rankedSearchAllowed: regionResolution.rankedSearchAllowed,
+        effectiveRegionScope: regionResolution.effectiveRegionScope,
+        residualQuery: regionResolution.residualQuery,
+        candidateCount: rankedCandidateItems.length,
+      })
+    ) {
+      try {
+        const scopedRankedResult =
+          await filterRankedSearchCandidatesByRegionScope(
+            scopedRankedSupabase ?? createDiscoverySupabase(),
+            rankedCandidateItems,
+            regionResolution.effectiveRegionScope!,
+          );
+        localItems = scopedRankedResult.items.slice(0, limit);
+
+        if (scopedRankedResult.failure) {
+          console.info("[API /api/search] scoped ranked restoration skipped", {
+            universeCode: requestedUniverseCode,
+            candidateCount: rankedCandidateItems.length,
+            failure: scopedRankedResult.failure,
+          });
+        } else if (
+          scopedRankedResult.stats.mapCanonicalDisagreementCount > 0
+        ) {
+          console.info("[API /api/search] scoped ranked map authority retained", {
+            universeCode: requestedUniverseCode,
+            disagreementCount:
+              scopedRankedResult.stats.mapCanonicalDisagreementCount,
+          });
+        }
+      } catch {
+        localItems = [];
+        console.info("[API /api/search] scoped ranked restoration skipped", {
+          universeCode: requestedUniverseCode,
+          candidateCount: rankedCandidateItems.length,
+          failure: "REGION_EVIDENCE_LOOKUP_FAILED",
+        });
+      }
+    }
     const globalItems =
       regionResolution.effectiveRegionScope ||
       !regionResolution.globalFallbackAllowed

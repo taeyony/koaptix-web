@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import ts from "typescript";
 
 import {
   DISCOVERY_REGION_FALLBACK_CANDIDATE_CAP,
@@ -350,5 +351,197 @@ test("search route keeps probe families, limits, sets, and final cap unchanged",
       "Array.from(candidateIds).slice(0, getDiscoveryHydrationLimit(classification))",
     ),
     true,
+  );
+});
+
+test("search route narrows the scoped KOREA guard through bounded region hydration", () => {
+  const routeSource = readFileSync(
+    resolve(process.cwd(), "src/app/api/search/route.ts"),
+    "utf8",
+  );
+  const rankedCandidateIndex = routeSource.indexOf(
+    "let rankedCandidateItems = mergeUniqueByComplexId",
+  );
+  const seedActivationIndex = routeSource.indexOf(
+    "shouldCollectScopedKoreaRankAuthoritySeeds({",
+  );
+  const companionSeedIndex = routeSource.indexOf(
+    "await loadRegionalNameCompanionItems(",
+    rankedCandidateIndex,
+  );
+  const seedPlanIndex = routeSource.indexOf(
+    "buildBoundedKoreaRankAuthoritySeedPlan(",
+  );
+  const authorityLookupIndex = routeSource.indexOf(
+    "await fetchBoundedKoreaRankAuthorityRows(",
+  );
+  const authorityMergeIndex = routeSource.indexOf(
+    "mergeKoreaRankedAuthorityCandidates(",
+  );
+  const guardIndex = routeSource.indexOf(
+    "const suppressUnscopedKoreaRankedResults",
+  );
+  const activationIndex = routeSource.indexOf(
+    "shouldHydrateScopedKoreaRankedCandidates({",
+  );
+  const hydrationIndex = routeSource.indexOf(
+    "await filterRankedSearchCandidatesByRegionScope(",
+  );
+  const capIndex = routeSource.indexOf(
+    "localItems = scopedRankedResult.items.slice(0, limit);",
+  );
+
+  assert.equal(rankedCandidateIndex >= 0, true);
+  assert.equal(seedActivationIndex > rankedCandidateIndex, true);
+  assert.equal(companionSeedIndex > seedActivationIndex, true);
+  assert.equal(seedPlanIndex > companionSeedIndex, true);
+  assert.equal(authorityLookupIndex > seedPlanIndex, true);
+  assert.equal(authorityMergeIndex > authorityLookupIndex, true);
+  assert.equal(guardIndex > authorityMergeIndex, true);
+  assert.equal(activationIndex > guardIndex, true);
+  assert.equal(hydrationIndex > activationIndex, true);
+  assert.equal(capIndex > hydrationIndex, true);
+  assert.equal(
+    (routeSource.match(/suppressUnscopedKoreaRankedResults/g) ?? []).length >= 2,
+    true,
+  );
+  assert.match(
+    routeSource,
+    /residualQuery:\s*regionResolution\.residualQuery/,
+  );
+  assert.match(
+    routeSource,
+    /candidateCount:\s*rankedCandidateItems\.length/,
+  );
+});
+
+test("scoped KOREA keeps global rows empty and gives restored ranked IDs discovery precedence", () => {
+  const routeSource = readFileSync(
+    resolve(process.cwd(), "src/app/api/search/route.ts"),
+    "utf8",
+  );
+  const guardStart = routeSource.indexOf(
+    "let rankedCandidateItems = mergeUniqueByComplexId",
+  );
+  const responseStart = routeSource.indexOf(
+    "return NextResponse.json(",
+    guardStart,
+  );
+  const scopedSource = routeSource.slice(guardStart, responseStart);
+  const localIndex = scopedSource.indexOf("let localItems:");
+  const globalIndex = scopedSource.indexOf("const globalItems =");
+  const discoveryIndex = scopedSource.indexOf(
+    "const discoveryCandidates = await loadDiscoveryCandidates(",
+  );
+
+  assert.equal(localIndex >= 0, true);
+  assert.equal(globalIndex > localIndex, true);
+  assert.equal(discoveryIndex > globalIndex, true);
+  assert.match(
+    scopedSource,
+    /const globalItems =\s*regionResolution\.effectiveRegionScope\s*\|\|[\s\S]*?\?\s*\[\]/,
+  );
+  assert.match(
+    scopedSource,
+    /new Set\(\s*\[\.\.\.localItems,\s*\.\.\.globalItems\]/,
+  );
+});
+
+test("ranked region helper has only bounded batch reads and no DB call inside a loop", () => {
+  const helperSource = readFileSync(
+    resolve(
+      process.cwd(),
+      "src/lib/koaptix/rankedSearchRegionScope.server.ts",
+    ),
+    "utf8",
+  );
+  const sourceFile = ts.createSourceFile(
+    "rankedSearchRegionScope.server.ts",
+    helperSource,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const fromCallsInsideLoops: string[] = [];
+
+  function visit(node: ts.Node, insideLoop: boolean) {
+    const nextInsideLoop =
+      insideLoop ||
+      ts.isForStatement(node) ||
+      ts.isForInStatement(node) ||
+      ts.isForOfStatement(node) ||
+      ts.isWhileStatement(node) ||
+      ts.isDoStatement(node);
+    if (
+      nextInsideLoop &&
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "from"
+    ) {
+      fromCallsInsideLoops.push(node.getText(sourceFile));
+    }
+    ts.forEachChild(node, (child) => visit(child, nextInsideLoop));
+  }
+  visit(sourceFile, false);
+
+  assert.match(
+    helperSource,
+    /RANKED_SEARCH_REGION_CANDIDATE_CAP = 80/,
+  );
+  assert.deepEqual(
+    Array.from(helperSource.matchAll(/\.from\("([^"]+)"\)/g)).map(
+      (match) => match[1],
+    ),
+    [
+      "koaptix_complex_region_map",
+      "apt_complex",
+      "region_dim",
+    ],
+  );
+  assert.equal((helperSource.match(/Promise\.all\(/g) ?? []).length, 1);
+  assert.deepEqual(fromCallsInsideLoops, []);
+});
+
+test("KOREA authority lookup is exact, bounded, and separate from regional evidence", () => {
+  const helperSource = readFileSync(
+    resolve(
+      process.cwd(),
+      "src/lib/koaptix/rankedSearchRegionScope.server.ts",
+    ),
+    "utf8",
+  );
+  const authorityStart = helperSource.indexOf(
+    "export async function fetchBoundedKoreaRankAuthorityRows",
+  );
+  const mergeStart = helperSource.indexOf(
+    "export function mergeKoreaRankedAuthorityCandidates",
+  );
+  const authoritySource = helperSource.slice(authorityStart, mergeStart);
+
+  assert.equal(authorityStart >= 0, true);
+  assert.equal(mergeStart > authorityStart, true);
+  assert.match(
+    authoritySource,
+    /\.eq\("universe_code", KOREA_ALL_UNIVERSE_CODE\)/,
+  );
+  assert.match(
+    authoritySource,
+    /\.in\("complex_id", normalizedIds\)/,
+  );
+  assert.match(
+    authoritySource,
+    /\.order\("rank_all", \{ ascending: true \}\)/,
+  );
+  assert.match(
+    authoritySource,
+    /\.limit\(normalizedIds\.length \+ 1\)/,
+  );
+  assert.equal(
+    (authoritySource.match(/\.from\(/g) ?? []).length,
+    1,
+  );
+  assert.equal(
+    /koaptix_complex_region_map|apt_complex|region_dim/.test(authoritySource),
+    false,
   );
 });

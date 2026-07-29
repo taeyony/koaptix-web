@@ -220,6 +220,16 @@ const regionAliasFixtures = [
     expectDiscoveryCount: 0,
   },
   {
+    id: "REGION_ALIAS_DONGDAEMUN_FIRST_UNIVERSE_CONFLICT",
+    query: "서울 동대문구 동대문더퍼스트데시앙",
+    paramName: "universe_code",
+    universe: "BUSAN_ALL",
+    classification: "strict-region-alias",
+    expectedStates: ["UNIVERSE_CONFLICT"],
+    expectedRankedCount: 0,
+    expectDiscoveryCount: 0,
+  },
+  {
     id: "REGION_ALIAS_NFC_EQUIVALENCE",
     query: "광주광역시 남구 한국아델리움".normalize("NFD"),
     paramName: "universe_code",
@@ -358,13 +368,120 @@ const fallbackDiscoveryFixtures = [
   },
 ];
 
+const rankedRegionFixtures = [
+  {
+    id: "RANKED_REGION_HELIO_SONGPA",
+    query: "서울 송파구 헬리오시티",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-ranked-region",
+    expectedScope: "11710",
+    expectedLocalIds: ["5084"],
+    forbiddenDiscoveryIds: ["5084"],
+  },
+  {
+    id: "RANKED_REGION_HELIO_WRONG_REGION",
+    query: "서울 동대문구 헬리오시티",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-ranked-absent",
+    expectedScope: "11230",
+    forbiddenRankedIds: ["5084"],
+  },
+  {
+    id: "RANKED_REGION_PARKRIO_SONGPA",
+    query: "서울 송파구 파크리오",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-ranked-region",
+    expectedScope: "11710",
+    expectedLocalIds: ["5061"],
+    forbiddenDiscoveryIds: ["5061"],
+  },
+  {
+    id: "RANKED_REGION_DONGDAEMUN_FIRST",
+    query: "서울 동대문구 동대문더퍼스트데시앙",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-ranked-region",
+    expectedScope: "11230",
+    expectedLocalIds: ["647"],
+    expectedLocalRanks: { "647": 2389 },
+    expectedLocalUniverses: { "647": "KOREA_ALL" },
+    forbiddenDiscoveryIds: ["647"],
+  },
+  {
+    id: "RANKED_REGION_DONGDAEMUN_FIRST_WRONG_REGION",
+    query: "서울 송파구 동대문더퍼스트데시앙",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-ranked-absent",
+    expectedScope: "11710",
+    forbiddenRankedIds: ["647"],
+  },
+  {
+    id: "RANKED_REGION_DISCOVERY_ONLY_1222",
+    query: "서울 강북구 수유역두산위브1",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-discovery-only",
+    expectedScope: "11305",
+    expectedDiscoveryIds: ["1222"],
+    forbiddenRankedIds: ["1222"],
+  },
+  {
+    id: "RANKED_REGION_EXPLICIT_SGG_UNCHANGED",
+    query: "서울 송파구 헬리오시티",
+    paramName: "universe_code",
+    universe: "SGG_11710",
+    classification: "strict-ranked-region",
+    expectedScope: "11710",
+    expectedLocalIds: ["5084"],
+    forbiddenDiscoveryIds: ["5084"],
+  },
+  {
+    id: "RANKED_REGION_NAME_ONLY_UNCHANGED",
+    query: "헬리오시티",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-ranked-current",
+    expectedRankedIds: ["5084"],
+  },
+  {
+    id: "RANKED_REGION_DONGDAEMUN_FIRST_NAME_ONLY_UNCHANGED",
+    query: "동대문더퍼스트데시앙",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-ranked-current",
+    expectedRankedIds: ["647"],
+  },
+  {
+    id: "RANKED_REGION_DONGDAEMUN_FIRST_EXPLICIT_SGG_UNCHANGED",
+    query: "서울 동대문구 동대문더퍼스트데시앙",
+    paramName: "universe_code",
+    universe: "SGG_11230",
+    classification: "strict-ranked-region",
+    expectedScope: "11230",
+    expectedLocalIds: ["647"],
+    forbiddenDiscoveryIds: ["647"],
+  },
+  {
+    id: "RANKED_REGION_ONLY_REMAINS_EMPTY",
+    query: "서울 송파구",
+    paramName: "universe_code",
+    universe: "KOREA_ALL",
+    classification: "strict-region-empty",
+    expectedScope: "11710",
+  },
+];
+
 const results = [];
 
 console.log("KOAPTIX Search Discovery Smoke");
 console.log(`base_url=${formatBaseUrlForOutput(baseUrl)}`);
 console.log(`mode=${smokeMode}`);
 console.log(
-  `fixture_count=${singleFixtures.length + parityFixtures.length + regionAliasFixtures.length + fallbackDiscoveryFixtures.length}`,
+  `fixture_count=${singleFixtures.length + parityFixtures.length + regionAliasFixtures.length + fallbackDiscoveryFixtures.length + rankedRegionFixtures.length}`,
 );
 
 for (const fixture of singleFixtures) {
@@ -386,6 +503,12 @@ for (const fixture of regionAliasFixtures) {
 }
 
 for (const fixture of fallbackDiscoveryFixtures) {
+  const result = await runSingleFixture(fixture);
+  results.push(result);
+  printFixtureResult(result);
+}
+
+for (const fixture of rankedRegionFixtures) {
   const result = await runSingleFixture(fixture);
   results.push(result);
   printFixtureResult(result);
@@ -552,11 +675,18 @@ function normalizeSearchResponse(result) {
   const discoveryIds = uniqueStrings(
     discoveryCandidates.map(extractDiscoveryId).filter(Boolean),
   );
+  const rankedItems = [...localItems, ...globalItems, ...results, ...items];
   const rankedIds = uniqueStrings(
-    [...localItems, ...globalItems, ...results, ...items]
-      .map(extractComplexId)
-      .filter(Boolean),
+    rankedItems.map(extractComplexId).filter(Boolean),
   );
+  const localIds = uniqueStrings(localItems.map(extractComplexId).filter(Boolean));
+  const globalIds = uniqueStrings(globalItems.map(extractComplexId).filter(Boolean));
+  const localDetails = localItems.map((item) => ({
+    complexId: extractComplexId(item),
+    rank: extractRank(item),
+    universeCode: extractUniverseCode(item),
+  }));
+  const visibleIds = uniqueStrings([...rankedIds, ...discoveryIds]);
   const discoveryDetails = discoveryCandidates.map((candidate) => ({
     complexId: extractDiscoveryId(candidate),
     regionEvidence:
@@ -584,6 +714,10 @@ function normalizeSearchResponse(result) {
     discoveryIds,
     discoveryDetails,
     rankedIds,
+    localIds,
+    globalIds,
+    localDetails,
+    visibleIds,
     currentnessOk,
     regionState: body.regionResolution?.state ?? null,
     regionReason: body.regionResolution?.reasonCode ?? null,
@@ -613,6 +747,17 @@ function extractDiscoveryId(item) {
 function extractComplexId(item) {
   if (!item || typeof item !== "object") return "";
   return String(item.complexId ?? item.complex_id ?? item.id ?? "").trim();
+}
+
+function extractRank(item) {
+  if (!item || typeof item !== "object") return null;
+  const value = Number(item.rank ?? item.rank_all);
+  return Number.isFinite(value) ? value : null;
+}
+
+function extractUniverseCode(item) {
+  if (!item || typeof item !== "object") return "";
+  return String(item.universeCode ?? item.universe_code ?? "").trim();
 }
 
 function getInventedDiscoveryFields(item) {
@@ -698,6 +843,148 @@ function evaluateFixture({ fixture, response }) {
         };
   }
 
+  if (fixture.classification === "strict-ranked-region") {
+    const details = [];
+    const missingLocalIds = getMissingIds(
+      fixture.expectedLocalIds,
+      response.localIds,
+    );
+    const duplicateDiscoveryIds = (fixture.forbiddenDiscoveryIds ?? []).filter(
+      (id) => response.discoveryIds.includes(String(id)),
+    );
+    if (missingLocalIds.length > 0) {
+      details.push(`missing_local_ids=${missingLocalIds.join(",")}`);
+    }
+    if (duplicateDiscoveryIds.length > 0) {
+      details.push(
+        `unexpected_discovery_ids=${duplicateDiscoveryIds.join(",")}`,
+      );
+    }
+    if (response.globalIds.length > 0) {
+      details.push(`unexpected_global_ids=${response.globalIds.join(",")}`);
+    }
+    if (response.effectiveRegionCode !== fixture.expectedScope) {
+      details.push(
+        `expected_scope=${fixture.expectedScope};actual=${response.effectiveRegionCode}`,
+      );
+    }
+    for (const [complexId, expectedRank] of Object.entries(
+      fixture.expectedLocalRanks ?? {},
+    )) {
+      const item = response.localDetails.find(
+        (candidate) => candidate.complexId === complexId,
+      );
+      if (item?.rank !== expectedRank) {
+        details.push(
+          `expected_local_rank_${complexId}=${expectedRank};actual=${item?.rank ?? "missing"}`,
+        );
+      }
+    }
+    for (const [complexId, expectedUniverse] of Object.entries(
+      fixture.expectedLocalUniverses ?? {},
+    )) {
+      const item = response.localDetails.find(
+        (candidate) => candidate.complexId === complexId,
+      );
+      if (item?.universeCode !== expectedUniverse) {
+        details.push(
+          `expected_local_universe_${complexId}=${expectedUniverse};actual=${item?.universeCode || "missing"}`,
+        );
+      }
+    }
+    return details.length === 0
+      ? { ...base, outcome: "PASS" }
+      : {
+          ...base,
+          outcome: "FAIL",
+          details,
+          missingRequiredIds: missingLocalIds,
+        };
+  }
+
+  if (fixture.classification === "strict-ranked-absent") {
+    const unexpectedRankedIds = (fixture.forbiddenRankedIds ?? []).filter(
+      (id) => response.rankedIds.includes(String(id)),
+    );
+    const details = [];
+    if (unexpectedRankedIds.length > 0) {
+      details.push(`unexpected_ranked_ids=${unexpectedRankedIds.join(",")}`);
+    }
+    if (response.effectiveRegionCode !== fixture.expectedScope) {
+      details.push(
+        `expected_scope=${fixture.expectedScope};actual=${response.effectiveRegionCode}`,
+      );
+    }
+    return details.length === 0
+      ? { ...base, outcome: "PASS" }
+      : { ...base, outcome: "FAIL", details };
+  }
+
+  if (fixture.classification === "strict-discovery-only") {
+    const missingDiscoveryIds = getMissingIds(
+      fixture.expectedDiscoveryIds,
+      response.discoveryIds,
+    );
+    const unexpectedRankedIds = (fixture.forbiddenRankedIds ?? []).filter(
+      (id) => response.rankedIds.includes(String(id)),
+    );
+    const details = [];
+    if (missingDiscoveryIds.length > 0) {
+      details.push(`missing_discovery_ids=${missingDiscoveryIds.join(",")}`);
+    }
+    if (unexpectedRankedIds.length > 0) {
+      details.push(`unexpected_ranked_ids=${unexpectedRankedIds.join(",")}`);
+    }
+    if (response.effectiveRegionCode !== fixture.expectedScope) {
+      details.push(
+        `expected_scope=${fixture.expectedScope};actual=${response.effectiveRegionCode}`,
+      );
+    }
+    return details.length === 0
+      ? { ...base, outcome: "PASS" }
+      : {
+          ...base,
+          outcome: "FAIL",
+          details,
+          missingRequiredIds: missingDiscoveryIds,
+        };
+  }
+
+  if (fixture.classification === "strict-ranked-current") {
+    const missingRankedIds = getMissingIds(
+      fixture.expectedRankedIds,
+      response.rankedIds,
+    );
+    return missingRankedIds.length === 0
+      ? { ...base, outcome: "PASS" }
+      : {
+          ...base,
+          outcome: "FAIL",
+          details: [`missing_ranked_ids=${missingRankedIds.join(",")}`],
+          missingRequiredIds: missingRankedIds,
+        };
+  }
+
+  if (fixture.classification === "strict-region-empty") {
+    const details = [];
+    if (response.rankedCount !== 0) {
+      details.push(`expected_ranked_count=0;actual=${response.rankedCount}`);
+    }
+    if (response.discoveryCount !== 0) {
+      details.push(
+        `expected_discovery_count=0;actual=${response.discoveryCount}`,
+      );
+    }
+    if (response.effectiveRegionCode !== fixture.expectedScope) {
+      details.push(
+        `expected_scope=${fixture.expectedScope};actual=${response.effectiveRegionCode}`,
+      );
+    }
+    return details.length === 0
+      ? { ...base, outcome: "PASS" }
+      : { ...base, outcome: "FAIL", details };
+  }
+
   if (fixture.classification === "strict-region-alias") {
     const details = [];
     if (
@@ -747,7 +1034,7 @@ function evaluateFixture({ fixture, response }) {
     }
     const missingRequiredIds = getMissingIds(
       fixture.requiredIds,
-      response.discoveryIds,
+      response.visibleIds,
     );
     if (missingRequiredIds.length > 0) {
       details.push(`missing_ids=${missingRequiredIds.join(",")}`);
@@ -768,8 +1055,8 @@ function evaluateFixture({ fixture, response }) {
     };
   }
 
-  const missingRequiredIds = getMissingIds(fixture.requiredIds, response.discoveryIds);
-  const missingOptionalIds = getMissingIds(fixture.optionalIds, response.discoveryIds);
+  const missingRequiredIds = getMissingIds(fixture.requiredIds, response.visibleIds);
+  const missingOptionalIds = getMissingIds(fixture.optionalIds, response.visibleIds);
 
   if (fixture.classification === "strict") {
     return missingRequiredIds.length === 0
@@ -826,10 +1113,12 @@ function evaluateParityFixture({ fixture, left, right }) {
     };
   }
 
-  const equivalentIds = sameStringSet(left.discoveryIds, right.discoveryIds);
-  const equivalentCounts = left.discoveryCount === right.discoveryCount;
-  const missingLeft = getMissingIds(fixture.requiredIds, left.discoveryIds);
-  const missingRight = getMissingIds(fixture.requiredIds, right.discoveryIds);
+  const equivalentIds = sameStringSet(left.visibleIds, right.visibleIds);
+  const equivalentCounts =
+    left.discoveryCount === right.discoveryCount &&
+    left.rankedCount === right.rankedCount;
+  const missingLeft = getMissingIds(fixture.requiredIds, left.visibleIds);
+  const missingRight = getMissingIds(fixture.requiredIds, right.visibleIds);
 
   if (fixture.classification === "strict-negative") {
     const leftGuard = left.discoveryCount === fixture.expectDiscoveryCount;
@@ -989,6 +1278,11 @@ function buildSummary(items) {
       item.classification === "strict-negative"
       || item.classification === "strict-region-alias"
       || item.classification === "strict-fallback-discovery"
+      || item.classification === "strict-ranked-region"
+      || item.classification === "strict-ranked-absent"
+      || item.classification === "strict-discovery-only"
+      || item.classification === "strict-ranked-current"
+      || item.classification === "strict-region-empty"
     ) {
       summary.strictPass += 1;
     }

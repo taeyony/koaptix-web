@@ -15,7 +15,9 @@
   "include": [
     "src/lib/koaptix/discoverySearch.ts",
     "src/lib/koaptix/discoverySearch.server.ts",
+    "src/lib/koaptix/rankedSearchRegionScope.server.ts",
     "tests/discoverySearch.test.ts",
+    "tests/rankedSearchRegionScope.test.ts",
     "tests/searchDiscoveryRouteContract.test.ts"
   ]
 }
