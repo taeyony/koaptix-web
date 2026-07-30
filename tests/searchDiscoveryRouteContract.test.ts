@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import ts from "typescript";
@@ -14,6 +15,53 @@ import { hydrateDiscoveryRegionFallbacks } from "../src/lib/koaptix/discoverySea
 
 type QueryResult = { data: unknown[] | null; error: { message: string } | null };
 type Call = { table: string; operation: string; args: unknown[] };
+type DiscoveryCopyInput = {
+  warnings: string[];
+  hasAreaHousehold: boolean;
+  hasTradeClean: boolean;
+};
+type DiscoveryCopyResult = {
+  badge: string;
+  message: string;
+  helperText: string;
+};
+
+function readSearchRouteSource() {
+  return readFileSync(
+    resolve(process.cwd(), "src/app/api/search/route.ts"),
+    "utf8",
+  );
+}
+
+function loadDiscoveryCopyFromRoute() {
+  const routeSource = readSearchRouteSource();
+  const sourceFile = ts.createSourceFile(
+    "route.ts",
+    routeSource,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const declaration = sourceFile.statements.find(
+    (node): node is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text === "buildDiscoveryCopy",
+  );
+
+  assert.ok(declaration);
+  const helperSource = declaration.getText(sourceFile);
+  const transpiled = ts.transpileModule(helperSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.None,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+
+  return runInNewContext(
+    `${transpiled}\nbuildDiscoveryCopy;`,
+    Object.create(null),
+  ) as (input: DiscoveryCopyInput) => DiscoveryCopyResult;
+}
 
 function createClient(results: Record<string, QueryResult>) {
   const calls: Call[] = [];
@@ -257,6 +305,222 @@ test("exact target survives the unchanged 48-candidate cap under broad saturatio
   assert.equal(capped.length, 48);
   assert.equal(capped[0], "278060");
   assert.equal(capped.includes("278060"), true);
+});
+
+test("discovery copy is truthful for every area and trade evidence state", () => {
+  const buildDiscoveryCopy = loadDiscoveryCopyFromRoute();
+  const cases: Array<{
+    name: string;
+    input: DiscoveryCopyInput;
+    expected: string;
+  }> = [
+    {
+      name: "area absent and trade absent",
+      input: {
+        warnings: [
+          "AREA_HOUSEHOLD_GAP",
+          "TRADE_CLEAN_GAP",
+          "MARKET_CAP_SOURCE_GAP",
+        ],
+        hasAreaHousehold: false,
+        hasTradeClean: false,
+      },
+      expected:
+        "평형별 세대수와 실거래 연결을 확인하고 있습니다. 가격·시가총액·랭킹 반영을 준비 중입니다.",
+    },
+    {
+      name: "area present and trade absent",
+      input: {
+        warnings: ["TRADE_CLEAN_GAP", "MARKET_CAP_SOURCE_GAP"],
+        hasAreaHousehold: true,
+        hasTradeClean: false,
+      },
+      expected:
+        "평형별 세대수는 확인됐습니다. 실거래 연결과 가격·시가총액·랭킹 반영을 준비 중입니다.",
+    },
+    {
+      name: "area absent and trade present",
+      input: {
+        warnings: ["AREA_HOUSEHOLD_GAP", "MARKET_CAP_SOURCE_GAP"],
+        hasAreaHousehold: false,
+        hasTradeClean: true,
+      },
+      expected:
+        "실거래는 확인됐습니다. 평형별 세대수 연결과 가격·시가총액·랭킹 반영을 준비 중입니다.",
+    },
+    {
+      name: "area present and trade present",
+      input: {
+        warnings: ["MARKET_CAP_SOURCE_GAP"],
+        hasAreaHousehold: true,
+        hasTradeClean: true,
+      },
+      expected:
+        "실거래와 평형별 세대수는 확인됐습니다. 가격·시가총액·랭킹 반영을 준비 중입니다.",
+    },
+  ];
+
+  for (const fixture of cases) {
+    const copy = buildDiscoveryCopy(fixture.input);
+    assert.equal(copy.badge, "관측 준비중", fixture.name);
+    assert.equal(copy.message, fixture.expected, fixture.name);
+    assert.match(copy.message, /랭킹 반영을 준비 중입니다\.$/, fixture.name);
+    assert.equal(copy.message.includes("랭킹 반영이 완료"), false, fixture.name);
+  }
+});
+
+test("discovery copy preserves the source-ambiguity helper contract", () => {
+  const buildDiscoveryCopy = loadDiscoveryCopyFromRoute();
+  const standard = buildDiscoveryCopy({
+    warnings: ["MARKET_CAP_SOURCE_GAP"],
+    hasAreaHousehold: true,
+    hasTradeClean: true,
+  });
+  const ambiguous = buildDiscoveryCopy({
+    warnings: ["SOURCE_IDENTITY_AMBIGUOUS", "MARKET_CAP_SOURCE_GAP"],
+    hasAreaHousehold: true,
+    hasTradeClean: true,
+  });
+
+  assert.equal(
+    standard.helperText,
+    "랭킹 보드에 올리기 전 원천 연결과 공개 검증 상태를 더 확인하고 있습니다.",
+  );
+  assert.equal(
+    ambiguous.helperText,
+    "랭킹 보드에 올리기 전 원천 연결과 공개 검증 상태를 더 확인하고 있습니다. 일부 원천 연결은 추가 확인이 필요합니다.",
+  );
+});
+
+test("route copy call uses the same existing area and trade facts as evidenceFlags", () => {
+  const routeSource = readSearchRouteSource();
+  const helperStart = routeSource.indexOf("function buildDiscoveryCopy");
+  const loaderStart = routeSource.indexOf(
+    "async function loadDiscoveryCandidates",
+    helperStart,
+  );
+  const helperSource = routeSource.slice(helperStart, loaderStart);
+  const dtoStart = routeSource.indexOf(
+    "const sigunguName = regionMap.sigungu_name",
+    loaderStart,
+  );
+  const dtoEnd = routeSource.indexOf(
+    ".filter((candidate): candidate is DiscoveryCandidate",
+    dtoStart,
+  );
+  const dtoSource = routeSource.slice(dtoStart, dtoEnd);
+
+  assert.equal(helperStart >= 0, true);
+  assert.equal(loaderStart > helperStart, true);
+  assert.equal(dtoStart > loaderStart, true);
+  assert.equal(dtoEnd > dtoStart, true);
+  assert.match(
+    helperSource,
+    /function buildDiscoveryCopy\(\{\s*warnings,\s*hasAreaHousehold,\s*hasTradeClean,\s*\}: DiscoveryCopyEvidence\)/,
+  );
+  assert.match(
+    dtoSource,
+    /const hasAreaHousehold = areaHouseholdIds\.has\(complexId\);/,
+  );
+  assert.match(
+    dtoSource,
+    /const hasTradeClean = tradeCleanIds\.has\(complexId\);/,
+  );
+  assert.match(
+    dtoSource,
+    /evidenceFlags:\s*\{[\s\S]*?\bhasAreaHousehold,\s*\bhasTradeClean,/,
+  );
+  assert.match(
+    dtoSource,
+    /copy: buildDiscoveryCopy\(\{\s*warnings,\s*hasAreaHousehold,\s*hasTradeClean,\s*\}\)/,
+  );
+  assert.deepEqual(
+    Array.from(helperSource.matchAll(/\.from\("([^"]+)"\)/g)),
+    [],
+  );
+});
+
+test("copy patch preserves admission, membership, ordering, dedup, and actions", () => {
+  const routeSource = readSearchRouteSource();
+  const assessmentStart = routeSource.indexOf(
+    "function assessDiscoveryCandidate",
+  );
+  const assessmentEnd = routeSource.indexOf(
+    "async function fetchDiscoveryCandidateIds",
+    assessmentStart,
+  );
+  const assessmentSource = routeSource.slice(assessmentStart, assessmentEnd);
+  const loaderStart = routeSource.indexOf(
+    "async function loadDiscoveryCandidates",
+  );
+  const loaderEnd = routeSource.indexOf(
+    "function getSearchSourceLimit",
+    loaderStart,
+  );
+  const loaderSource = routeSource.slice(loaderStart, loaderEnd);
+
+  assert.match(
+    assessmentSource,
+    /const downstreamEvidence =\s*flags\.hasAreaHousehold \|\|\s*flags\.hasTradeClean \|\|/,
+  );
+  assert.match(
+    assessmentSource,
+    /\(flags\.hasTradeClean \? 20 : 0\) \+\s*\(flags\.hasPriceSnapshot \|\| flags\.hasComponentSnapshot \? 20 : 0\)/,
+  );
+  assert.match(
+    assessmentSource,
+    /passes: score >= \(hasRegionContext \? 140 : 180\)/,
+  );
+  assert.equal(assessmentSource.includes("buildDiscoveryCopy"), false);
+  assert.match(loaderSource, /return dedupeDiscoveryByComplexId\(/);
+  assert.match(
+    loaderSource,
+    /\.slice\(0, SEARCH_DISCOVERY_CANDIDATE_LIMIT\)/,
+  );
+  assert.match(
+    loaderSource,
+    /disabledActions:\s*\{\s*openRankedDetail: true,\s*showMarketCap: true,\s*showRank: true,\s*showChart: true,\s*\}/,
+  );
+  assert.equal(
+    loaderSource.indexOf("isDiscoveryOnlyEligible(") <
+      loaderSource.indexOf("copy: buildDiscoveryCopy("),
+    true,
+  );
+});
+
+test("product route contains no shield ID, cohort, or payload branching", () => {
+  const routeSource = readSearchRouteSource();
+  const shieldIds = [
+    "4760",
+    "306118",
+    "306130",
+    "306192",
+    "306237",
+    "306264",
+    "306343",
+    "306386",
+    "306427",
+    "306456",
+    "306501",
+    "306575",
+    "306609",
+    "306663",
+    "306664",
+    "306666",
+    "306689",
+  ];
+
+  for (const complexId of shieldIds) {
+    assert.equal(routeSource.includes(complexId), false, complexId);
+  }
+  assert.equal(routeSource.includes("destination-payload.csv"), false);
+  assert.equal(
+    routeSource.includes(
+      "E0456E3F98368677F30FD465975333A2B7399A21C36457930BA7FAFCFC3BFF57",
+    ),
+    false,
+  );
+  assert.equal(routeSource.includes(".handoff/area-household-66"), false);
 });
 
 test("search route wires the existing generated terms through the ordering helper once", () => {

@@ -154,6 +154,12 @@ type DiscoveryMatchAssessment = {
   warnings: DiscoveryWarning[];
 };
 
+type DiscoveryCopyEvidence = {
+  warnings: DiscoveryWarning[];
+  hasAreaHousehold: boolean;
+  hasTradeClean: boolean;
+};
+
 type DiscoveryMode =
   | "DISABLED_FOR_BROAD_NATIONAL"
   | "SCOPED_ONLY"
@@ -1109,13 +1115,29 @@ async function loadGenericDiscoverySeeds(
     .slice(0, SEARCH_DISCOVERY_CANDIDATE_LIMIT);
 }
 
-function buildDiscoveryCopy(warnings: DiscoveryWarning[]) {
+function buildDiscoveryCopy({
+  warnings,
+  hasAreaHousehold,
+  hasTradeClean,
+}: DiscoveryCopyEvidence) {
   const hasSourceWarning = warnings.includes("SOURCE_IDENTITY_AMBIGUOUS");
+  let message =
+    "평형별 세대수와 실거래 연결을 확인하고 있습니다. 가격·시가총액·랭킹 반영을 준비 중입니다.";
+
+  if (hasAreaHousehold && hasTradeClean) {
+    message =
+      "실거래와 평형별 세대수는 확인됐습니다. 가격·시가총액·랭킹 반영을 준비 중입니다.";
+  } else if (hasAreaHousehold) {
+    message =
+      "평형별 세대수는 확인됐습니다. 실거래 연결과 가격·시가총액·랭킹 반영을 준비 중입니다.";
+  } else if (hasTradeClean) {
+    message =
+      "실거래는 확인됐습니다. 평형별 세대수 연결과 가격·시가총액·랭킹 반영을 준비 중입니다.";
+  }
 
   return {
     badge: "관측 준비중",
-    message:
-      "단지 이름과 지역 정보는 확인됐지만, 아직 KOAPTIX 랭킹 산정에 필요한 실거래·세대수 연결이 끝나지 않았어요.",
+    message,
     helperText: hasSourceWarning
       ? "랭킹 보드에 올리기 전 원천 연결과 공개 검증 상태를 더 확인하고 있습니다. 일부 원천 연결은 추가 확인이 필요합니다."
       : "랭킹 보드에 올리기 전 원천 연결과 공개 검증 상태를 더 확인하고 있습니다.",
@@ -1306,6 +1328,8 @@ async function loadDiscoveryCandidates(
           [sigunguName, umdName].filter(Boolean).join(" ") ||
           seed.fallbackRegionLabel;
         const warnings = Array.from(new Set(seed.warnings));
+        const hasAreaHousehold = areaHouseholdIds.has(complexId);
+        const hasTradeClean = tradeCleanIds.has(complexId);
 
         return {
           discoveryId: `observation-ready:${complexId}`,
@@ -1321,8 +1345,8 @@ async function loadDiscoveryCandidates(
             hasAlias: aliasIds.has(complexId),
             hasExternalId: externalIdIds.has(complexId),
             hasRegionMap: regionEvidence?.source === "REGION_MAP",
-            hasAreaHousehold: areaHouseholdIds.has(complexId),
-            hasTradeClean: tradeCleanIds.has(complexId),
+            hasAreaHousehold,
+            hasTradeClean,
             hasPriceSnapshot: priceSnapshotIds.has(complexId),
             hasComponentSnapshot: componentSnapshotIds.has(complexId),
             hasMarketCap: marketCapIds.has(complexId),
@@ -1332,7 +1356,11 @@ async function loadDiscoveryCandidates(
             hasDetail,
           },
           warnings,
-          copy: buildDiscoveryCopy(warnings),
+          copy: buildDiscoveryCopy({
+            warnings,
+            hasAreaHousehold,
+            hasTradeClean,
+          }),
           disabledActions: {
             openRankedDetail: true,
             showMarketCap: true,
