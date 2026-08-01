@@ -1,0 +1,29 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "target": "ES2022",
+    "rootDir": ".",
+    "outDir": ".next/rank-publication-contract-tests",
+    "noEmit": false,
+    "declaration": false,
+    "sourceMap": false,
+    "incremental": false,
+    "isolatedModules": false
+  },
+  "include": [
+    "src/app/api/map/route.ts",
+    "src/app/api/rankings/route.ts",
+    "src/app/api/ranking/route.ts",
+    "src/app/api/search/route.ts",
+    "src/app/api/currentness/route.ts",
+    "src/lib/koaptix/queries.ts",
+    "src/lib/koaptix/currentness.ts",
+    "src/lib/koaptix/types.ts",
+    "src/app/api/home/route.ts",
+    "src/lib/koaptix/home.ts",
+    "src/types/koaptix.ts",
+    "tests/rankPublicationContract.test.ts"
+  ]
+}

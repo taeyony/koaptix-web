@@ -8,7 +8,12 @@ import {
   type UniverseRequestResolution,
 } from "../../../lib/koaptix/universes";
 import { getLatestRankBoard } from "../../../lib/koaptix/queries";
-import { getKoaptixCurrentnessHeaders } from "../../../lib/koaptix/currentness";
+import {
+  getKoaptixDeploymentHeaders,
+  requirePublicationIdentity,
+  requireUniformUniverseServicePublication,
+  type KoaptixPublicationSelectionIdentity,
+} from "../../../lib/koaptix/currentness";
 import {
   createRegionAliasSourceUnavailableResolution,
   resolveRegionAliasV1,
@@ -52,16 +57,14 @@ import {
 import type {
   DiscoveryCandidate,
   DiscoveryWarning,
+  PublishedRankingItem,
   RankingItem,
 } from "../../../lib/koaptix/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const SEARCH_CACHE_TTL_MS = 30_000;
-const SEARCH_STALE_CACHE_TTL_MS = 600_000;
 const SEARCH_REGIONAL_RETRY_LIMIT = 40;
-const SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT = 1_000;
 const SEARCH_RANK_VISIBLE_FALLBACK_RESULT_LIMIT = 8;
 const SEARCH_KOREA_ALL_DONG_AUXILIARY_RESULT_LIMIT = 10;
 const SEARCH_REGIONAL_NAME_AUXILIARY_RESULT_LIMIT = 8;
@@ -71,25 +74,22 @@ const SEARCH_DISCOVERY_NAME_SOURCE_LIMIT = 120;
 const SEARCH_DISCOVERY_REGION_SOURCE_LIMIT = 80;
 const SEARCH_DISCOVERY_HYDRATION_LIMIT = 120;
 const SEARCH_DISCOVERY_QUERY_TERM_LIMIT = 8;
-const SEARCH_SUCCESS_CACHE_CONTROL =
-  "public, max-age=10, s-maxage=30, stale-while-revalidate=300";
-const SEARCH_ERROR_CACHE_CONTROL = "no-store";
+const SEARCH_CACHE_CONTROL = "private, no-store, max-age=0";
 
-type SearchCachePayload = {
-  items: RankingItem[];
-};
-
-type SearchSourceResult = {
-  items: RankingItem[];
-  source: "live_dynamic" | "stale_cache" | "stale_cache_any_limit";
-  cacheState: "bypassed" | "fresh" | "stale_exact" | "stale_any_limit";
-  fallbackMode:
-    | "none"
-    | "exact_same_universe_stale"
-    | "same_universe_stale_any_limit";
+type SearchSourceResult = KoaptixPublicationSelectionIdentity & {
+  items: PublishedRankingItem[];
+  source: "live_latest";
+  cacheState: "bypassed";
+  fallbackMode: "none";
 };
 
 type SearchBoardRow = {
+  generation_id: string;
+  publication_version: number;
+  publication_event_id: string;
+  published_at: string;
+  surface_code: "UNIVERSE_SERVICE";
+  snapshot_date: string;
   complex_id?: number | string | null;
   id?: number | string | null;
   apt_name_ko?: string | null;
@@ -111,7 +111,7 @@ type SearchBoardRow = {
   previous_rank_all?: number | string | null;
   market_cap_krw?: number | string | null;
   market_cap_trillion_krw?: number | string | null;
-  universe_code?: string | null;
+  universe_code: string;
   universe_name?: string | null;
   is_top1000?: boolean | null;
 };
@@ -181,16 +181,6 @@ type SearchQueryClassification = {
   isContextRichIntent: boolean;
   discoveryMode: DiscoveryMode;
 };
-
-const searchSourceCache = new Map<
-  string,
-  {
-    freshUntil: number;
-    staleUntil: number;
-    payload: SearchCachePayload;
-  }
->();
-const searchSourceInflight = new Map<string, Promise<RankingItem[]>>();
 
 function parseLimit(value: string | null, fallback = 12, min = 5, max = 20) {
   if (!value) return fallback;
@@ -1397,7 +1387,7 @@ type RegionalNameCompanionIntent = {
 };
 
 type ScoredRegionalNameCompanionItem = {
-  item: RankingItem;
+  item: PublishedRankingItem;
   score: number;
   universeIndex: number;
   sourceIndex: number;
@@ -1430,7 +1420,7 @@ function toNullableNumber(value: unknown): number | null {
 function toRankingItem(
   row: SearchBoardRow,
   fallbackUniverseCode: string,
-): RankingItem {
+): PublishedRankingItem {
   const buildYear = toNullableNumber(row.build_year ?? row.approval_year);
   const households = toNullableNumber(
     row.household_count ?? row.total_household_count ?? row.households,
@@ -1438,15 +1428,25 @@ function toRankingItem(
   const recovery = toNullableNumber(
     row.recovery_52w ?? row.recovery_rate_52w,
   );
+  const identity = {
+    ...requirePublicationIdentity(row, "UNIVERSE_SERVICE"),
+    surface_code: "UNIVERSE_SERVICE" as const,
+  };
+  const rank = toNullableNumber(row.rank_all ?? row.rank) ?? 0;
+  const marketCapKrw = toNullableNumber(row.market_cap_krw) ?? 0;
+  const marketCapTrillionKrw = toNullableNumber(
+    row.market_cap_trillion_krw,
+  );
 
   return {
+    ...identity,
     complexId: String(row.complex_id ?? row.id),
 
     name: row.apt_name_ko ?? row.name ?? "",
     apt_name_ko: row.apt_name_ko ?? row.name ?? "",
 
-    rank: row.rank_all ?? row.rank ?? 0,
-    rank_all: row.rank_all ?? row.rank ?? 0,
+    rank,
+    rank_all: rank,
 
     sigunguName: row.sigungu_name ?? "",
     sigungu_name: row.sigungu_name ?? "",
@@ -1454,11 +1454,11 @@ function toRankingItem(
     legalDongName: row.legal_dong_name ?? "",
     legal_dong_name: row.legal_dong_name ?? "",
 
-    marketCapKrw: row.market_cap_krw ?? 0,
-    market_cap_krw: row.market_cap_krw ?? 0,
+    marketCapKrw,
+    market_cap_krw: marketCapKrw,
 
-    marketCapTrillionKrw: row.market_cap_trillion_krw ?? 0,
-    market_cap_trillion_krw: row.market_cap_trillion_krw ?? 0,
+    marketCapTrillionKrw,
+    market_cap_trillion_krw: marketCapTrillionKrw,
 
     rankDelta7d: toNullableNumber(row.rank_delta_w ?? row.rank_delta_7d),
     rank_delta_w: toNullableNumber(row.rank_delta_w ?? row.rank_delta_7d),
@@ -1493,7 +1493,32 @@ function toRankingItem(
     universe_code: row.universe_code ?? fallbackUniverseCode,
     universeName: row.universe_name ?? null,
     universe_name: row.universe_name ?? null,
-  } as unknown as RankingItem;
+  };
+}
+
+function selectMatchingPublicationItems(
+  items: readonly RankingItem[],
+  expected: KoaptixPublicationSelectionIdentity,
+): PublishedRankingItem[] {
+  return items.filter((item): item is PublishedRankingItem => {
+    try {
+      const identity = requirePublicationIdentity(item, "UNIVERSE_SERVICE");
+      return (
+        identity.generation_id === expected.generation_id &&
+        identity.publication_version === expected.publication_version &&
+        identity.publication_event_id === expected.publication_event_id &&
+        identity.published_at === expected.published_at &&
+        identity.surface_code === expected.surface_code
+      );
+    } catch {
+      return false;
+    }
+  });
+}
+
+function isPublishedRankingVisibleTop1000(item: RankingItem): boolean {
+  const rank = toNullableNumber(item.rank_all ?? item.rank);
+  return rank !== null && rank >= 1 && rank <= 1000;
 }
 
 function getErrorMessage(error: unknown) {
@@ -1509,63 +1534,6 @@ function getErrorMessage(error: unknown) {
   }
 
   return "Unknown search error";
-}
-
-function makeCacheKey(universeCode: string, sourceLimit: number) {
-  return `LOCAL::${universeCode}::${sourceLimit}`;
-}
-
-function readFreshSearchSourceCache(cacheKey: string) {
-  const cached = searchSourceCache.get(cacheKey);
-  if (!cached) return null;
-
-  const now = Date.now();
-
-  if (now > cached.staleUntil) {
-    searchSourceCache.delete(cacheKey);
-    return null;
-  }
-
-  if (now > cached.freshUntil) {
-    return null;
-  }
-
-  return cached.payload;
-}
-
-function readStaleSearchSourceCache(cacheKey: string) {
-  const cached = searchSourceCache.get(cacheKey);
-  if (!cached) return null;
-
-  const now = Date.now();
-
-  if (now > cached.staleUntil) {
-    searchSourceCache.delete(cacheKey);
-    return null;
-  }
-
-  return cached.payload;
-}
-
-function readAnyUniverseSearchSourceCache(universeCode: string) {
-  const prefix = `LOCAL::${universeCode}::`;
-  const now = Date.now();
-
-  const candidates = Array.from(searchSourceCache.entries())
-    .filter(([key, entry]) => key.startsWith(prefix) && now <= entry.staleUntil)
-    .sort((a, b) => b[1].freshUntil - a[1].freshUntil);
-
-  return candidates[0]?.[1].payload ?? null;
-}
-
-function writeSearchSourceCache(cacheKey: string, payload: SearchCachePayload) {
-  const now = Date.now();
-
-  searchSourceCache.set(cacheKey, {
-    freshUntil: now + SEARCH_CACHE_TTL_MS,
-    staleUntil: now + SEARCH_STALE_CACHE_TTL_MS,
-    payload,
-  });
 }
 
 function normalizeSearchToken(value: unknown) {
@@ -1776,19 +1744,6 @@ function normalizeExactName(value: unknown) {
     .trim()
     .replace(/\s+/g, " ")
     .toLowerCase();
-}
-
-function isRankingVisibleTop1000(row: SearchBoardRow) {
-  if (typeof row?.is_top1000 === "boolean") {
-    return row.is_top1000;
-  }
-
-  const rankAll = toNullableNumber(row?.rank_all ?? row?.rank);
-  return (
-    rankAll !== null &&
-    rankAll >= 1 &&
-    rankAll <= SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT
-  );
 }
 
 function mergeUniqueByComplexId(items: RankingItem[]) {
@@ -2152,8 +2107,8 @@ async function loadRegionAuxiliaryItems(
           matchedItems.length === 0 &&
           dongAuxiliarySearchTerms.length > 0
         ) {
-          matchedItems = await fetchRankVisibleRegionalAuxiliaryItems(
-            resolution.renderedUniverseCode,
+          matchedItems = fetchRankVisibleRegionalAuxiliaryItems(
+            source.items,
             dongAuxiliarySearchTerms,
           );
         }
@@ -2189,7 +2144,7 @@ function buildUnavailableSearchPayload(
   limit: number,
 ) {
   return {
-    ok: true,
+    ok: false,
     ...buildUniverseResolutionMetadata(resolution),
     requestedLimit: limit,
     resultCount: 0,
@@ -2214,52 +2169,39 @@ async function fetchSourceItems(
     universeCode,
     sourceLimit,
   );
+  const identity = requireUniformUniverseServicePublication(rows, universeCode);
   const items = rows.map((row) =>
-    toRankingItem(row, universeCode),
+    toRankingItem({ ...row, ...identity }, universeCode),
   );
 
-  return items;
+  return { identity, items };
 }
 
-async function fetchRankVisibleFallbackItems(
-  universeCode: string,
+function fetchRankVisibleFallbackItems(
+  items: PublishedRankingItem[],
   q: string,
-): Promise<RankingItem[]> {
+): PublishedRankingItem[] {
   const normalizedQ = normalizeExactName(q);
   if (!normalizedQ) return [];
-
-  const rows: SearchBoardRow[] = await getLatestRankBoard(
-    universeCode,
-    SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT,
-  );
 
   // Bounded rank-visible fallback: search only the approved Top1000-style
   // rank-board path, never apt_complex-only discovery or unranked rows.
   return filterItemsByQuery(
-    rows
-      .filter(isRankingVisibleTop1000)
-      .map((row) => toRankingItem(row, universeCode)),
+    items.filter(isPublishedRankingVisibleTop1000),
     q,
-  ).slice(0, SEARCH_RANK_VISIBLE_FALLBACK_RESULT_LIMIT);
+  ).slice(0, SEARCH_RANK_VISIBLE_FALLBACK_RESULT_LIMIT) as PublishedRankingItem[];
 }
 
-async function fetchRankVisibleRegionalAuxiliaryItems(
-  universeCode: string,
+function fetchRankVisibleRegionalAuxiliaryItems(
+  items: PublishedRankingItem[],
   terms: string[],
-): Promise<RankingItem[]> {
+): PublishedRankingItem[] {
   if (terms.length === 0) return [];
 
-  const rows: SearchBoardRow[] = await getLatestRankBoard(
-    universeCode,
-    SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT,
-  );
-
   return filterItemsByRegionalAuxiliaryTerms(
-    rows
-      .filter(isRankingVisibleTop1000)
-      .map((row) => toRankingItem(row, universeCode)),
+    items.filter(isPublishedRankingVisibleTop1000),
     terms,
-  ).slice(0, SEARCH_KOREA_ALL_DONG_AUXILIARY_RESULT_LIMIT);
+  ).slice(0, SEARCH_KOREA_ALL_DONG_AUXILIARY_RESULT_LIMIT) as PublishedRankingItem[];
 }
 
 async function fetchRankVisibleRegionalNameCompanionItems(
@@ -2267,16 +2209,13 @@ async function fetchRankVisibleRegionalNameCompanionItems(
   intent: RegionalNameCompanionIntent,
   universeIndex: number,
 ): Promise<ScoredRegionalNameCompanionItem[]> {
-  const rows: SearchBoardRow[] = await getLatestRankBoard(
-    universeCode,
-    SEARCH_EXACT_NAME_FALLBACK_SOURCE_LIMIT,
-  );
+  const source = await loadSourceItems(universeCode);
 
   // KOREA_ALL companion search stays bounded to rank-visible regional boards.
-  return rows
-    .filter(isRankingVisibleTop1000)
-    .map((row, sourceIndex) => ({
-      item: toRankingItem(row, universeCode),
+  return source.items
+    .filter(isPublishedRankingVisibleTop1000)
+    .map((item, sourceIndex) => ({
+      item,
       sourceIndex,
     }))
     .map(({ item, sourceIndex }) => ({
@@ -2355,91 +2294,31 @@ async function loadSourceItems(
   universeCode: string,
 ): Promise<SearchSourceResult> {
   const sourceLimit = getSearchSourceLimit();
-  const cacheKey = makeCacheKey(universeCode, sourceLimit);
-
-  const freshCached = readFreshSearchSourceCache(cacheKey);
-  if (freshCached) {
-    return {
-      items: freshCached.items,
-      source: "live_dynamic",
-      cacheState: "fresh",
-      fallbackMode: "none",
-    };
-  }
-
-  let inflight = searchSourceInflight.get(cacheKey);
-  if (!inflight) {
-    inflight = fetchSourceItems(universeCode, sourceLimit)
-      .then((items) => {
-        writeSearchSourceCache(cacheKey, { items });
-        return items;
-      })
-      .finally(() => {
-        searchSourceInflight.delete(cacheKey);
-      });
-
-    searchSourceInflight.set(cacheKey, inflight);
-  }
-
   try {
+    const { identity, items } = await fetchSourceItems(
+      universeCode,
+      sourceLimit,
+    );
     return {
-      items: await inflight,
-      source: "live_dynamic",
+      ...identity,
+      items,
+      source: "live_latest",
       cacheState: "bypassed",
       fallbackMode: "none",
     };
-  } catch (primaryError) {
+  } catch {
     const retryLimit = Math.min(sourceLimit, SEARCH_REGIONAL_RETRY_LIMIT);
-    const retryCacheKey = makeCacheKey(universeCode, retryLimit);
-    const freshRetryCached = readFreshSearchSourceCache(retryCacheKey);
-
-    if (freshRetryCached) {
-      return {
-        items: freshRetryCached.items,
-        source: "live_dynamic",
-        cacheState: "fresh",
-        fallbackMode: "none",
-      };
-    }
-
-    try {
-      const retryItems = await fetchSourceItems(universeCode, retryLimit);
-      writeSearchSourceCache(retryCacheKey, { items: retryItems });
-      return {
-        items: retryItems,
-        source: "live_dynamic",
-        cacheState: "bypassed",
-        fallbackMode: "none",
-      };
-    } catch (retryError) {
-      const exactStaleCached =
-        readStaleSearchSourceCache(cacheKey) ??
-        readStaleSearchSourceCache(retryCacheKey);
-      const anyLimitStaleCached =
-        exactStaleCached ? null : readAnyUniverseSearchSourceCache(universeCode);
-      const staleCached = exactStaleCached ?? anyLimitStaleCached;
-
-      if (staleCached) {
-        console.info("[API /api/search] serving stale local search source", {
-          universeCode,
-          sourceLimit,
-          retryLimit,
-          cacheState: exactStaleCached ? "stale_exact" : "stale_any_limit",
-          primaryMessage: getErrorMessage(primaryError),
-          retryMessage: getErrorMessage(retryError),
-        });
-        return {
-          items: staleCached.items,
-          source: exactStaleCached ? "stale_cache" : "stale_cache_any_limit",
-          cacheState: exactStaleCached ? "stale_exact" : "stale_any_limit",
-          fallbackMode: exactStaleCached
-            ? "exact_same_universe_stale"
-            : "same_universe_stale_any_limit",
-        };
-      }
-
-      throw retryError;
-    }
+    const { identity, items } = await fetchSourceItems(
+      universeCode,
+      retryLimit,
+    );
+    return {
+      ...identity,
+      items,
+      source: "live_latest",
+      cacheState: "bypassed",
+      fallbackMode: "none",
+    };
   }
 }
 
@@ -2511,7 +2390,7 @@ function buildRegionAliasFailClosedPayload(
   metadata: RegionAliasApiMetadata,
 ) {
   return {
-    ok: true,
+    ok: false,
     universeCode,
     requestedUniverseCode: universeCode,
     renderedUniverseCode: universeCode,
@@ -2544,9 +2423,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       buildUnavailableSearchPayload(universeResolution, limit),
       {
+        status: 400,
         headers: {
-          "Cache-Control": SEARCH_ERROR_CACHE_CONTROL,
-          ...getKoaptixCurrentnessHeaders(),
+          "Cache-Control": SEARCH_CACHE_CONTROL,
+          ...getKoaptixDeploymentHeaders(),
         },
       },
     );
@@ -2557,7 +2437,7 @@ export async function GET(request: NextRequest) {
   if (normalizeSearchToken(q).length < 2) {
     return NextResponse.json(
       {
-        ok: true,
+        ok: false,
         universeCode: requestedUniverseCode,
         requestedUniverseCode,
         renderedUniverseCode: requestedUniverseCode,
@@ -2572,9 +2452,10 @@ export async function GET(request: NextRequest) {
         discoveryCandidates: [],
       },
       {
+        status: 400,
         headers: {
-          "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL,
-          ...getKoaptixCurrentnessHeaders(),
+          "Cache-Control": SEARCH_CACHE_CONTROL,
+          ...getKoaptixDeploymentHeaders(),
         },
       },
     );
@@ -2607,9 +2488,10 @@ export async function GET(request: NextRequest) {
           regionAliasMetadata,
         ),
         {
+          status: 409,
           headers: {
-            "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL,
-            ...getKoaptixCurrentnessHeaders(),
+            "Cache-Control": SEARCH_CACHE_CONTROL,
+            ...getKoaptixDeploymentHeaders(),
           },
         },
       );
@@ -2625,7 +2507,7 @@ export async function GET(request: NextRequest) {
     );
     const localSource = await loadSourceItems(requestedUniverseCode);
     let matchedLocalItems = filterItemsByQuery(localSource.items, effectiveQuery);
-    let rankVisibleFallbackItems: RankingItem[] = [];
+    let rankVisibleFallbackItems: PublishedRankingItem[] = [];
 
     if (matchedLocalItems.length === 0) {
       const localFallbackTerms = getRegionAuxiliaryFallbackSearchTerms(
@@ -2644,8 +2526,8 @@ export async function GET(request: NextRequest) {
       !isStrictRegionIntentQuery(queryClassification.normalizedQuery)
     ) {
       try {
-        rankVisibleFallbackItems = await fetchRankVisibleFallbackItems(
-          requestedUniverseCode,
+        rankVisibleFallbackItems = fetchRankVisibleFallbackItems(
+          localSource.items,
           effectiveQuery,
         );
       } catch (fallbackError) {
@@ -2658,9 +2540,13 @@ export async function GET(request: NextRequest) {
     }
 
     let rankedCandidateItems = mergeUniqueByComplexId([
-      ...rankVisibleFallbackItems,
       ...matchedLocalItems,
+      ...rankVisibleFallbackItems,
     ]);
+    rankedCandidateItems = selectMatchingPublicationItems(
+      rankedCandidateItems,
+      localSource,
+    );
     let scopedRankAuthorityFailure: string | null = null;
     let scopedRankedSupabase:
       | ReturnType<typeof createDiscoverySupabase>
@@ -2678,10 +2564,13 @@ export async function GET(request: NextRequest) {
     ) {
       try {
         const regionalCompanionSeedItems =
-          await loadRegionalNameCompanionItems(
-            q,
-            rankedCandidateItems,
-            limit,
+          selectMatchingPublicationItems(
+            await loadRegionalNameCompanionItems(
+              q,
+              rankedCandidateItems,
+              limit,
+            ),
+            localSource,
           );
         const seedPlan = buildBoundedKoreaRankAuthoritySeedPlan(
           rankedCandidateItems,
@@ -2700,13 +2589,59 @@ export async function GET(request: NextRequest) {
           if (authorityResult.failure) {
             scopedRankAuthorityFailure = authorityResult.failure;
           } else {
-            const recoveredKoreaItems = authorityResult.rows.map((row) =>
-              toRankingItem(row, DEFAULT_UNIVERSE_CODE),
+            const regionalCompanionById = new Map(
+              regionalCompanionSeedItems.map((item) => [
+                String(item.complexId).trim(),
+                item,
+              ]),
             );
-            rankedCandidateItems = mergeKoreaRankedAuthorityCandidates(
-              rankedCandidateItems,
-              recoveredKoreaItems,
+            const recoveredKoreaRankedItems = authorityResult.rows.flatMap(
+              (row): PublishedRankingItem[] => {
+                const complexId = String(row.complex_id ?? "").trim();
+                const companion = regionalCompanionById.get(complexId);
+                const rank = toNullableNumber(row.rank_all);
+                if (
+                  !companion ||
+                  rank === null ||
+                  row.snapshot_date !== localSource.snapshot_date
+                ) {
+                  return [];
+                }
+
+                const recoveredItem: PublishedRankingItem & {
+                  snapshot_date: string;
+                } = {
+                  ...companion,
+                  complexId,
+                  name: row.apt_name_ko ?? companion.name,
+                  apt_name_ko:
+                    row.apt_name_ko ?? companion.apt_name_ko ?? companion.name,
+                  rank,
+                  rank_all: rank,
+                  snapshot_date: localSource.snapshot_date,
+                  universeCode: DEFAULT_UNIVERSE_CODE,
+                  universe_code: DEFAULT_UNIVERSE_CODE,
+                  universeName: row.universe_name ?? companion.universeName,
+                  universe_name:
+                    row.universe_name ?? companion.universe_name ?? null,
+                };
+                return [recoveredItem];
+              },
             );
+
+            if (
+              recoveredKoreaRankedItems.length !== authorityResult.rows.length
+            ) {
+              scopedRankAuthorityFailure = "KOREA_RANK_AUTHORITY_MALFORMED";
+            } else {
+              rankedCandidateItems = selectMatchingPublicationItems(
+                mergeKoreaRankedAuthorityCandidates(
+                  rankedCandidateItems,
+                  recoveredKoreaRankedItems,
+                ),
+                localSource,
+              );
+            }
           }
         }
 
@@ -2756,6 +2691,10 @@ export async function GET(request: NextRequest) {
             regionResolution.effectiveRegionScope!,
           );
         localItems = scopedRankedResult.items.slice(0, limit);
+        localItems = selectMatchingPublicationItems(
+          localItems,
+          localSource,
+        );
 
         if (scopedRankedResult.failure) {
           console.info("[API /api/search] scoped ranked restoration skipped", {
@@ -2785,11 +2724,14 @@ export async function GET(request: NextRequest) {
       regionResolution.effectiveRegionScope ||
       !regionResolution.globalFallbackAllowed
         ? []
-        : await loadGlobalAuxiliaryItems(
-            effectiveQuery,
-            requestedUniverseCode,
-            localItems,
-            limit,
+        : selectMatchingPublicationItems(
+            await loadGlobalAuxiliaryItems(
+              effectiveQuery,
+              requestedUniverseCode,
+              localItems,
+              limit,
+            ),
+            localSource,
           );
     const discoveryCandidates = await loadDiscoveryCandidates(
       effectiveQuery,
@@ -2805,7 +2747,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        ok: true,
+        ok: false,
+        generation_id: localSource.generation_id,
+        publication_version: localSource.publication_version,
+        publication_event_id: localSource.publication_event_id,
+        published_at: localSource.published_at,
+        surface_code: localSource.surface_code,
         universeCode: requestedUniverseCode,
         requestedUniverseCode,
         renderedUniverseCode: requestedUniverseCode,
@@ -2821,9 +2768,10 @@ export async function GET(request: NextRequest) {
         ...regionAliasMetadata,
       },
       {
+        status: 503,
         headers: {
-          "Cache-Control": SEARCH_SUCCESS_CACHE_CONTROL,
-          ...getKoaptixCurrentnessHeaders(),
+          "Cache-Control": SEARCH_CACHE_CONTROL,
+          ...getKoaptixDeploymentHeaders(),
         },
       },
     );
@@ -2859,8 +2807,8 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control": SEARCH_ERROR_CACHE_CONTROL,
-          ...getKoaptixCurrentnessHeaders(),
+          "Cache-Control": SEARCH_CACHE_CONTROL,
+          ...getKoaptixDeploymentHeaders(),
         },
       },
     );

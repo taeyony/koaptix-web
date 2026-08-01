@@ -2,6 +2,23 @@ import type { DiscoveryRegionEvidenceSource } from "./discoverySearch";
 
 export type NullableNumberLike = number | string | null;
 
+export type KoaptixPublicationSurfaceCode =
+  | "GLOBAL_LATEST"
+  | "UNIVERSE_SERVICE";
+
+export type KoaptixPublicationIdentity = {
+  generation_id: string;
+  publication_version: number;
+  publication_event_id: string;
+  published_at: string;
+  surface_code: KoaptixPublicationSurfaceCode;
+};
+
+export type KoaptixUniverseServicePublicationIdentity =
+  KoaptixPublicationIdentity & {
+    surface_code: "UNIVERSE_SERVICE";
+  };
+
 export type WeeklyDeltaWindow = "7d";
 
 export type WeeklyDeltaPayload = {
@@ -11,7 +28,9 @@ export type WeeklyDeltaPayload = {
   market_cap_delta_pct_7d: number | null;
 };
 
-export type DbLatestRankBoardRow = {
+export type DbLatestRankBoardRow =
+  KoaptixUniverseServicePublicationIdentity & {
+  snapshot_date: string;
   complex_id: number | string | null;
   apt_name_ko: string | null;
   rank_all: number | null;
@@ -23,7 +42,7 @@ export type DbLatestRankBoardRow = {
   household_count?: NullableNumberLike;
   build_year?: NullableNumberLike;
 
-  universe_code?: string | null;
+  universe_code: string;
   universe_name?: string | null;
 };
 
@@ -203,6 +222,9 @@ export type RankingItem = {
   universeName?: string | null;
   universe_name?: string | null;
 };
+
+export type PublishedRankingItem = RankingItem &
+  KoaptixUniverseServicePublicationIdentity;
 export type ComplexDetail = {
   complexId: string;
   name: string;

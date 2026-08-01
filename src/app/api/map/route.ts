@@ -14,6 +14,10 @@ import {
   resolveUniverseRequest,
   type UniverseRequestResolution,
 } from "../../../lib/koaptix/universes";
+import {
+  requireUniformUniverseServicePublication,
+  type KoaptixPublicationSelectionIdentity,
+} from "../../../lib/koaptix/currentness";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -25,18 +29,10 @@ const MAP_DEFAULT_LIMIT_REGIONAL = 44;
 const MAP_MAX_LIMIT_KOREA = 52;
 const MAP_MAX_LIMIT = 120;
 
-const MAP_CACHE_FRESH_TTL_MS = 90_000;
-const MAP_CACHE_STALE_TTL_MS = 900_000;
-const MAP_SUCCESS_CACHE_CONTROL =
-  "public, max-age=15, s-maxage=90, stale-while-revalidate=900";
-const MAP_ERROR_CACHE_CONTROL = "no-store";
+const MAP_CACHE_CONTROL = "private, no-store, max-age=0";
 
 const LATEST_MAP_TIMEOUT_MS_KOREA = 1_800;
 const LATEST_MAP_TIMEOUT_MS_REGIONAL = 1_100;
-const DYNAMIC_MAP_TIMEOUT_MS_KOREA = 8_500;
-const DYNAMIC_MAP_TIMEOUT_MS_REGIONAL = 5_500;
-
-const LATEST_MAP_COOLDOWN_MS = 180_000;
 
 const UNIVERSE_SCOPE_LABELS: Record<string, string> = {
   SEOUL_ALL: "서울특별시",
@@ -126,7 +122,7 @@ type MapDistrictItem = {
   peakComplexName: string | null;
 };
 
-type CachedMapPayload = {
+type MapPayload = KoaptixPublicationSelectionIdentity & {
   ok: true;
   universeCode: string;
   requestedUniverseCode: string;
@@ -136,30 +132,14 @@ type CachedMapPayload = {
   resultCount: number;
   mapScopeLabel: string;
   isFallback: boolean;
-  fallbackMode:
-    | "none"
-    | "same_universe_dynamic_degraded"
-    | "exact_same_universe_stale"
-    | "same_universe_stale_any_limit"
-    | "same_universe_empty_degraded";
-  source:
-    | "live_dynamic_fallback"
-    | "live_latest"
-    | "stale_cache"
-    | "stale_cache_any_limit"
-    | "empty_degraded";
-  cacheState: "bypassed" | "fresh" | "stale_exact" | "stale_any_limit" | "miss";
+  fallbackMode: "none";
+  source: "live_latest";
+  cacheState: "bypassed";
   fallbackUsed: boolean;
   degraded: boolean;
   reason?: string | null;
   count: number;
   items: MapDistrictItem[];
-};
-
-type CachedMapEntry = {
-  freshUntil: number;
-  staleUntil: number;
-  payload: CachedMapPayload;
 };
 
 type ComplexRegionMapRow = {
@@ -173,54 +153,13 @@ type ComplexScopeMeta = {
   shortLabel: string | null;
 };
 
-const mapCache = new Map<string, CachedMapEntry>();
-const mapInflight = new Map<string, Promise<CachedMapPayload>>();
-
 // 🚨 지차장 지시 A: 로그 다이어트용 헬퍼 및 상수 추가 🚨
-const QUIET_MAP_LOG_WINDOW_MS = 180_000;
-const quietMapLogAt = new Map<string, number>();
-
-function shouldEmitQuietMapLog(key: string) {
-  const now = Date.now();
-  const last = quietMapLogAt.get(key) ?? 0;
-
-  if (now - last < QUIET_MAP_LOG_WINDOW_MS) {
-    return false;
-  }
-
-  quietMapLogAt.set(key, now);
-  return true;
-}
-
 function logQuietMapFallback(
   key: string,
   message: string,
   payload: Record<string, unknown>,
 ) {
-  const verbose = process.env.KOAPTIX_VERBOSE_FALLBACK_LOGS === "1";
-
-  if (verbose || shouldEmitQuietMapLog(key)) {
-    console.info(message, payload);
-  }
-}
-
-const latestMapCooldownUntil = new Map<string, number>();
-
-function isLatestMapCoolingDown(universeCode: string) {
-  if (universeCode === DEFAULT_UNIVERSE_CODE) return false;
-
-  const until = latestMapCooldownUntil.get(universeCode) ?? 0;
-  if (until <= Date.now()) {
-    latestMapCooldownUntil.delete(universeCode);
-    return false;
-  }
-
-  return true;
-}
-
-function markLatestMapCooldown(universeCode: string) {
-  if (universeCode === DEFAULT_UNIVERSE_CODE) return;
-  latestMapCooldownUntil.set(universeCode, Date.now() + LATEST_MAP_COOLDOWN_MS);
+  console.info(message, { key, ...payload });
 }
 
 function createServerSupabase() {
@@ -487,63 +426,13 @@ function buildDistrictIdentity(
   };
 }
 
-function makeCacheKey(universeCode: string, limit: number) {
-  return `${universeCode}::${limit}`;
-}
-
-function readFreshMapCache(cacheKey: string): CachedMapPayload | null {
-  const cached = mapCache.get(cacheKey);
-  if (!cached) return null;
-
-  const now = Date.now();
-
-  if (now > cached.staleUntil) {
-    mapCache.delete(cacheKey);
-    return null;
-  }
-
-  if (now > cached.freshUntil) {
-    return null;
-  }
-
-  return cached.payload;
-}
-
-function readStaleMapCache(cacheKey: string): CachedMapPayload | null {
-  const cached = mapCache.get(cacheKey);
-  if (!cached) return null;
-
-  const now = Date.now();
-
-  if (now > cached.staleUntil) {
-    mapCache.delete(cacheKey);
-    return null;
-  }
-
-  return cached.payload;
-}
-
-function readAnyUniverseMapCache(
-  universeCode: string,
-): CachedMapPayload | null {
-  const prefix = `${universeCode}::`;
-  const now = Date.now();
-
-  const candidates = Array.from(mapCache.entries())
-    .filter(([key, entry]) => key.startsWith(prefix) && now <= entry.staleUntil)
-    .sort((a, b) => b[1].freshUntil - a[1].freshUntil);
-
-  if (candidates.length === 0) return null;
-  return candidates[0][1].payload;
-}
-
 function buildEmptyMapPayload(
   universeCode: string,
   requestedLimit: number,
   message?: string,
-): CachedMapPayload & { degraded?: true; message?: string } {
+) {
   return {
-    ok: true,
+    ok: false,
     universeCode,
     requestedUniverseCode: universeCode,
     renderedUniverseCode: universeCode,
@@ -569,7 +458,7 @@ function buildUnavailableMapPayload(
   requestedLimit: number,
 ) {
   return {
-    ok: true,
+    ok: false,
     ...buildUniverseResolutionMetadata(resolution),
     requestedLimit,
     renderedLimit: 0,
@@ -585,41 +474,6 @@ function buildUnavailableMapPayload(
     items: [],
     message: resolution.reason ?? "universe_unavailable",
   };
-}
-
-function withMapDeliveryState(
-  payload: CachedMapPayload,
-  options: {
-    cacheState: "fresh" | "stale_exact" | "stale_any_limit";
-    fallbackMode:
-      | "none"
-      | "exact_same_universe_stale"
-      | "same_universe_stale_any_limit";
-    source?: "stale_cache" | "stale_cache_any_limit";
-  },
-) {
-  return {
-    ...payload,
-    requestedUniverseCode: payload.universeCode,
-    renderedUniverseCode: payload.universeCode,
-    resultCount: payload.items.length,
-    isFallback: options.fallbackMode !== "none",
-    fallbackMode: options.fallbackMode,
-    source: options.source ?? payload.source,
-    cacheState: options.cacheState,
-    fallbackUsed: payload.fallbackUsed || options.fallbackMode !== "none",
-    degraded: payload.degraded || options.fallbackMode !== "none",
-  };
-}
-
-function writeMapCache(cacheKey: string, payload: CachedMapPayload) {
-  const now = Date.now();
-
-  mapCache.set(cacheKey, {
-    freshUntil: now + MAP_CACHE_FRESH_TTL_MS,
-    staleUntil: now + MAP_CACHE_STALE_TTL_MS,
-    payload,
-  });
 }
 
 async function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T> {
@@ -661,16 +515,13 @@ async function rowsToMapPayload(
   supabase: ReturnType<typeof createServerSupabase>,
   rows: any[],
   universeCode: string,
+  identity: KoaptixPublicationSelectionIdentity,
   options: {
     requestedLimit: number;
     renderedLimit: number;
-    source: "live_dynamic_fallback" | "live_latest";
-    fallbackMode?: "none" | "same_universe_dynamic_degraded";
-    fallbackUsed?: boolean;
-    degraded?: boolean;
-    reason?: string | null;
+    source: "live_latest";
   },
-): Promise<CachedMapPayload> {
+): Promise<MapPayload> {
   const complexIds = extractComplexIds(rows);
   const scopeMetaMap =
     universeCode === DEFAULT_UNIVERSE_CODE
@@ -851,6 +702,7 @@ async function rowsToMapPayload(
     .sort((a, b) => b.totalMarketCap - a.totalMarketCap);
 
   return {
+    ...identity,
     ok: true,
     universeCode,
     requestedUniverseCode: universeCode,
@@ -860,141 +712,37 @@ async function rowsToMapPayload(
     resultCount: items.length,
     mapScopeLabel: getUniverseLabel(universeCode),
     isFallback: Boolean(fallbackIdentity),
-    fallbackMode: options.fallbackMode ?? "none",
+    fallbackMode: "none",
     source: options.source,
     cacheState: "bypassed",
-    fallbackUsed: options.fallbackUsed ?? false,
-    degraded: options.degraded ?? false,
-    reason: options.reason ?? null,
+    fallbackUsed: false,
+    degraded: false,
+    reason: null,
     count: items.length,
     items,
   };
-}
-
-function withStaleMapIdentity(
-  payload: CachedMapPayload,
-  requestedUniverseCode: string,
-  fallbackMode: "exact_same_universe_stale" | "same_universe_stale_any_limit",
-): CachedMapPayload {
-  return {
-    ...payload,
-    requestedUniverseCode,
-    renderedUniverseCode: payload.universeCode,
-    mapScopeLabel: getUniverseLabel(payload.universeCode),
-    isFallback: true,
-    fallbackMode,
-    source:
-      fallbackMode === "exact_same_universe_stale"
-        ? "stale_cache"
-        : "stale_cache_any_limit",
-    cacheState:
-      fallbackMode === "exact_same_universe_stale"
-        ? "stale_exact"
-        : "stale_any_limit",
-    resultCount: payload.items.length,
-  };
-}
-
-async function fetchMapPayloadFromDynamic(
-  supabase: ReturnType<typeof createServerSupabase>,
-  universeCode: string,
-  requestedLimit: number,
-): Promise<CachedMapPayload> {
-  const effectiveLimit = getEffectiveRequestedLimit(requestedLimit, universeCode);
-
-  const { data: latestSnapshot, error: latestSnapshotError } = await supabase
-    .from("koaptix_rank_snapshot")
-    .select("snapshot_date")
-    .eq("universe_code", universeCode)
-    .order("snapshot_date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (latestSnapshotError) {
-    throw latestSnapshotError;
-  }
-
-  if (!latestSnapshot?.snapshot_date) {
-    return {
-      ok: true,
-      universeCode,
-      requestedUniverseCode: universeCode,
-      renderedUniverseCode: universeCode,
-      requestedLimit,
-      renderedLimit: 0,
-      resultCount: 0,
-      mapScopeLabel: getUniverseLabel(universeCode),
-      isFallback: false,
-      fallbackMode: "same_universe_empty_degraded",
-      source: "empty_degraded",
-      cacheState: "bypassed",
-      fallbackUsed: true,
-      degraded: true,
-      reason: "dynamic_latest_snapshot_missing",
-      count: 0,
-      items: [],
-    };
-  }
-
-  let query = supabase
-    .from("v_koaptix_universe_rank_history_dynamic")
-    .select(
-      `
-        snapshot_date,
-        universe_code,
-        complex_id,
-        apt_name_ko,
-        sigungu_name,
-        legal_dong_name,
-        rank_all,
-        market_cap_krw
-      `,
-    )
-    .eq("universe_code", universeCode)
-    .eq("snapshot_date", latestSnapshot.snapshot_date);
-
-  if (universeCode === DEFAULT_UNIVERSE_CODE) {
-    query = query.lte("rank_all", effectiveLimit);
-  }
-
-  const { data, error } = await query
-    .order("rank_all", { ascending: true })
-    .limit(effectiveLimit);
-
-  if (error) {
-    throw error;
-  }
-
-  const normalizedRows = (data ?? []).map((row: any) => ({
-    ...row,
-    rank_delta_w: null,
-  }));
-
-  return rowsToMapPayload(supabase, normalizedRows, universeCode, {
-    requestedLimit,
-    renderedLimit: effectiveLimit,
-    source: "live_dynamic_fallback",
-    fallbackMode: "same_universe_dynamic_degraded",
-    fallbackUsed: true,
-    degraded: true,
-    reason: "latest_board_dynamic_fallback",
-  });
 }
 
 async function fetchMapPayloadFromLatestBoard(
   supabase: ReturnType<typeof createServerSupabase>,
   universeCode: string,
   requestedLimit: number,
-): Promise<CachedMapPayload> {
+): Promise<MapPayload> {
   const retryLimits = getRetryLimits(requestedLimit);
   let lastError: unknown = new Error("MAP_FAILED");
 
   for (const attemptLimit of retryLimits) {
     try {
       const queryPromise = supabase
-        .from("v_koaptix_latest_universe_rank_board_u")
+        .from("v_koaptix_latest_board_read_model_published")
         .select(
           `
+            generation_id,
+            publication_version,
+            publication_event_id,
+            published_at,
+            surface_code,
+            snapshot_date,
             universe_code,
             complex_id,
             apt_name_ko,
@@ -1005,6 +753,7 @@ async function fetchMapPayloadFromLatestBoard(
             market_cap_krw
           `,
         )
+        .eq("surface_code", "UNIVERSE_SERVICE")
         .eq("universe_code", universeCode)
         .order("rank_all", { ascending: true })
         .limit(attemptLimit);
@@ -1021,20 +770,19 @@ async function fetchMapPayloadFromLatestBoard(
 
       const { data, error } = queryResult;
       if (error) throw error;
-      if ((data ?? []).length === 0) {
-        throw new Error("LATEST_MAP_EMPTY_DYNAMIC_FALLBACK");
-      }
+      const rows = data ?? [];
+      const identity = requireUniformUniverseServicePublication(
+        rows,
+        universeCode,
+      );
 
-      latestMapCooldownUntil.delete(universeCode);
-
-      return rowsToMapPayload(supabase, data ?? [], universeCode, {
+      return rowsToMapPayload(supabase, rows, universeCode, identity, {
         requestedLimit,
         renderedLimit: attemptLimit,
         source: "live_latest",
       });
     } catch (error) {
       lastError = error;
-      markLatestMapCooldown(universeCode);
 
       // 🚨 지차장 지시 B: latest attempt failed warn을 logQuietMapFallback으로 교체 🚨
       logQuietMapFallback(
@@ -1058,35 +806,11 @@ async function fetchMapPayload(
   supabase: ReturnType<typeof createServerSupabase>,
   universeCode: string,
   requestedLimit: number,
-): Promise<CachedMapPayload> {
-  if (!isLatestMapCoolingDown(universeCode)) {
-    try {
-      return await fetchMapPayloadFromLatestBoard(
-        supabase,
-        universeCode,
-        requestedLimit,
-      );
-    } catch (error) {
-      logQuietMapFallback(
-        `map:dynamic-fallback:${universeCode}`,
-        "[API /api/map] using same-universe dynamic fallback",
-        {
-          universeCode,
-          requestedLimit,
-          message: getErrorMessage(error),
-        },
-      );
-    }
-  }
-
-  const dynamicTimeoutMs =
-    universeCode === DEFAULT_UNIVERSE_CODE
-      ? DYNAMIC_MAP_TIMEOUT_MS_KOREA
-      : DYNAMIC_MAP_TIMEOUT_MS_REGIONAL;
-
-  return withTimeout(
-    fetchMapPayloadFromDynamic(supabase, universeCode, requestedLimit),
-    dynamicTimeoutMs,
+): Promise<MapPayload> {
+  return fetchMapPayloadFromLatestBoard(
+    supabase,
+    universeCode,
+    requestedLimit,
   );
 }
 
@@ -1111,8 +835,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       buildUnavailableMapPayload(universeResolution, unavailableLimit),
       {
+        status: 400,
         headers: {
-          "Cache-Control": MAP_ERROR_CACHE_CONTROL,
+          "Cache-Control": MAP_CACHE_CONTROL,
           "X-Koaptix-Map-Cache": "unavailable",
         },
       },
@@ -1128,44 +853,9 @@ export async function GET(request: NextRequest) {
     getMaxMapLimit(universeCode),
   );
 
-  const cacheKey = makeCacheKey(universeCode, limit);
-
-  const freshCached = readFreshMapCache(cacheKey);
-  if (freshCached) {
-    return NextResponse.json(
-      withMapDeliveryState(freshCached, {
-        cacheState: "fresh",
-        fallbackMode: "none",
-      }),
-      {
-        headers: {
-          "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
-          "X-Koaptix-Map-Cache": "fresh",
-        },
-      },
-    );
-  }
-
-  const reusedInflight = mapInflight.has(cacheKey);
-
   try {
     const supabase = createServerSupabase();
-    let inflight = mapInflight.get(cacheKey);
-
-    if (!inflight) {
-      inflight = fetchMapPayload(supabase, universeCode, limit)
-        .then((payload) => {
-          writeMapCache(cacheKey, payload);
-          return payload;
-        })
-        .finally(() => {
-          mapInflight.delete(cacheKey);
-        });
-
-      mapInflight.set(cacheKey, inflight);
-    }
-
-    const payload = await inflight;
+    const payload = await fetchMapPayload(supabase, universeCode, limit);
 
     return NextResponse.json(
       {
@@ -1175,8 +865,8 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
-          "X-Koaptix-Map-Cache": reusedInflight ? "inflight" : "live",
+          "Cache-Control": MAP_CACHE_CONTROL,
+          "X-Koaptix-Map-Cache": "live",
         },
       },
     );
@@ -1188,53 +878,12 @@ export async function GET(request: NextRequest) {
       isTimeout: isTimeoutError(error),
     });
 
-    const exactStaleCached = readStaleMapCache(cacheKey);
-    const anyLimitStaleCached =
-      exactStaleCached ? null : readAnyUniverseMapCache(universeCode);
-    const staleCached = exactStaleCached ?? anyLimitStaleCached;
-
-    if (staleCached) {
-      if (staleCached.universeCode !== universeCode) {
-        return NextResponse.json(
-          buildEmptyMapPayload(
-            universeCode,
-            limit,
-            "Stale cache identity mismatch",
-          ),
-          {
-            headers: {
-              "Cache-Control": MAP_ERROR_CACHE_CONTROL,
-              "X-Koaptix-Map-Cache": "miss",
-            },
-          },
-        );
-      }
-
-      return NextResponse.json(
-        withStaleMapIdentity(
-          staleCached,
-          universeCode,
-          exactStaleCached
-            ? "exact_same_universe_stale"
-            : "same_universe_stale_any_limit",
-        ),
-        {
-          headers: {
-            "Cache-Control": MAP_SUCCESS_CACHE_CONTROL,
-            "X-Koaptix-Map-Cache": exactStaleCached
-              ? "stale-exact"
-              : "stale-any-limit",
-          },
-        },
-      );
-    }
-
     return NextResponse.json(
       buildEmptyMapPayload(universeCode, limit, getErrorMessage(error)),
       {
         status: isTimeoutError(error) ? 504 : 500,
         headers: {
-          "Cache-Control": MAP_ERROR_CACHE_CONTROL,
+          "Cache-Control": MAP_CACHE_CONTROL,
           "X-Koaptix-Map-Cache": "miss",
         },
       },

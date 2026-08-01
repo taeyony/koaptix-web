@@ -1,0 +1,1811 @@
+{
+  "authority": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1",
+  "canonicalization": "UTF-8 compact sorted-key JSON array ordered by universe_code; no trailing LF",
+  "row_count": 40484,
+  "rows": [
+    {
+      "max_rank": 1123,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 1123,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "BUSAN_ALL"
+    },
+    {
+      "max_rank": 485,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 485,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "CHUNGBUK_ALL"
+    },
+    {
+      "max_rank": 586,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 586,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "CHUNGNAM_ALL"
+    },
+    {
+      "max_rank": 761,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 761,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "DAEGU_ALL"
+    },
+    {
+      "max_rank": 405,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 405,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "DAEJEON_ALL"
+    },
+    {
+      "max_rank": 71,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 71,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "GANGWON_ALL"
+    },
+    {
+      "max_rank": 529,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 529,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "GWANGJU_ALL"
+    },
+    {
+      "max_rank": 748,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 748,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "GYEONGBUK_ALL"
+    },
+    {
+      "max_rank": 3243,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 3243,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "GYEONGGI_ALL"
+    },
+    {
+      "max_rank": 961,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 961,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "GYEONGNAM_ALL"
+    },
+    {
+      "max_rank": 814,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 814,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "INCHEON_ALL"
+    },
+    {
+      "max_rank": 113,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 113,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "JEJU_ALL"
+    },
+    {
+      "max_rank": 423,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 423,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "JEONNAM_ALL"
+    },
+    {
+      "max_rank": 13497,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 13497,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "KOREA_ALL"
+    },
+    {
+      "max_rank": 118,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 118,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SEJONG_ALL"
+    },
+    {
+      "max_rank": 2571,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 2571,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SEOUL_ALL"
+    },
+    {
+      "max_rank": 37,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 37,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11110"
+    },
+    {
+      "max_rank": 41,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 41,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11140"
+    },
+    {
+      "max_rank": 62,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 62,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11170"
+    },
+    {
+      "max_rank": 92,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 92,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11200"
+    },
+    {
+      "max_rank": 81,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 81,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11215"
+    },
+    {
+      "max_rank": 116,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 116,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11230"
+    },
+    {
+      "max_rank": 86,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 86,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11260"
+    },
+    {
+      "max_rank": 94,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 94,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11290"
+    },
+    {
+      "max_rank": 28,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 28,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11305"
+    },
+    {
+      "max_rank": 59,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 59,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11320"
+    },
+    {
+      "max_rank": 156,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 156,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11350"
+    },
+    {
+      "max_rank": 100,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 100,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11380"
+    },
+    {
+      "max_rank": 88,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 88,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11410"
+    },
+    {
+      "max_rank": 124,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 124,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11440"
+    },
+    {
+      "max_rank": 134,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 134,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11470"
+    },
+    {
+      "max_rank": 164,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 164,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11500"
+    },
+    {
+      "max_rank": 120,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 120,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11530"
+    },
+    {
+      "max_rank": 34,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 34,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11545"
+    },
+    {
+      "max_rank": 142,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 142,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11560"
+    },
+    {
+      "max_rank": 112,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 112,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11590"
+    },
+    {
+      "max_rank": 68,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 68,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11620"
+    },
+    {
+      "max_rank": 156,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 156,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11650"
+    },
+    {
+      "max_rank": 156,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 156,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11680"
+    },
+    {
+      "max_rank": 177,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 177,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11710"
+    },
+    {
+      "max_rank": 144,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 144,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_11740"
+    },
+    {
+      "max_rank": 13,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 13,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26110"
+    },
+    {
+      "max_rank": 36,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 36,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26140"
+    },
+    {
+      "max_rank": 27,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 27,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26170"
+    },
+    {
+      "max_rank": 41,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 41,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26200"
+    },
+    {
+      "max_rank": 137,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 137,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26230"
+    },
+    {
+      "max_rank": 107,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 107,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26260"
+    },
+    {
+      "max_rank": 81,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 81,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26290"
+    },
+    {
+      "max_rank": 84,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 84,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26320"
+    },
+    {
+      "max_rank": 141,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 141,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26350"
+    },
+    {
+      "max_rank": 81,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 81,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26380"
+    },
+    {
+      "max_rank": 84,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 84,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26410"
+    },
+    {
+      "max_rank": 29,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 29,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26440"
+    },
+    {
+      "max_rank": 87,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 87,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26470"
+    },
+    {
+      "max_rank": 65,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 65,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26500"
+    },
+    {
+      "max_rank": 67,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 67,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26530"
+    },
+    {
+      "max_rank": 43,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 43,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_26710"
+    },
+    {
+      "max_rank": 36,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 36,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_27110"
+    },
+    {
+      "max_rank": 113,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 113,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_27140"
+    },
+    {
+      "max_rank": 24,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 24,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_27170"
+    },
+    {
+      "max_rank": 32,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 32,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_27200"
+    },
+    {
+      "max_rank": 147,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 147,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_27230"
+    },
+    {
+      "max_rank": 160,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 160,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_27260"
+    },
+    {
+      "max_rank": 165,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 165,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_27290"
+    },
+    {
+      "max_rank": 83,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 83,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_27710"
+    },
+    {
+      "max_rank": 1,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 1,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_27720"
+    },
+    {
+      "max_rank": 39,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 39,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_28110"
+    },
+    {
+      "max_rank": 18,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 18,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_28140"
+    },
+    {
+      "max_rank": 106,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 106,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_28177"
+    },
+    {
+      "max_rank": 136,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 136,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_28185"
+    },
+    {
+      "max_rank": 114,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 114,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_28200"
+    },
+    {
+      "max_rank": 140,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 140,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_28237"
+    },
+    {
+      "max_rank": 88,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 88,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_28245"
+    },
+    {
+      "max_rank": 167,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 167,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_28260"
+    },
+    {
+      "max_rank": 6,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 6,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_28710"
+    },
+    {
+      "max_rank": 37,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 37,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_29110"
+    },
+    {
+      "max_rank": 97,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 97,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_29140"
+    },
+    {
+      "max_rank": 76,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 76,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_29155"
+    },
+    {
+      "max_rank": 169,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 169,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_29170"
+    },
+    {
+      "max_rank": 150,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 150,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_29200"
+    },
+    {
+      "max_rank": 53,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 53,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_30110"
+    },
+    {
+      "max_rank": 61,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 61,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_30140"
+    },
+    {
+      "max_rank": 128,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 128,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_30170"
+    },
+    {
+      "max_rank": 115,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 115,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_30200"
+    },
+    {
+      "max_rank": 48,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 48,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_30230"
+    },
+    {
+      "max_rank": 100,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 100,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_31110"
+    },
+    {
+      "max_rank": 165,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 165,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_31140"
+    },
+    {
+      "max_rank": 62,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 62,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_31170"
+    },
+    {
+      "max_rank": 95,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 95,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_31200"
+    },
+    {
+      "max_rank": 79,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 79,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_31710"
+    },
+    {
+      "max_rank": 118,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 118,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_36110"
+    },
+    {
+      "max_rank": 61,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 61,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41111"
+    },
+    {
+      "max_rank": 103,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 103,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41113"
+    },
+    {
+      "max_rank": 52,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 52,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41115"
+    },
+    {
+      "max_rank": 119,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 119,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41117"
+    },
+    {
+      "max_rank": 44,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 44,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41131"
+    },
+    {
+      "max_rank": 44,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 44,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41133"
+    },
+    {
+      "max_rank": 153,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 153,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41135"
+    },
+    {
+      "max_rank": 154,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 154,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41150"
+    },
+    {
+      "max_rank": 67,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 67,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41171"
+    },
+    {
+      "max_rank": 120,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 120,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41173"
+    },
+    {
+      "max_rank": 67,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 67,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41210"
+    },
+    {
+      "max_rank": 171,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 171,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41220"
+    },
+    {
+      "max_rank": 30,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 30,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41250"
+    },
+    {
+      "max_rank": 42,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 42,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41271"
+    },
+    {
+      "max_rank": 58,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 58,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41273"
+    },
+    {
+      "max_rank": 129,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 129,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41281"
+    },
+    {
+      "max_rank": 52,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 52,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41285"
+    },
+    {
+      "max_rank": 100,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 100,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41287"
+    },
+    {
+      "max_rank": 15,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 15,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41290"
+    },
+    {
+      "max_rank": 78,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 78,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41310"
+    },
+    {
+      "max_rank": 187,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 187,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41360"
+    },
+    {
+      "max_rank": 71,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 71,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41370"
+    },
+    {
+      "max_rank": 154,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 154,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41390"
+    },
+    {
+      "max_rank": 78,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 78,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41410"
+    },
+    {
+      "max_rank": 48,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 48,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41430"
+    },
+    {
+      "max_rank": 89,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 89,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41450"
+    },
+    {
+      "max_rank": 60,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 60,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41461"
+    },
+    {
+      "max_rank": 171,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 171,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41463"
+    },
+    {
+      "max_rank": 175,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 175,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41465"
+    },
+    {
+      "max_rank": 98,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 98,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41480"
+    },
+    {
+      "max_rank": 49,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 49,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41500"
+    },
+    {
+      "max_rank": 43,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 43,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41550"
+    },
+    {
+      "max_rank": 103,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 103,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41570"
+    },
+    {
+      "max_rank": 91,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 91,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41610"
+    },
+    {
+      "max_rank": 86,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 86,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41630"
+    },
+    {
+      "max_rank": 21,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 21,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41650"
+    },
+    {
+      "max_rank": 26,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 26,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41670"
+    },
+    {
+      "max_rank": 3,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 3,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41800"
+    },
+    {
+      "max_rank": 14,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 14,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41820"
+    },
+    {
+      "max_rank": 17,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 17,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_41830"
+    },
+    {
+      "max_rank": 67,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 67,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43111"
+    },
+    {
+      "max_rank": 63,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 63,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43112"
+    },
+    {
+      "max_rank": 98,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 98,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43113"
+    },
+    {
+      "max_rank": 69,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 69,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43114"
+    },
+    {
+      "max_rank": 61,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 61,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43130"
+    },
+    {
+      "max_rank": 52,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 52,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43150"
+    },
+    {
+      "max_rank": 5,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 5,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43720"
+    },
+    {
+      "max_rank": 7,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 7,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43730"
+    },
+    {
+      "max_rank": 2,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 2,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43740"
+    },
+    {
+      "max_rank": 8,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 8,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43745"
+    },
+    {
+      "max_rank": 25,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 25,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43750"
+    },
+    {
+      "max_rank": 28,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 28,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_43770"
+    },
+    {
+      "max_rank": 80,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 80,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44131"
+    },
+    {
+      "max_rank": 151,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 151,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44133"
+    },
+    {
+      "max_rank": 30,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 30,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44150"
+    },
+    {
+      "max_rank": 29,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 29,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44180"
+    },
+    {
+      "max_rank": 113,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 113,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44200"
+    },
+    {
+      "max_rank": 44,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 44,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44210"
+    },
+    {
+      "max_rank": 22,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 22,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44230"
+    },
+    {
+      "max_rank": 9,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 9,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44250"
+    },
+    {
+      "max_rank": 42,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 42,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44270"
+    },
+    {
+      "max_rank": 8,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 8,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44710"
+    },
+    {
+      "max_rank": 6,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 6,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44760"
+    },
+    {
+      "max_rank": 6,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 6,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44770"
+    },
+    {
+      "max_rank": 16,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 16,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44800"
+    },
+    {
+      "max_rank": 21,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 21,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44810"
+    },
+    {
+      "max_rank": 9,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 9,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_44825"
+    },
+    {
+      "max_rank": 90,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 90,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46110"
+    },
+    {
+      "max_rank": 66,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 66,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46130"
+    },
+    {
+      "max_rank": 92,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 92,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46150"
+    },
+    {
+      "max_rank": 25,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 25,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46170"
+    },
+    {
+      "max_rank": 45,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 45,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46230"
+    },
+    {
+      "max_rank": 5,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 5,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46710"
+    },
+    {
+      "max_rank": 3,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 3,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46720"
+    },
+    {
+      "max_rank": 1,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 1,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46730"
+    },
+    {
+      "max_rank": 7,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 7,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46770"
+    },
+    {
+      "max_rank": 4,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 4,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46780"
+    },
+    {
+      "max_rank": 11,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 11,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46790"
+    },
+    {
+      "max_rank": 6,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 6,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46800"
+    },
+    {
+      "max_rank": 5,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 5,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46810"
+    },
+    {
+      "max_rank": 7,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 7,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46820"
+    },
+    {
+      "max_rank": 12,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 12,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46830"
+    },
+    {
+      "max_rank": 28,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 28,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46840"
+    },
+    {
+      "max_rank": 2,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 2,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46860"
+    },
+    {
+      "max_rank": 9,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 9,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46870"
+    },
+    {
+      "max_rank": 5,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 5,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_46880"
+    },
+    {
+      "max_rank": 73,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 73,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47111"
+    },
+    {
+      "max_rank": 101,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 101,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47113"
+    },
+    {
+      "max_rank": 85,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 85,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47130"
+    },
+    {
+      "max_rank": 41,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 41,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47150"
+    },
+    {
+      "max_rank": 50,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 50,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47170"
+    },
+    {
+      "max_rank": 136,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 136,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47190"
+    },
+    {
+      "max_rank": 33,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 33,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47210"
+    },
+    {
+      "max_rank": 30,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 30,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47230"
+    },
+    {
+      "max_rank": 21,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 21,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47250"
+    },
+    {
+      "max_rank": 20,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 20,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47280"
+    },
+    {
+      "max_rank": 87,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 87,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47290"
+    },
+    {
+      "max_rank": 2,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 2,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47730"
+    },
+    {
+      "max_rank": 4,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 4,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47770"
+    },
+    {
+      "max_rank": 5,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 5,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47820"
+    },
+    {
+      "max_rank": 3,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 3,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47830"
+    },
+    {
+      "max_rank": 6,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 6,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47840"
+    },
+    {
+      "max_rank": 26,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 26,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47850"
+    },
+    {
+      "max_rank": 14,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 14,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47900"
+    },
+    {
+      "max_rank": 2,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 2,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47920"
+    },
+    {
+      "max_rank": 8,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 8,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47930"
+    },
+    {
+      "max_rank": 1,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 1,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_47940"
+    },
+    {
+      "max_rank": 46,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 46,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48121"
+    },
+    {
+      "max_rank": 81,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 81,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48123"
+    },
+    {
+      "max_rank": 51,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 51,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48125"
+    },
+    {
+      "max_rank": 45,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 45,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48127"
+    },
+    {
+      "max_rank": 50,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 50,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48129"
+    },
+    {
+      "max_rank": 119,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 119,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48170"
+    },
+    {
+      "max_rank": 39,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 39,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48220"
+    },
+    {
+      "max_rank": 35,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 35,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48240"
+    },
+    {
+      "max_rank": 187,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 187,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48250"
+    },
+    {
+      "max_rank": 33,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 33,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48270"
+    },
+    {
+      "max_rank": 88,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 88,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48310"
+    },
+    {
+      "max_rank": 123,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 123,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48330"
+    },
+    {
+      "max_rank": 2,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 2,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48720"
+    },
+    {
+      "max_rank": 9,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 9,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48730"
+    },
+    {
+      "max_rank": 11,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 11,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48740"
+    },
+    {
+      "max_rank": 12,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 12,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48820"
+    },
+    {
+      "max_rank": 3,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 3,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48840"
+    },
+    {
+      "max_rank": 6,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 6,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48850"
+    },
+    {
+      "max_rank": 5,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 5,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48870"
+    },
+    {
+      "max_rank": 16,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 16,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_48880"
+    },
+    {
+      "max_rank": 78,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 78,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_50110"
+    },
+    {
+      "max_rank": 35,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 35,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_50130"
+    },
+    {
+      "max_rank": 68,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 68,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_51110"
+    },
+    {
+      "max_rank": 3,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 3,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "SGG_51820"
+    },
+    {
+      "max_rank": 55,
+      "min_rank": 1,
+      "previous_date": null,
+      "row_count": 55,
+      "snapshot_date": "2026-04-30",
+      "universe_code": "SGG_52111"
+    },
+    {
+      "max_rank": 28,
+      "min_rank": 1,
+      "previous_date": null,
+      "row_count": 28,
+      "snapshot_date": "2026-04-13",
+      "universe_code": "SGG_52113"
+    },
+    {
+      "max_rank": 501,
+      "min_rank": 1,
+      "previous_date": "2026-06-26",
+      "row_count": 501,
+      "snapshot_date": "2026-07-03",
+      "universe_code": "ULSAN_ALL"
+    }
+  ],
+  "schema_version": 1,
+  "surface_code": "UNIVERSE_SERVICE",
+  "universe_count": 225,
+  "vector_sha256": "6E7BA473DDCC0C25F3F46FFEE443BA41CC9D2435F448531189F843AB28FA82F7"
+}

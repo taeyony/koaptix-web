@@ -5,6 +5,13 @@ import {
 } from "../../../lib/koaptix/home";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const revalidate = 0;
+
+const HOME_CACHE_CONTROL = "private, no-store, max-age=0";
+const HOME_RESPONSE_HEADERS = {
+  "Cache-Control": HOME_CACHE_CONTROL,
+};
 
 function parseRequiredBoundedInt(
   rawValue: string | null,
@@ -37,9 +44,7 @@ export async function GET(request: NextRequest) {
       { ok: true, data },
       {
         status: 200,
-        headers: {
-          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
-        },
+        headers: HOME_RESPONSE_HEADERS,
       },
     );
   } catch (error) {
@@ -52,7 +57,7 @@ export async function GET(request: NextRequest) {
             message: error.message,
           },
         },
-        { status: 400 },
+        { status: 400, headers: HOME_RESPONSE_HEADERS },
       );
     }
 
@@ -65,7 +70,7 @@ export async function GET(request: NextRequest) {
             message: error.message,
           },
         },
-        { status: 503 },
+        { status: 503, headers: HOME_RESPONSE_HEADERS },
       );
     }
 
@@ -79,7 +84,7 @@ export async function GET(request: NextRequest) {
           message,
         },
       },
-      { status: 500 },
+      { status: 500, headers: HOME_RESPONSE_HEADERS },
     );
   }
 }

@@ -17,9 +17,12 @@ import {
   getLatestRankBoard,
   toNullableNumber,
 } from "../../../lib/koaptix/queries";
+import { requireUniformUniverseServicePublication } from "../../../lib/koaptix/currentness";
 import type {
   DbLatestRankBoardWeeklyRow,
+  KoaptixUniverseServicePublicationIdentity,
   NullableNumberLike,
+  PublishedRankingItem,
   RankingItem,
 } from "../../../lib/koaptix/types";
 
@@ -29,6 +32,7 @@ export const revalidate = 0;
 const FULL_DEFAULT_LIMIT = 1000;
 const FULL_MAX_LIMIT = 1000;
 const ROUTE_LATEST_BOARD_TIMEOUT_MS = 6_000;
+const RANKING_CACHE_CONTROL = "private, no-store, max-age=0";
 
 type RankingApiResponse = {
   ok: boolean;
@@ -38,11 +42,10 @@ type RankingApiResponse = {
   requestedLimit: number;
   renderedLimit: number;
   resultCount: number;
-  source: "live_latest" | "live_dynamic_fallback" | "empty_degraded";
+  source: "live_latest" | "empty_degraded";
   cacheState: "bypassed" | "miss";
   fallbackMode:
     | "none"
-    | "same_universe_dynamic_degraded"
     | "same_universe_empty_degraded";
   fallbackUsed: boolean;
   degraded: boolean;
@@ -53,9 +56,12 @@ type RankingApiResponse = {
     complexId: string | null;
   };
   count: number;
-  items: RankingItem[];
+  items: PublishedRankingItem[];
   message?: string;
 };
+
+type PublishedRankingApiResponse = RankingApiResponse &
+  KoaptixUniverseServicePublicationIdentity;
 
 type TierFilterKey = "ALL" | "S" | "A" | "B" | "C" | "D";
 
@@ -124,9 +130,14 @@ async function fetchRankingLatestBoardForRoute(
 
   const { data, error } = await withRouteQueryTimeout(
     supabase
-      .from("v_koaptix_latest_universe_rank_board_u")
+      .from("v_koaptix_latest_board_read_model_published")
       .select(
         `
+          generation_id,
+          publication_version,
+          publication_event_id,
+          published_at,
+          surface_code,
           snapshot_date,
           universe_code,
           universe_name,
@@ -153,6 +164,7 @@ async function fetchRankingLatestBoardForRoute(
           is_top1000
         `,
       )
+      .eq("surface_code", "UNIVERSE_SERVICE")
       .eq("universe_code", universeCode)
       .order("rank_all", { ascending: true })
       .limit(limit),
@@ -162,14 +174,16 @@ async function fetchRankingLatestBoardForRoute(
 
   if (error) {
     throw new Error(
-      `Failed to fetch v_koaptix_latest_universe_rank_board_u: ${error.message}`,
+      `Failed to fetch v_koaptix_latest_board_read_model_published: ${error.message}`,
     );
   }
 
   const rows = (data ?? []) as unknown as RankingBoardRow[];
+  const identity = requireUniformUniverseServicePublication(rows, universeCode);
 
   return rows.map((row) => ({
     ...row,
+    ...identity,
     history_snapshot_date: row.history_snapshot_date ?? null,
     rank_delta_7d: row.rank_delta_7d ?? null,
     market_cap_delta_7d: row.market_cap_delta_7d ?? null,
@@ -243,10 +257,6 @@ function deriveBoardSource(rows: RankingBoardRow[]): RankingApiResponse["source"
     .map((row) => row.__koaptixBoardSource)
     .find((value): value is string => Boolean(value));
 
-  if (firstSource === "live_dynamic_fallback") {
-    return "live_dynamic_fallback";
-  }
-
   if (firstSource === "live_latest") {
     return "live_latest";
   }
@@ -257,10 +267,6 @@ function deriveBoardSource(rows: RankingBoardRow[]): RankingApiResponse["source"
 function deriveFallbackMode(
   source: RankingApiResponse["source"],
 ): RankingApiResponse["fallbackMode"] {
-  if (source === "live_dynamic_fallback") {
-    return "same_universe_dynamic_degraded";
-  }
-
   if (source === "empty_degraded") {
     return "same_universe_empty_degraded";
   }
@@ -278,7 +284,7 @@ function buildUnavailableRankingPayload(
   },
 ) {
   return {
-    ok: true,
+    ok: false,
     ...buildUniverseResolutionMetadata(resolution),
     requestedLimit: options.limit,
     renderedLimit: 0,
@@ -344,7 +350,7 @@ function matchesQuery(item: RankingItem, query: string) {
 function toRankingItem(
   row: RankingBoardRow,
   fallbackUniverseCode: string,
-): RankingItem {
+): PublishedRankingItem {
   const buildYear = toNullableNumber(row.build_year ?? row.approval_year);
   const households = toNullableNumber(
     row.household_count ?? row.total_household_count ?? row.households,
@@ -381,6 +387,11 @@ function toRankingItem(
     .toLowerCase();
 
   return {
+    generation_id: row.generation_id,
+    publication_version: row.publication_version,
+    publication_event_id: row.publication_event_id,
+    published_at: row.published_at,
+    surface_code: "UNIVERSE_SERVICE",
     complexId: String(row.complex_id ?? row.id ?? ""),
 
     name,
@@ -466,7 +477,8 @@ export async function GET(request: NextRequest) {
         complexId,
       }),
       {
-        headers: { "Cache-Control": "no-store" },
+        status: 400,
+        headers: { "Cache-Control": RANKING_CACHE_CONTROL },
       },
     );
   }
@@ -482,10 +494,7 @@ export async function GET(request: NextRequest) {
       rows = (await getLatestRankBoard(universeCode, limit)) as RankingBoardRow[];
     }
 
-    if (rows.length === 0) {
-      rows = (await getLatestRankBoard(universeCode, limit)) as RankingBoardRow[];
-    }
-
+    const identity = requireUniformUniverseServicePublication(rows, universeCode);
     const latestBoardDate = deriveLatestBoardDate(rows);
     const source = deriveBoardSource(rows);
     const fallbackMode = deriveFallbackMode(source);
@@ -495,7 +504,8 @@ export async function GET(request: NextRequest) {
       .filter((item) => matchesTier(item, tier))
       .filter((item) => matchesQuery(item, q));
 
-    const payload: RankingApiResponse = {
+    const payload: PublishedRankingApiResponse = {
+      ...identity,
       ok: true,
       universeCode,
       requestedUniverseCode: universeCode,
@@ -519,7 +529,7 @@ export async function GET(request: NextRequest) {
     };
 
     return NextResponse.json(payload, {
-      headers: { "Cache-Control": "no-store" },
+      headers: { "Cache-Control": RANKING_CACHE_CONTROL },
     });
   } catch (error) {
     const message =
@@ -551,7 +561,7 @@ export async function GET(request: NextRequest) {
       } satisfies RankingApiResponse,
       {
         status: 500,
-        headers: { "Cache-Control": "no-store" },
+        headers: { "Cache-Control": RANKING_CACHE_CONTROL },
       },
     );
   }

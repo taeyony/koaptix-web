@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://koaptix.local/schemas/operational-role-action-packet-v1.json",
+  "title": "KOAPTIX single-entrypoint operational role action packet",
+  "description": "Sanitized evidence for one PostgreSQL 17 CONNECTION LIMIT 1 login, one NOLOGIN action role, one SET LOCAL ROLE transaction, mandatory backend close and membership revocation. It never contains a DSN, credential or token.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_run_id",
+    "execution_run_id",
+    "authorization_proof_exact",
+    "dedicated_login",
+    "connection_limit",
+    "backend_count_before",
+    "action_role",
+    "entrypoint",
+    "query_path",
+    "query_sha256",
+    "packet_sha256",
+    "membership_options",
+    "transaction_isolation",
+    "set_local_role",
+    "automatic_retry_count",
+    "backend_closed",
+    "membership_revoked",
+    "post_cleanup"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "plan_run_id": { "type": "string", "minLength": 1 },
+    "execution_run_id": { "type": "string", "minLength": 1 },
+    "authorization_proof_exact": { "type": "string", "minLength": 1 },
+    "dedicated_login": {
+      "type": "string",
+      "pattern": "^koaptix_rank_action_[a-z0-9_]+$"
+    },
+    "connection_limit": { "const": 1 },
+    "backend_count_before": { "const": 0 },
+    "action_role": {
+      "enum": [
+        "koaptix_rank_authority_reader",
+        "koaptix_rank_manifest_sealer",
+        "koaptix_rank_manifest_revoker",
+        "koaptix_rank_bootstrap_seeder",
+        "koaptix_rank_generation_builder",
+        "koaptix_rank_generation_publisher",
+        "koaptix_rank_publication_rollback"
+      ]
+    },
+    "entrypoint": { "type": "string", "minLength": 1 },
+    "query_path": {
+      "type": "string",
+      "pattern": "^tooling/koaptix/rank_publication/queries/[a-z0-9_]+\\.sql$"
+    },
+    "query_sha256": { "$ref": "#/$defs/sha256" },
+    "packet_sha256": { "$ref": "#/$defs/sha256" },
+    "membership_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inherit", "set", "admin"],
+      "properties": {
+        "inherit": { "const": false },
+        "set": { "const": true },
+        "admin": { "const": false }
+      }
+    },
+    "transaction_isolation": { "const": "SERIALIZABLE" },
+    "set_local_role": { "const": true },
+    "automatic_retry_count": { "const": 0 },
+    "backend_closed": { "const": true },
+    "membership_revoked": { "const": true },
+    "post_cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["member", "set", "usage", "backend_count"],
+      "properties": {
+        "member": { "const": false },
+        "set": { "const": false },
+        "usage": { "const": false },
+        "backend_count": { "const": 0 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "action_role": { "const": "koaptix_rank_authority_reader" } } },
+      "then": {
+        "properties": {
+          "entrypoint": { "const": "public.koaptix_compute_rank_input_authority(date)" },
+          "query_path": { "const": "tooling/koaptix/rank_publication/queries/canonical_readiness.sql" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "action_role": { "const": "koaptix_rank_manifest_sealer" } } },
+      "then": {
+        "properties": {
+          "entrypoint": { "const": "public.koaptix_seal_rank_input_manifest(jsonb)" },
+          "query_path": { "const": "tooling/koaptix/rank_publication/queries/seal_rank_input_manifest.sql" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "action_role": { "const": "koaptix_rank_manifest_revoker" } } },
+      "then": {
+        "properties": {
+          "entrypoint": { "const": "public.koaptix_revoke_rank_input_manifest(jsonb)" },
+          "query_path": { "const": "tooling/koaptix/rank_publication/queries/revoke_rank_input_manifest.sql" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "action_role": { "const": "koaptix_rank_bootstrap_seeder" } } },
+      "then": {
+        "properties": {
+          "entrypoint": { "const": "public.koaptix_seed_latest_board_compatibility_generation(jsonb)" },
+          "query_path": { "const": "tooling/koaptix/rank_publication/queries/bootstrap_legacy_vector_generation.sql" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "action_role": { "const": "koaptix_rank_generation_builder" } } },
+      "then": {
+        "properties": {
+          "entrypoint": { "const": "public.koaptix_build_rank_publication_generation(jsonb)" },
+          "query_path": { "const": "tooling/koaptix/rank_publication/queries/build_latest_generation.sql" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "action_role": { "const": "koaptix_rank_generation_publisher" } } },
+      "then": {
+        "properties": {
+          "entrypoint": { "const": "public.koaptix_publish_latest_board_generation(jsonb)" },
+          "query_path": { "const": "tooling/koaptix/rank_publication/queries/verify_and_publish_generation.sql" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "action_role": { "const": "koaptix_rank_publication_rollback" } } },
+      "then": {
+        "properties": {
+          "entrypoint": { "const": "public.koaptix_rollback_latest_board_publication(jsonb)" },
+          "query_path": { "const": "tooling/koaptix/rank_publication/queries/rollback_publication_pointer.sql" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9A-F]{64}$"
+    }
+  }
+}

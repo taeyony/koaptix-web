@@ -86,6 +86,11 @@ export interface KoaptixRankItem {
 
 export interface KoaptixHomePayloadViewRow {
   snapshot_date: string;
+  rank_snapshot_date: string;
+  rank_generation_id: string;
+  rank_publication_version: number | string;
+  rank_publication_event_id: string;
+  rank_published_at: string;
   index_code: string;
   universe_code: string;
   index_name: string;
@@ -98,6 +103,11 @@ export interface KoaptixHomePayloadViewRow {
 }
 
 export interface KoaptixHomeApiData {
+  rank_snapshot_date: string;
+  rank_generation_id: string;
+  rank_publication_version: number;
+  rank_publication_event_id: string;
+  rank_published_at: string;
   indexCard: KoaptixIndexCard;
   chart: KoaptixIndexChartPoint[];
   baseDate: string;

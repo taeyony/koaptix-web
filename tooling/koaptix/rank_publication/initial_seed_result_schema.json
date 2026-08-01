@@ -1,0 +1,331 @@
+{
+  "$defs": {
+    "bootstrap_surface_component": {
+      "additionalProperties": false,
+      "properties": {
+        "component_manifest_sha256": {
+          "pattern": "^[0-9A-F]{64}$",
+          "type": "string"
+        },
+        "date_vector_sha256": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "pattern": "^[0-9A-F]{64}$",
+              "type": "string"
+            }
+          ]
+        },
+        "full_row_digest_sha256": {
+          "pattern": "^[0-9A-F]{64}$",
+          "type": "string"
+        },
+        "previous_snapshot_date": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "format": "date",
+              "type": "string"
+            }
+          ]
+        },
+        "row_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "snapshot_date": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "format": "date",
+              "type": "string"
+            }
+          ]
+        },
+        "surface_code": {
+          "enum": [
+            "GLOBAL_LATEST",
+            "UNIVERSE_SERVICE"
+          ]
+        },
+        "universe_count": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "surface_code",
+        "snapshot_date",
+        "previous_snapshot_date",
+        "date_vector_sha256",
+        "universe_count",
+        "row_count",
+        "full_row_digest_sha256",
+        "component_manifest_sha256"
+      ],
+      "type": "object"
+    },
+    "event_tuple": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "event_type": {
+          "enum": [
+            "PUBLISH",
+            "ROLLBACK"
+          ]
+        },
+        "execution_run_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "expected_previous_version": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "from_generation_id": {
+          "oneOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plan_run_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "publication_version": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "to_generation_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "event_type",
+        "from_generation_id",
+        "to_generation_id",
+        "plan_run_id",
+        "execution_run_id",
+        "expected_previous_version",
+        "publication_version",
+        "recorded_at"
+      ],
+      "type": "object"
+    },
+    "initial_pointer_tuple": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/pointer_tuple"
+        },
+        {
+          "properties": {
+            "previous_generation_id": {
+              "type": "null"
+            },
+            "publication_version": {
+              "const": 1
+            }
+          }
+        }
+      ]
+    },
+    "pointer_tuple": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "generation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "previous_generation_id": {
+          "oneOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "publication_version": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "published_at": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "generation_id",
+        "previous_generation_id",
+        "event_id",
+        "publication_version",
+        "published_at"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Bootstrap-only completion; never accepts a manifest publication result. JSON Schema validation is necessary but not sufficient: validate_publication_result.py must enforce every seed event/pointer/result/DB relationship.",
+  "properties": {
+    "affected_universe_codes": {
+      "const": []
+    },
+    "authorization_proof_exact": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "automatic_retry_count": {
+      "const": 0
+    },
+    "cache_mutations": {
+      "const": 0
+    },
+    "combined_surface_manifest_sha256": {
+      "const": "F2C78A29E43EAAD77AF815AB2723B3ED5202D70384E7145DDF01BCFC2041DE63"
+    },
+    "generation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "official_history_rows_written": {
+      "const": 0
+    },
+    "official_snapshot_rows_written": {
+      "const": 0
+    },
+    "outcome": {
+      "const": "SUCCESSFUL_BOOTSTRAP_PUBLICATION"
+    },
+    "plan_run_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "pointer_after": {
+      "$ref": "#/$defs/initial_pointer_tuple"
+    },
+    "pointer_before": {
+      "type": "null"
+    },
+    "pre_post_row_mismatches": {
+      "const": 0
+    },
+    "pre_post_value_mismatches": {
+      "const": 0
+    },
+    "publish_event": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/event_tuple"
+        },
+        {
+          "properties": {
+            "event_type": {
+              "const": "PUBLISH"
+            },
+            "expected_previous_version": {
+              "const": 0
+            },
+            "from_generation_id": {
+              "type": "null"
+            },
+            "publication_version": {
+              "const": 1
+            }
+          }
+        }
+      ]
+    },
+    "seed_execution_run_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "smoke_status": {
+      "const": "PASS"
+    },
+    "source_authority_key": {
+      "const": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1"
+    },
+    "source_authority_kind": {
+      "const": "BOOTSTRAP_COMPATIBILITY_BUNDLE"
+    },
+    "surface_components": {
+      "items": {
+        "$ref": "#/$defs/bootstrap_surface_component"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "total_component_rows": {
+      "const": 53981
+    }
+  },
+  "required": [
+    "outcome",
+    "plan_run_id",
+    "seed_execution_run_id",
+    "generation_id",
+    "authorization_proof_exact",
+    "source_authority_kind",
+    "source_authority_key",
+    "affected_universe_codes",
+    "surface_components",
+    "total_component_rows",
+    "combined_surface_manifest_sha256",
+    "official_history_rows_written",
+    "official_snapshot_rows_written",
+    "pre_post_row_mismatches",
+    "pre_post_value_mismatches",
+    "pointer_before",
+    "pointer_after",
+    "publish_event",
+    "automatic_retry_count",
+    "smoke_status",
+    "cache_mutations"
+  ],
+  "title": "KOAPTIX exact legacy compatibility bootstrap completion",
+  "type": "object",
+  "x-koaptix-semantic-validator": {
+    "mode": "INITIAL_SEED_RESULT",
+    "read_only_db_completion_evidence_required": true,
+    "required_after_json_schema_validation": true,
+    "schema_only_acceptance_prohibited": true,
+    "tracked_file": "tooling/koaptix/rank_publication/validate_publication_result.py"
+  },
+  "x-koaptix-semantic-validator-rules": [
+    "generation_id equals pointer_after.generation_id and publish_event.to_generation_id; publish_event.from_generation_id and pointer_after.previous_generation_id are null",
+    "pointer_after.event_id equals publish_event.event_id, both publication versions equal 1, and pointer_after.published_at equals publish_event.recorded_at byte-for-value",
+    "publish_event.plan_run_id equals plan_run_id and publish_event.execution_run_id equals seed_execution_run_id; expected_previous_version equals 0",
+    "read-only database completion evidence contains exactly the named immutable generation, PUBLISH event and singleton pointer tuple and no unrelated event or generation is accepted",
+    "surface_components sorted by surface_code are exactly GLOBAL_LATEST 2026-07-31/1/13497/C560F4...92908/DED5CE...DB6C with null date vector and UNIVERSE_SERVICE null-date/225/40484/FB31BF...D8008/A1CCAC...07E2 with vector 6E7BA4...82F7; no missing, extra, duplicate or unknown surface is accepted",
+    "the database generation authority is BOOTSTRAP_COMPATIBILITY_BUNDLE/BOOTSTRAP_COMPATIBILITY_BUNDLE_V1 with affected_universe_codes=[], affected_rank_date=NULL, total_component_rows 53981 and combined surface manifest F2C78A...1DE63; official history/snapshot write counts and all pre/post component mismatches are zero"
+  ]
+}

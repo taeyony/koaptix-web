@@ -1,0 +1,42 @@
+{
+  "affected_rank_date": null,
+  "affected_universe_codes": [],
+  "bootstrap_only_cross_surface_date_divergence": true,
+  "combined_surface_manifest_sha256": "F2C78A29E43EAAD77AF815AB2723B3ED5202D70384E7145DDF01BCFC2041DE63",
+  "components": [
+    {
+      "component_manifest_sha256": "DED5CE75CCD8B4A36F064AD59D3BF43F7DD1D8CEADD33AD43E9150ED7826DB6C",
+      "date_vector_sha256": null,
+      "full_row_digest_sha256": "C560F484EA049B56A6251A34FB4C4E39047E24CB2610A0824DADFE114EC92908",
+      "previous_snapshot_date": "2026-07-30",
+      "row_count": 13497,
+      "snapshot_date": "2026-07-31",
+      "surface_code": "GLOBAL_LATEST",
+      "universe_count": 1
+    },
+    {
+      "component_manifest_sha256": "A1CCACBCE1AF6EE106840E482A97A303813F096EA616F7D3837D865CFA8707E2",
+      "date_vector_sha256": "6E7BA473DDCC0C25F3F46FFEE443BA41CC9D2435F448531189F843AB28FA82F7",
+      "full_row_digest_sha256": "FB31BF64DF0000EABDD3827581D6B40FEC2D22EE64582C4B1AB28FE6A26D8008",
+      "previous_snapshot_date": null,
+      "row_count": 40484,
+      "snapshot_date": null,
+      "surface_code": "UNIVERSE_SERVICE",
+      "universe_count": 225
+    }
+  ],
+  "future_sealed_generation_may_reuse_divergence": false,
+  "official_history_rows_written": 0,
+  "official_snapshot_rows_written": 0,
+  "required_surface_codes": [
+    "GLOBAL_LATEST",
+    "UNIVERSE_SERVICE"
+  ],
+  "schema_version": 1,
+  "source_authority_key": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1",
+  "source_authority_kind": "BOOTSTRAP_COMPATIBILITY_BUNDLE",
+  "status": "IMMUTABLE_APPROVED_CONTROL_NO_EXECUTION",
+  "surface_count": 2,
+  "total_component_rows": 53981,
+  "vector_control": "bootstrap_legacy_source_date_vector.json"
+}

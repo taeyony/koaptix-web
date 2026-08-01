@@ -1,0 +1,1273 @@
+{
+  "$defs": {
+    "affected_universe_manifest": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "row_count": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "row_set_sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "universe_code": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "universe_code",
+          "row_count",
+          "row_set_sha256"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "bootstrap_rollback_surface_component": {
+      "additionalProperties": false,
+      "properties": {
+        "component_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "date_vector_sha256": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sha256"
+            }
+          ]
+        },
+        "full_row_digest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "row_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "snapshot_date": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "format": "date",
+              "type": "string"
+            }
+          ]
+        },
+        "surface_code": {
+          "enum": [
+            "GLOBAL_LATEST",
+            "UNIVERSE_SERVICE"
+          ]
+        },
+        "universe_count": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "surface_code",
+        "snapshot_date",
+        "date_vector_sha256",
+        "universe_count",
+        "row_count",
+        "full_row_digest_sha256",
+        "component_manifest_sha256"
+      ],
+      "type": "object"
+    },
+    "bootstrap_rollback_target_authority": {
+      "additionalProperties": false,
+      "properties": {
+        "authority_kind": {
+          "const": "BOOTSTRAP_COMPATIBILITY_BUNDLE"
+        },
+        "combined_surface_manifest_sha256": {
+          "const": "F2C78A29E43EAAD77AF815AB2723B3ED5202D70384E7145DDF01BCFC2041DE63"
+        },
+        "required_surface_codes": {
+          "const": [
+            "GLOBAL_LATEST",
+            "UNIVERSE_SERVICE"
+          ]
+        },
+        "source_authority_key": {
+          "const": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1"
+        },
+        "surface_components": {
+          "items": {
+            "$ref": "#/$defs/bootstrap_rollback_surface_component"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "target_bundle_matches_pointer_after_generation": {
+          "const": true
+        },
+        "target_generation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "total_component_rows": {
+          "const": 53981
+        }
+      },
+      "required": [
+        "authority_kind",
+        "target_generation_id",
+        "source_authority_key",
+        "required_surface_codes",
+        "surface_components",
+        "total_component_rows",
+        "combined_surface_manifest_sha256",
+        "target_bundle_matches_pointer_after_generation"
+      ],
+      "type": "object"
+    },
+    "canonical_rollback_target_authority": {
+      "additionalProperties": false,
+      "properties": {
+        "authority_kind": {
+          "const": "SEALED_RANK_INPUT_MANIFEST"
+        },
+        "combined_surface_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "required_surface_codes": {
+          "const": [
+            "GLOBAL_LATEST",
+            "UNIVERSE_SERVICE"
+          ]
+        },
+        "surface_components": {
+          "items": {
+            "$ref": "#/$defs/publication_surface_component"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "target_generation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "target_manifest_contract_version": {
+          "const": "rank-input-v1"
+        },
+        "target_manifest_matches_pointer_after_generation": {
+          "const": true
+        },
+        "target_manifest_revocation_rows": {
+          "const": 0
+        },
+        "target_manifest_run_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "total_component_rows": {
+          "minimum": 2,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "authority_kind",
+        "target_generation_id",
+        "target_manifest_run_id",
+        "target_manifest_contract_version",
+        "target_manifest_revocation_rows",
+        "required_surface_codes",
+        "surface_components",
+        "total_component_rows",
+        "combined_surface_manifest_sha256",
+        "target_manifest_matches_pointer_after_generation"
+      ],
+      "type": "object"
+    },
+    "common_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "authorization_proof_exact": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "execution_run_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "manifest_contract_version": {
+          "const": "rank-input-v1"
+        },
+        "manifest_run_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "plan_run_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "target_date": {
+          "format": "date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plan_run_id",
+        "execution_run_id",
+        "authorization_proof_exact",
+        "manifest_run_id",
+        "manifest_contract_version",
+        "target_date"
+      ],
+      "type": "object"
+    },
+    "event_tuple": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "event_type": {
+          "enum": [
+            "PUBLISH",
+            "ROLLBACK"
+          ]
+        },
+        "execution_run_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "expected_previous_version": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "from_generation_id": {
+          "oneOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plan_run_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "publication_version": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "to_generation_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "event_type",
+        "from_generation_id",
+        "to_generation_id",
+        "plan_run_id",
+        "execution_run_id",
+        "expected_previous_version",
+        "publication_version",
+        "recorded_at"
+      ],
+      "type": "object"
+    },
+    "gate_counts": {
+      "additionalProperties": false,
+      "properties": {
+        "actual_affected_universe_codes": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "actual_affected_universe_manifest": {
+          "$ref": "#/$defs/affected_universe_manifest"
+        },
+        "actual_affected_universe_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "actual_blocking_review_rows": {
+          "const": 0
+        },
+        "actual_blocking_review_rule_version": {
+          "const": "NO_DIRECT_RANK_REVIEW_AUTHORITY_V1"
+        },
+        "actual_blocking_review_sha256": {
+          "const": "4F53CDA18C2BAA0C0354BB5F9A3ECBE5ED12AB4D8E11BA873C2F11161202B945"
+        },
+        "actual_canonical_query_version": {
+          "const": "canonical-rank-input-v1"
+        },
+        "actual_eligibility": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "actual_eligibility_rule_versions": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "actual_eligibility_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "actual_eligibility_source_ids": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "actual_invalid_source_contract_rows": {
+          "const": 0
+        },
+        "actual_jeonbuk_membership": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "actual_joined": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "actual_manual_override_allowed": {
+          "type": "boolean"
+        },
+        "actual_manual_override_rows": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "actual_market_cap": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "actual_market_cap_calculation_versions": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "actual_market_cap_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "actual_market_cap_source_ids": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "actual_membership_contract_version": {
+          "const": "membership-map-first-45-52-v1"
+        },
+        "actual_membership_duplicate_pairs": {
+          "const": 0
+        },
+        "actual_membership_fail_closed_qualified": {
+          "const": 0
+        },
+        "actual_membership_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "actual_membership_source_ids": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "actual_qualified": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "actual_selected_input_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "actual_sgg_52111_membership": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "actual_sgg_52111_qualified": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "actual_source_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "actual_unauthorized_manual_override_rows": {
+          "const": 0
+        },
+        "all_expected_actual_equal": {
+          "const": true
+        },
+        "expected_affected_universe_codes": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "expected_affected_universe_manifest": {
+          "$ref": "#/$defs/affected_universe_manifest"
+        },
+        "expected_affected_universe_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_blocking_review_rows": {
+          "const": 0
+        },
+        "expected_blocking_review_rule_version": {
+          "const": "NO_DIRECT_RANK_REVIEW_AUTHORITY_V1"
+        },
+        "expected_blocking_review_sha256": {
+          "const": "4F53CDA18C2BAA0C0354BB5F9A3ECBE5ED12AB4D8E11BA873C2F11161202B945"
+        },
+        "expected_canonical_query_version": {
+          "const": "canonical-rank-input-v1"
+        },
+        "expected_eligibility": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expected_eligibility_rule_versions": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "expected_eligibility_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_eligibility_source_ids": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "expected_invalid_source_contract_rows": {
+          "const": 0
+        },
+        "expected_jeonbuk_membership": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expected_joined": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expected_manual_override_allowed": {
+          "type": "boolean"
+        },
+        "expected_market_cap": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expected_market_cap_calculation_versions": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "expected_market_cap_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_market_cap_source_ids": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "expected_membership_contract_version": {
+          "const": "membership-map-first-45-52-v1"
+        },
+        "expected_membership_duplicate_pairs": {
+          "const": 0
+        },
+        "expected_membership_fail_closed_qualified": {
+          "const": 0
+        },
+        "expected_membership_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_membership_source_ids": {
+          "$ref": "#/$defs/nonblank_unique_string_array"
+        },
+        "expected_qualified": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expected_selected_input_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_sgg_52111_membership": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expected_sgg_52111_qualified": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expected_source_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_unauthorized_manual_override_rows": {
+          "const": 0
+        }
+      },
+      "required": [
+        "expected_market_cap",
+        "actual_market_cap",
+        "expected_eligibility",
+        "actual_eligibility",
+        "expected_joined",
+        "actual_joined",
+        "expected_qualified",
+        "actual_qualified",
+        "expected_canonical_query_version",
+        "actual_canonical_query_version",
+        "expected_membership_contract_version",
+        "actual_membership_contract_version",
+        "expected_market_cap_calculation_versions",
+        "actual_market_cap_calculation_versions",
+        "expected_eligibility_rule_versions",
+        "actual_eligibility_rule_versions",
+        "expected_market_cap_source_ids",
+        "actual_market_cap_source_ids",
+        "expected_eligibility_source_ids",
+        "actual_eligibility_source_ids",
+        "expected_jeonbuk_membership",
+        "actual_jeonbuk_membership",
+        "expected_sgg_52111_membership",
+        "actual_sgg_52111_membership",
+        "expected_sgg_52111_qualified",
+        "actual_sgg_52111_qualified",
+        "expected_membership_duplicate_pairs",
+        "actual_membership_duplicate_pairs",
+        "expected_membership_fail_closed_qualified",
+        "actual_membership_fail_closed_qualified",
+        "expected_membership_source_ids",
+        "actual_membership_source_ids",
+        "expected_manual_override_allowed",
+        "actual_manual_override_allowed",
+        "actual_manual_override_rows",
+        "expected_unauthorized_manual_override_rows",
+        "actual_unauthorized_manual_override_rows",
+        "expected_invalid_source_contract_rows",
+        "actual_invalid_source_contract_rows",
+        "expected_blocking_review_rule_version",
+        "actual_blocking_review_rule_version",
+        "expected_blocking_review_rows",
+        "actual_blocking_review_rows",
+        "expected_blocking_review_sha256",
+        "actual_blocking_review_sha256",
+        "expected_affected_universe_codes",
+        "actual_affected_universe_codes",
+        "expected_affected_universe_manifest",
+        "actual_affected_universe_manifest",
+        "expected_market_cap_set_sha256",
+        "actual_market_cap_set_sha256",
+        "expected_eligibility_set_sha256",
+        "actual_eligibility_set_sha256",
+        "expected_source_set_sha256",
+        "actual_source_set_sha256",
+        "expected_selected_input_sha256",
+        "actual_selected_input_sha256",
+        "expected_membership_set_sha256",
+        "actual_membership_set_sha256",
+        "expected_affected_universe_set_sha256",
+        "actual_affected_universe_set_sha256",
+        "all_expected_actual_equal"
+      ],
+      "type": "object"
+    },
+    "nonblank_unique_string_array": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "pointer_tuple": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "generation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "previous_generation_id": {
+          "oneOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "publication_version": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "published_at": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "generation_id",
+        "previous_generation_id",
+        "event_id",
+        "publication_version",
+        "published_at"
+      ],
+      "type": "object"
+    },
+    "publication_surface_component": {
+      "additionalProperties": false,
+      "properties": {
+        "affected_date_aligned": {
+          "const": true
+        },
+        "component_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "cross_surface_common_fields_equal": {
+          "const": true
+        },
+        "date_vector_sha256": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sha256"
+            }
+          ]
+        },
+        "full_row_digest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "row_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "snapshot_date": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "format": "date",
+              "type": "string"
+            }
+          ]
+        },
+        "surface_code": {
+          "enum": [
+            "GLOBAL_LATEST",
+            "UNIVERSE_SERVICE"
+          ]
+        },
+        "universe_count": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "surface_code",
+        "snapshot_date",
+        "date_vector_sha256",
+        "universe_count",
+        "row_count",
+        "full_row_digest_sha256",
+        "component_manifest_sha256",
+        "affected_date_aligned",
+        "cross_surface_common_fields_equal"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9A-F]{64}$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Future SEALED_RANK_INPUT_MANIFEST publication only; initial bootstrap uses initial_seed_execution_result_contract.json. Cross-field equality is additionally enforced by validate_publication_result.py.",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "activation": {
+          "additionalProperties": false,
+          "properties": {
+            "automatic_retry_count": {
+              "const": 0
+            },
+            "isolation": {
+              "const": "SERIALIZABLE"
+            },
+            "lock_outcome": {
+              "const": "ACQUIRED"
+            },
+            "pointer_after": {
+              "$ref": "#/$defs/pointer_tuple"
+            },
+            "pointer_before": {
+              "$ref": "#/$defs/pointer_tuple"
+            },
+            "pointer_matches_event": {
+              "const": true
+            },
+            "publish_event": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/event_tuple"
+                },
+                {
+                  "properties": {
+                    "event_type": {
+                      "const": "PUBLISH"
+                    }
+                  }
+                }
+              ]
+            },
+            "transaction_a_completion_observed_at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "transaction_b_completion_observed_at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "version_increment_exact": {
+              "const": true
+            }
+          },
+          "required": [
+            "isolation",
+            "lock_outcome",
+            "automatic_retry_count",
+            "transaction_a_completion_observed_at",
+            "transaction_b_completion_observed_at",
+            "pointer_before",
+            "pointer_after",
+            "publish_event",
+            "version_increment_exact",
+            "pointer_matches_event"
+          ],
+          "type": "object"
+        },
+        "candidate_stage": {
+          "additionalProperties": false,
+          "properties": {
+            "history_row_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "history_set_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "snapshot_row_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "snapshot_vector_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          },
+          "required": [
+            "history_row_count",
+            "history_set_sha256",
+            "snapshot_row_count",
+            "snapshot_vector_sha256"
+          ],
+          "type": "object"
+        },
+        "gate_counts": {
+          "$ref": "#/$defs/gate_counts"
+        },
+        "generation": {
+          "additionalProperties": false,
+          "properties": {
+            "all_component_manifests_verified": {
+              "const": true
+            },
+            "combined_surface_manifest_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "derived_status": {
+              "const": "PUBLISHED"
+            },
+            "generation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "required_surface_codes": {
+              "const": [
+                "GLOBAL_LATEST",
+                "UNIVERSE_SERVICE"
+              ]
+            },
+            "surface_components": {
+              "items": {
+                "$ref": "#/$defs/publication_surface_component"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "surface_count": {
+              "const": 2
+            },
+            "total_component_rows": {
+              "minimum": 2,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "generation_id",
+            "derived_status",
+            "surface_count",
+            "required_surface_codes",
+            "total_component_rows",
+            "combined_surface_manifest_sha256",
+            "surface_components",
+            "all_component_manifests_verified"
+          ],
+          "type": "object"
+        },
+        "history": {
+          "additionalProperties": false,
+          "properties": {
+            "equals_candidate_stage": {
+              "const": true
+            },
+            "inserted_rows": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "source_set_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          },
+          "required": [
+            "inserted_rows",
+            "source_set_sha256",
+            "equals_candidate_stage"
+          ],
+          "type": "object"
+        },
+        "identity": {
+          "$ref": "#/$defs/common_identity"
+        },
+        "outcome": {
+          "const": "SUCCESSFUL_PUBLICATION"
+        },
+        "smoke": {
+          "additionalProperties": false,
+          "properties": {
+            "cache_mutations": {
+              "const": 0
+            },
+            "mixed_generation_responses": {
+              "const": 0
+            },
+            "status": {
+              "const": "PASS"
+            }
+          },
+          "required": [
+            "status",
+            "mixed_generation_responses",
+            "cache_mutations"
+          ],
+          "type": "object"
+        },
+        "snapshots": {
+          "additionalProperties": false,
+          "properties": {
+            "equals_candidate_stage": {
+              "const": true
+            },
+            "per_universe_insert_counts": {
+              "additionalProperties": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "minProperties": 1,
+              "propertyNames": {
+                "minLength": 1
+              },
+              "type": "object"
+            },
+            "snapshot_vector_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "total_inserted_rows": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "universe_count_matches_generation": {
+              "const": true
+            }
+          },
+          "required": [
+            "per_universe_insert_counts",
+            "total_inserted_rows",
+            "snapshot_vector_sha256",
+            "universe_count_matches_generation",
+            "equals_candidate_stage"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "outcome",
+        "identity",
+        "gate_counts",
+        "candidate_stage",
+        "history",
+        "snapshots",
+        "generation",
+        "activation",
+        "smoke"
+      ],
+      "title": "SUCCESSFUL_PUBLICATION",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/common_identity"
+        },
+        "outcome": {
+          "const": "REJECTED_NO_PUBLICATION"
+        },
+        "rejection": {
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "phase": {
+                    "const": "TRANSACTION_A"
+                  }
+                },
+                "required": [
+                  "phase"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "retained_history_stage_rows": {
+                    "const": 0
+                  },
+                  "retained_inactive_generation": {
+                    "type": "null"
+                  },
+                  "retained_snapshot_stage_rows": {
+                    "const": 0
+                  },
+                  "transaction_a_committed": {
+                    "const": false
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "phase": {
+                    "const": "TRANSACTION_B"
+                  }
+                },
+                "required": [
+                  "phase"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "retained_history_stage_rows": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "retained_inactive_generation": {
+                    "type": "object"
+                  },
+                  "retained_snapshot_stage_rows": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "transaction_a_committed": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          ],
+          "properties": {
+            "automatic_retry_count": {
+              "const": 0
+            },
+            "lock_outcome": {
+              "enum": [
+                "NOWAIT_REJECTED",
+                "GATE_REJECTED"
+              ]
+            },
+            "official_history_rows_written": {
+              "const": 0
+            },
+            "official_snapshot_rows_written": {
+              "const": 0
+            },
+            "phase": {
+              "enum": [
+                "TRANSACTION_A",
+                "TRANSACTION_B"
+              ]
+            },
+            "pointer_after": {
+              "$ref": "#/$defs/pointer_tuple"
+            },
+            "pointer_before": {
+              "$ref": "#/$defs/pointer_tuple"
+            },
+            "pointer_rows_changed": {
+              "const": 0
+            },
+            "pointer_unchanged": {
+              "const": true
+            },
+            "publication_events_written": {
+              "const": 0
+            },
+            "reason_code": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "retained_history_stage_rows": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "retained_inactive_generation": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "combined_surface_manifest_sha256": {
+                      "$ref": "#/$defs/sha256"
+                    },
+                    "generation_id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "surface_components": {
+                      "items": {
+                        "$ref": "#/$defs/publication_surface_component"
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "generation_id",
+                    "combined_surface_manifest_sha256",
+                    "surface_components"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "retained_snapshot_stage_rows": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "transaction_a_committed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "phase",
+            "reason_code",
+            "lock_outcome",
+            "automatic_retry_count",
+            "official_history_rows_written",
+            "official_snapshot_rows_written",
+            "publication_events_written",
+            "pointer_rows_changed",
+            "pointer_before",
+            "pointer_after",
+            "pointer_unchanged",
+            "transaction_a_committed",
+            "retained_inactive_generation",
+            "retained_history_stage_rows",
+            "retained_snapshot_stage_rows"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "outcome",
+        "identity",
+        "rejection"
+      ],
+      "title": "REJECTED_NO_PUBLICATION",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failed_smoke": {
+          "additionalProperties": false,
+          "properties": {
+            "cache_mutations": {
+              "const": 0
+            },
+            "failure_code": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "status": {
+              "const": "FAIL"
+            }
+          },
+          "required": [
+            "status",
+            "failure_code",
+            "cache_mutations"
+          ],
+          "type": "object"
+        },
+        "identity": {
+          "$ref": "#/$defs/common_identity"
+        },
+        "outcome": {
+          "const": "PUBLICATION_ROLLED_BACK"
+        },
+        "rollback": {
+          "additionalProperties": false,
+          "properties": {
+            "authorization_proof_exact": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "automatic_retry_count": {
+              "const": 0
+            },
+            "completion_observed_at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "isolation": {
+              "const": "SERIALIZABLE"
+            },
+            "lock_outcome": {
+              "const": "ACQUIRED"
+            },
+            "official_history_rows_retained": {
+              "const": true
+            },
+            "official_snapshot_rows_retained": {
+              "const": true
+            },
+            "original_publication_execution_run_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "original_publish_event_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "pointer_after": {
+              "$ref": "#/$defs/pointer_tuple"
+            },
+            "pointer_before": {
+              "$ref": "#/$defs/pointer_tuple"
+            },
+            "pointer_matches_rollback_event": {
+              "const": true
+            },
+            "rollback_event": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/event_tuple"
+                },
+                {
+                  "properties": {
+                    "event_type": {
+                      "const": "ROLLBACK"
+                    }
+                  }
+                }
+              ]
+            },
+            "rollback_execution_run_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "target_authority": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/canonical_rollback_target_authority"
+                },
+                {
+                  "$ref": "#/$defs/bootstrap_rollback_target_authority"
+                }
+              ]
+            },
+            "version_increment_exact": {
+              "const": true
+            }
+          },
+          "required": [
+            "authorization_proof_exact",
+            "rollback_execution_run_id",
+            "original_publication_execution_run_id",
+            "original_publish_event_id",
+            "isolation",
+            "lock_outcome",
+            "automatic_retry_count",
+            "rollback_event",
+            "pointer_before",
+            "pointer_after",
+            "version_increment_exact",
+            "pointer_matches_rollback_event",
+            "completion_observed_at",
+            "target_authority",
+            "official_history_rows_retained",
+            "official_snapshot_rows_retained"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "outcome",
+        "identity",
+        "failed_smoke",
+        "rollback"
+      ],
+      "title": "PUBLICATION_ROLLED_BACK",
+      "type": "object"
+    }
+  ],
+  "title": "KOAPTIX atomic rank publication completion",
+  "x-koaptix-semantic-validator": {
+    "mode": "PUBLICATION_RESULT",
+    "read_only_db_completion_evidence_required": true,
+    "required_after_json_schema_validation": true,
+    "schema_only_acceptance_prohibited": true,
+    "tracked_file": "tooling/koaptix/rank_publication/validate_publication_result.py"
+  },
+  "x-koaptix-semantic-validator-rules": [
+    "for SUCCESSFUL_PUBLICATION every expected_* canonical source, version, authorization, membership, affected-universe scalar, array, manifest and digest equals its actual_* peer byte-for-value; all_expected_actual_equal is derived only after every pair passes",
+    "canonical_query_version, membership_contract_version, calculation/rule version arrays, market-cap/eligibility/membership source IDs, market-cap/eligibility/combined/selected-input/membership/affected digests, manual_override_allowed, and blocking-review rule/digest are mandatory manifest-vs-recomputed pairs",
+    "membership duplicate, fail-closed qualified, unauthorized manual-override, invalid source-contract and blocking-review expected/actual counts are integer zero, not JSON booleans",
+    "actual_manual_override_rows is a nonnegative recomputed count and must be zero when actual_manual_override_allowed is false",
+    "Transaction A candidate-stage counts/digests equal generation provenance; Transaction B history.source_set_sha256 equals candidate_stage.history_set_sha256 and snapshots.snapshot_vector_sha256 equals candidate_stage.snapshot_vector_sha256, with official counts equal to the candidate stage",
+    "publish and rollback event tuples equal pointer_after event/generation/version/time and increment pointer_before version by exactly one",
+    "for SUCCESSFUL_PUBLICATION publish_event.plan_run_id/execution_run_id equal identity.plan_run_id/execution_run_id; generation.generation_id equals publish_event.to_generation_id and pointer_after.generation_id; publish_event.from_generation_id equals pointer_before.generation_id; pointer_after.previous_generation_id equals pointer_before.generation_id",
+    "for SUCCESSFUL_PUBLICATION identity manifest_run_id/contract/target_date equal the immutable generation authority and nonrevoked manifest plus the same-transaction gate authority verified through read-only completion evidence",
+    "for SUCCESSFUL_PUBLICATION generation.surface_components sorted by surface_code are exactly GLOBAL_LATEST and UNIVERSE_SERVICE, equal the immutable DB component rows/counts/full-row digests/component manifests, total_component_rows and combined_surface_manifest_sha256; all affected rows use identity.target_date and cross-surface equality is exact only for snapshot_date,KOREA_ALL,complex_id,rank_all,market_cap_krw,type-normalized share/pct,tier code/label/sort,is_top1000; previous rank/prior date/delta/movement are compared only when predecessor dates are equal",
+    "for REJECTED_NO_PUBLICATION pointer_before and pointer_after are byte-for-field equal across generation_id, previous_generation_id, event_id, publication_version and published_at and equal the read-only database singleton completion evidence; pointer_unchanged is derived only after equality and all four official/event/pointer write counts are database-verified zero",
+    "a TRANSACTION_A rejection has transaction_a_committed=false, no retained generation and zero retained stage rows; a TRANSACTION_B rejection has transaction_a_committed=true meaning an exact candidate generation is durably present (including exact idempotent reuse), a nonnull retained generation and positive history/snapshot stage rows",
+    "for a TRANSACTION_B rejection the retained generation ID/combined manifest/two typed surface components and both retained stage counts equal read-only database completion evidence for identity.execution_run_id and its named nonrevoked manifest; missing or contradictory provenance rejects the result",
+    "for PUBLICATION_ROLLED_BACK original_publication_execution_run_id equals identity.execution_run_id, original_publish_event_id equals pointer_before.event_id, rollback_event.plan_run_id equals identity.plan_run_id, and rollback_event.execution_run_id equals rollback_execution_run_id",
+    "for PUBLICATION_ROLLED_BACK rollback_event.from_generation_id equals pointer_before.generation_id, rollback_event.to_generation_id equals pointer_after.generation_id, pointer_after.generation_id equals pointer_before.previous_generation_id, and pointer_after.previous_generation_id equals pointer_before.generation_id",
+    "canonical rollback target_generation_id equals pointer_after.generation_id; its generation references the named nonrevoked SEALED rank-input-v1 manifest and the serialized required_surface_codes/surface_components/total_component_rows/combined_surface_manifest_sha256 equal the immutable database parent and exactly two GLOBAL_LATEST plus UNIVERSE_SERVICE component rows, including dates or date vector, counts, full-row and component digests, affected-date alignment and common-field equality",
+    "bootstrap rollback target_generation_id equals pointer_after.generation_id and its serialized/database generation carries exact BOOTSTRAP_COMPATIBILITY_BUNDLE_V1 components GLOBAL_LATEST 2026-07-31/1/13497/C560F4...92908/DED5CE...DB6C with null date vector and UNIVERSE_SERVICE null-date/225/40484/6E7BA4...82F7/FB31BF...D8008/A1CCAC...07E2 plus total 53981 and combined manifest F2C78A...1DE63"
+  ]
+}

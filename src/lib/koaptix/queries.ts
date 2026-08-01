@@ -19,6 +19,7 @@ import type {
   DbLatestRankBoardWeeklyRow,
   DbRankHistoryRow,
 } from "./types";
+import { requireUniformUniverseServicePublication } from "./currentness";
 import {
   KOAPTIX_OFFICIAL_BASE_DATE,
   KOAPTIX_PUBLIC_EXPOSURE_BLOCKED,
@@ -463,28 +464,6 @@ async function fetchRegionFallbackByComplexId(
   return map.get(String(parsed)) ?? null;
 }
 
-function isStatementTimeout(
-  error: { code?: string | null; message?: string | null } | null | undefined
-) {
-  if (!error) return false;
-  return (
-    error.code === "57014" ||
-    (error.message ?? "").includes("statement timeout")
-  );
-}
-
-function isLocalLatestBoardTimeout(
-  error: { code?: string | null; message?: string | null } | null | undefined
-) {
-  if (!error) return false;
-
-  return (
-    error.code === "LOCAL_TIMEOUT" ||
-    (error.message ?? "").includes("LATEST_BOARD_LOCAL_TIMEOUT") ||
-    (error.message ?? "").includes("DYNAMIC_FALLBACK_LOCAL_TIMEOUT")
-  );
-}
-
 async function withLocalQueryTimeout<T>(
   promise: PromiseLike<T>,
   ms: number,
@@ -509,36 +488,7 @@ const MAX_LATEST_RANK_BOARD_LIMIT = 1000;
 const HOME_KPI_LOG_WINDOW_MS = 180_000;
 const LATEST_RANK_BOARD_TIMEOUT_MS_KOREA = 1_800;
 const LATEST_RANK_BOARD_TIMEOUT_MS_REGIONAL = 900;
-const DYNAMIC_RANK_BOARD_FALLBACK_TIMEOUT_MS_KOREA = 6_500;
-const DYNAMIC_RANK_BOARD_FALLBACK_TIMEOUT_MS_REGIONAL = 5_200;
-
-const latestRankBoardCooldownUntil = new Map<string, number>();
-const LATEST_RANK_BOARD_COOLDOWN_MS = 180_000;
 let lastHomeKpiWarningAt = 0;
-
-function isLatestRankBoardCoolingDown(universeCode: string) {
-  if (universeCode === DEFAULT_UNIVERSE_CODE) return false;
-
-  const until = latestRankBoardCooldownUntil.get(universeCode) ?? 0;
-  if (until <= Date.now()) {
-    latestRankBoardCooldownUntil.delete(universeCode);
-    return false;
-  }
-
-  return true;
-}
-
-function markLatestRankBoardCooldown(universeCode: string) {
-  if (universeCode === DEFAULT_UNIVERSE_CODE) return;
-  latestRankBoardCooldownUntil.set(
-    universeCode,
-    Date.now() + LATEST_RANK_BOARD_COOLDOWN_MS,
-  );
-}
-
-function clearLatestRankBoardCooldown(universeCode: string) {
-  latestRankBoardCooldownUntil.delete(universeCode);
-}
 
 function buildRankBoardRetryLimits(
   requestedLimit: number,
@@ -558,143 +508,9 @@ function buildRankBoardRetryLimits(
   );
 }
 
-function buildTierMeta(rankAll: number | null) {
-  if (rankAll === null) {
-    return {
-      tier_code: "E",
-      tier_label: "Top 1000+",
-      tier_sort: 6,
-      is_top1000: false,
-    };
-  }
-
-  if (rankAll <= 10) {
-    return {
-      tier_code: "S",
-      tier_label: "Top 10",
-      tier_sort: 1,
-      is_top1000: true,
-    };
-  }
-
-  if (rankAll <= 50) {
-    return {
-      tier_code: "A",
-      tier_label: "Top 50",
-      tier_sort: 2,
-      is_top1000: true,
-    };
-  }
-
-  if (rankAll <= 100) {
-    return {
-      tier_code: "B",
-      tier_label: "Top 100",
-      tier_sort: 3,
-      is_top1000: true,
-    };
-  }
-
-  if (rankAll <= 300) {
-    return {
-      tier_code: "C",
-      tier_label: "Top 300",
-      tier_sort: 4,
-      is_top1000: true,
-    };
-  }
-
-  if (rankAll <= 1000) {
-    return {
-      tier_code: "D",
-      tier_label: "Top 1000",
-      tier_sort: 5,
-      is_top1000: true,
-    };
-  }
-
-  return {
-    tier_code: "E",
-    tier_label: "Top 1000+",
-    tier_sort: 6,
-    is_top1000: false,
-  };
-}
-
-async function fetchLatestRankBoardFallbackFromDynamic(
-  supabase: ReturnType<typeof createServerSupabase>,
-  universeCode: KnownUniverseCode | string,
-  limit: number,
-) {
-  const { data: latestSnapshot, error: latestSnapshotError } = await supabase
-    .from("koaptix_rank_snapshot")
-    .select("snapshot_date")
-    .eq("universe_code", universeCode)
-    .order("snapshot_date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (latestSnapshotError) {
-    throw latestSnapshotError;
-  }
-
-  if (!latestSnapshot?.snapshot_date) {
-    return [] as any[];
-  }
-
-  let query = supabase
-    .from("v_koaptix_universe_rank_history_dynamic")
-    .select(
-      `
-        snapshot_date,
-        universe_code,
-        universe_name,
-        universe_scope,
-        complex_id,
-        apt_name_ko,
-        sigungu_name,
-        legal_dong_name,
-        build_year,
-        household_count,
-        total_household_count,
-        recovery_52w,
-        rank_all,
-        market_cap_krw,
-        market_cap_trillion_krw,
-        market_cap_share,
-        market_cap_share_pct
-      `,
-    )
-    .eq("universe_code", universeCode)
-    .eq("snapshot_date", latestSnapshot.snapshot_date);
-
-  if (universeCode === DEFAULT_UNIVERSE_CODE) {
-    query = query.lte("rank_all", limit);
-  }
-
-  const { data, error } = await query
-    .order("rank_all", { ascending: true })
-    .limit(limit);
-
-  if (error) {
-    throw error;
-  }
-
-  return (data ?? []).map((row: any) => {
-    const rankAll = toNullableNumber(row.rank_all);
-    const tier = buildTierMeta(rankAll);
-
-    return {
-      ...row,
-      previous_rank_all: null,
-      rank_delta_w: null,
-      rank_movement: null,
-      ...tier,
-    };
-  });
-}
-
 const HOME_TACTICAL_RANK_BOARD_LIMIT = 20;
+const PUBLISHED_UNIVERSE_SERVICE_VIEW =
+  "v_koaptix_latest_board_read_model_published";
 
 /**
  * Home initial SSR seed path.
@@ -723,143 +539,99 @@ export async function getLatestRankBoard(
     safeUniverseCode === DEFAULT_UNIVERSE_CODE
       ? LATEST_RANK_BOARD_TIMEOUT_MS_KOREA
       : LATEST_RANK_BOARD_TIMEOUT_MS_REGIONAL;
-  const dynamicFallbackTimeoutMs =
-    safeUniverseCode === DEFAULT_UNIVERSE_CODE
-      ? DYNAMIC_RANK_BOARD_FALLBACK_TIMEOUT_MS_KOREA
-      : DYNAMIC_RANK_BOARD_FALLBACK_TIMEOUT_MS_REGIONAL;
-  const shouldTryLatestBoard = !isLatestRankBoardCoolingDown(safeUniverseCode);
-
-  let data: any[] | null = null;
   let lastError: { code?: string | null; message?: string | null } | null =
     null;
-  let deliverySource: "live_latest" | "live_dynamic_fallback" = "live_latest";
 
-  if (shouldTryLatestBoard) {
-    for (const attemptLimit of retryLimits) {
-      try {
-        const result = await withLocalQueryTimeout<{
-          data: any[] | null;
-          error: { code?: string | null; message?: string | null } | null;
-        }>(
-          supabase
-            .from("v_koaptix_latest_universe_rank_board_u")
-            .select(
-              `
-                snapshot_date,
-                universe_code,
-                universe_name,
-                universe_scope,
-                complex_id,
-                apt_name_ko,
-                sigungu_name,
-                legal_dong_name,
-                build_year,
-                household_count,
-                total_household_count,
-                recovery_52w,
-                rank_all,
-                previous_rank_all,
-                rank_delta_w,
-                rank_movement,
-                market_cap_krw,
-                market_cap_trillion_krw,
-                market_cap_share,
-                market_cap_share_pct,
-                tier_code,
-                tier_label,
-                tier_sort,
-                is_top1000
-              `,
-            )
-            .eq("universe_code", safeUniverseCode)
-            .order("rank_all", { ascending: true })
-            .limit(attemptLimit),
-          latestBoardAttemptTimeoutMs,
-          "LATEST_BOARD_LOCAL_TIMEOUT",
-        );
+  for (const attemptLimit of retryLimits) {
+    try {
+      const result = await withLocalQueryTimeout<{
+        data: any[] | null;
+        error: { code?: string | null; message?: string | null } | null;
+      }>(
+        supabase
+          .from(PUBLISHED_UNIVERSE_SERVICE_VIEW)
+          .select(
+            `
+              generation_id,
+              publication_version,
+              publication_event_id,
+              published_at,
+              surface_code,
+              snapshot_date,
+              universe_code,
+              universe_name,
+              universe_scope,
+              complex_id,
+              apt_name_ko,
+              sigungu_name,
+              legal_dong_name,
+              build_year,
+              household_count,
+              total_household_count,
+              recovery_52w,
+              rank_all,
+              previous_rank_all,
+              rank_delta_w,
+              rank_movement,
+              market_cap_krw,
+              market_cap_trillion_krw,
+              market_cap_share,
+              market_cap_share_pct,
+              tier_code,
+              tier_label,
+              tier_sort,
+              is_top1000
+            `,
+          )
+          .eq("surface_code", "UNIVERSE_SERVICE")
+          .eq("universe_code", safeUniverseCode)
+          .order("rank_all", { ascending: true })
+          .limit(attemptLimit),
+        latestBoardAttemptTimeoutMs,
+        "LATEST_BOARD_LOCAL_TIMEOUT",
+      );
 
-        data = result.data ?? null;
-        lastError = result.error ?? null;
-
-        if (!lastError && data && data.length > 0) {
-          clearLatestRankBoardCooldown(safeUniverseCode);
-          break;
-        }
-
-        markLatestRankBoardCooldown(safeUniverseCode);
-        lastError = lastError ?? {
-          code: "LOCAL_TIMEOUT",
-          message: "LATEST_BOARD_EMPTY_DYNAMIC_FALLBACK",
-        };
-        break;
-      } catch (error) {
-        data = null;
-        lastError = {
-          code: "LOCAL_TIMEOUT",
-          message:
-            error instanceof Error
-              ? error.message
-              : "LATEST_BOARD_LOCAL_TIMEOUT",
-        };
-
-        markLatestRankBoardCooldown(safeUniverseCode);
-        break;
+      if (result.error) {
+        lastError = result.error;
+        continue;
       }
-    }
-  } else {
-    lastError = {
-      code: "LOCAL_TIMEOUT",
-      message: "LATEST_BOARD_COOLDOWN_SKIP",
-    };
-  }
 
-  if (
-    lastError &&
-    (isStatementTimeout(lastError) ||
-      isLocalLatestBoardTimeout(lastError) ||
-      lastError.message === "LATEST_BOARD_COOLDOWN_SKIP" ||
-      lastError.message === "LATEST_BOARD_EMPTY_DYNAMIC_FALLBACK")
-  ) {
-    const fallbackRows = await withLocalQueryTimeout<any[]>(
-      fetchLatestRankBoardFallbackFromDynamic(
-        supabase,
+      const liveRows = result.data ?? [];
+      const identity = requireUniformUniverseServicePublication(
+        liveRows,
         safeUniverseCode,
-        requestedLimit,
-      ),
-      dynamicFallbackTimeoutMs,
-      "DYNAMIC_FALLBACK_LOCAL_TIMEOUT",
-    );
+      );
 
-    data = fallbackRows;
-    lastError = null;
-    deliverySource = "live_dynamic_fallback";
+      return liveRows.map((row: any) => ({
+        ...row,
+        ...identity,
+        history_snapshot_date: row.history_snapshot_date ?? null,
+        rank_delta_7d: toNullableNumber(row.rank_delta_w),
+        market_cap_delta_7d: null,
+        market_cap_delta_pct_7d: null,
+        __koaptixBoardSource: "live_latest",
+        __koaptixFallbackMode: "none",
+        universe_name: row.universe_name ?? null,
+        location_search_label: [
+          row.sigungu_name ?? null,
+          row.legal_dong_name ?? null,
+          row.apt_name_ko ?? null,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      })) as DbLatestRankBoardWeeklyRow[];
+    } catch (error) {
+      lastError = {
+        code: "LOCAL_TIMEOUT",
+        message:
+          error instanceof Error ? error.message : "LATEST_BOARD_LOCAL_TIMEOUT",
+      };
+    }
   }
 
-  if (lastError) {
-    throw new Error(
-      `Failed to fetch v_koaptix_latest_universe_rank_board_u: ${lastError.message}`,
-    );
-  }
-
-  const liveRows = (data ?? []) as any[];
-
-  return liveRows.map((row: any) => ({
-    ...row,
-    __koaptixBoardSource: deliverySource,
-    __koaptixFallbackMode:
-      deliverySource === "live_dynamic_fallback"
-        ? "same_universe_dynamic_degraded"
-        : "none",
-    universe_code: row.universe_code ?? safeUniverseCode,
-    universe_name: row.universe_name ?? null,
-    location_search_label: [
-      row.sigungu_name ?? null,
-      row.legal_dong_name ?? null,
-      row.apt_name_ko ?? null,
-    ]
-      .filter(Boolean)
-      .join(" "),
-  })) as DbLatestRankBoardWeeklyRow[];
+  throw new Error(
+    `Failed to fetch ${PUBLISHED_UNIVERSE_SERVICE_VIEW}: ${lastError?.message ?? "unknown error"}`,
+  );
 }
 
 export async function getComplexDetailById(

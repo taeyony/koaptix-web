@@ -28,15 +28,9 @@ export interface HomePayloadOptions {
 const KOAPTIX_KOREA_INDEX_CODE = "KOAPTIX_KOREA";
 const KOAPTIX_KOREA_UNIVERSE_CODE = "KOREA_ALL";
 const KOAPTIX_HOME_PUBLIC_SERVICE_VIEW =
-  "v_koaptix_home_public_service_payload";
-const KOAPTIX_HOME_LATEST_PAYLOAD_VIEW = "v_koaptix_home_latest_payload";
-
-type SupabaseQueryErrorLike = {
-  code?: string;
-  message?: string;
-  details?: string | null;
-  hint?: string | null;
-};
+  "v_koaptix_home_public_service_payload_published";
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function clampInt(value: number | undefined, min: number, max: number, fallback: number): number {
   if (value === undefined || Number.isNaN(value)) return fallback;
@@ -51,31 +45,6 @@ function toFiniteNumber(value: number | string | null | undefined): number | nul
   if (value === null || value === undefined) return null;
   const numeric = typeof value === "number" ? value : Number(value);
   return Number.isFinite(numeric) ? numeric : null;
-}
-
-function isMissingRelationError(
-  error: SupabaseQueryErrorLike,
-  relationName: string,
-): boolean {
-  if (error.code === "42P01") return true;
-
-  const haystack = [
-    error.code,
-    error.message,
-    error.details,
-    error.hint,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .join(" ")
-    .toLowerCase();
-  const relation = relationName.toLowerCase();
-
-  return (
-    haystack.includes(relation) &&
-    (haystack.includes("could not find") ||
-      haystack.includes("does not exist") ||
-      haystack.includes("schema cache"))
-  );
 }
 
 function isOfficialGenesisMetadata(
@@ -196,11 +165,61 @@ function getPublicBaseValue(
   );
 }
 
+function requireHomeRankIdentity(row: KoaptixHomePayloadViewRow) {
+  const rankSnapshotDate = normalizeDate(row.rank_snapshot_date);
+  const parsedSnapshotDate = rankSnapshotDate
+    ? new Date(`${rankSnapshotDate}T00:00:00Z`)
+    : null;
+  if (
+    !rankSnapshotDate ||
+    rankSnapshotDate !== row.rank_snapshot_date ||
+    !parsedSnapshotDate ||
+    Number.isNaN(parsedSnapshotDate.getTime()) ||
+    parsedSnapshotDate.toISOString().slice(0, 10) !== rankSnapshotDate
+  ) {
+    throw new Error("KOAPTIX home rank_snapshot_date must be YYYY-MM-DD");
+  }
+
+  const generationId = row.rank_generation_id?.toLowerCase();
+  const eventId = row.rank_publication_event_id?.toLowerCase();
+  if (!UUID_PATTERN.test(generationId ?? "")) {
+    throw new Error("KOAPTIX home rank_generation_id is invalid");
+  }
+  if (!UUID_PATTERN.test(eventId ?? "")) {
+    throw new Error("KOAPTIX home rank_publication_event_id is invalid");
+  }
+
+  const publicationVersion = toFiniteNumber(row.rank_publication_version);
+  if (
+    publicationVersion === null ||
+    !Number.isSafeInteger(publicationVersion) ||
+    publicationVersion <= 0
+  ) {
+    throw new Error("KOAPTIX home rank_publication_version is invalid");
+  }
+
+  if (
+    typeof row.rank_published_at !== "string" ||
+    Number.isNaN(Date.parse(row.rank_published_at))
+  ) {
+    throw new Error("KOAPTIX home rank_published_at is invalid");
+  }
+
+  return {
+    rank_snapshot_date: rankSnapshotDate,
+    rank_generation_id: generationId!,
+    rank_publication_version: publicationVersion,
+    rank_publication_event_id: eventId!,
+    rank_published_at: row.rank_published_at,
+  };
+}
+
 function buildPublicHomePayload(
   row: KoaptixHomePayloadViewRow,
   topN: number,
   chartPoints: number,
 ): KoaptixHomeApiData | null {
+  const rankIdentity = requireHomeRankIdentity(row);
   const cardBaseDate = normalizeDate(row.index_card?.base_date);
   const rowBaseDate = normalizeDate(row.base_date);
 
@@ -248,6 +267,7 @@ function buildPublicHomePayload(
     .slice(-chartPoints);
 
   return {
+    ...rankIdentity,
     indexCard,
     chart,
     baseDate,
@@ -267,47 +287,39 @@ function buildPublicHomePayload(
 
 async function loadPublicHomePayloadFromView(
   supabase: ReturnType<typeof getSupabaseAdminClient>,
-  viewName: string,
   topN: number,
   chartPoints: number,
-  options: {
-    includeIdentityFilters?: boolean;
-    ignoreMissingRelation?: boolean;
-  } = {},
-): Promise<KoaptixHomeApiData | null> {
-  let query = supabase
-    .from(viewName)
+): Promise<KoaptixHomeApiData> {
+  const { data, error } = await supabase
+    .from(KOAPTIX_HOME_PUBLIC_SERVICE_VIEW)
     .select("*")
-    .eq("base_date", KOAPTIX_PUBLIC_SERVICE_BASE_DATE);
+    .eq("index_code", KOAPTIX_KOREA_INDEX_CODE)
+    .eq("universe_code", KOAPTIX_KOREA_UNIVERSE_CODE)
+    .eq("base_date", KOAPTIX_PUBLIC_SERVICE_BASE_DATE)
+    .single();
 
-  if (options.includeIdentityFilters) {
-    query = query
-      .eq("index_code", KOAPTIX_KOREA_INDEX_CODE)
-      .eq("universe_code", KOAPTIX_KOREA_UNIVERSE_CODE);
+  if (error) {
+    throw new Error(
+      `Failed to load ${KOAPTIX_HOME_PUBLIC_SERVICE_VIEW}: ${error.message}`,
+    );
   }
 
-  const result = await query
-    .order("snapshot_date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (result.error) {
-    if (
-      options.ignoreMissingRelation &&
-      isMissingRelationError(result.error, viewName)
-    ) {
-      return null;
-    }
-    throw new Error(`Failed to load ${viewName}: ${result.error.message}`);
+  if (!data) {
+    throw new Error(
+      `${KOAPTIX_HOME_PUBLIC_SERVICE_VIEW} returned no published row`,
+    );
   }
 
-  if (!result.data) return null;
-
-  return buildPublicHomePayload(
-    result.data as unknown as KoaptixHomePayloadViewRow,
+  const payload = buildPublicHomePayload(
+    data as unknown as KoaptixHomePayloadViewRow,
     topN,
     chartPoints,
   );
+  if (!payload) {
+    throw new OfficialIndexPublicExposureBlockedError();
+  }
+
+  return payload;
 }
 
 export async function getKoaptixHomePayload(
@@ -318,46 +330,9 @@ export async function getKoaptixHomePayload(
 
   const supabase = getSupabaseAdminClient();
 
-  const dedicatedPublicPayload = await loadPublicHomePayloadFromView(
+  return loadPublicHomePayloadFromView(
     supabase,
-    KOAPTIX_HOME_PUBLIC_SERVICE_VIEW,
-    topN,
-    chartPoints,
-    {
-      includeIdentityFilters: true,
-      ignoreMissingRelation: true,
-    },
-  );
-  if (dedicatedPublicPayload) return dedicatedPublicPayload;
-
-  const publicPayload = await loadPublicHomePayloadFromView(
-    supabase,
-    KOAPTIX_HOME_LATEST_PAYLOAD_VIEW,
     topN,
     chartPoints,
   );
-  if (publicPayload) return publicPayload;
-
-  const { data, error } = await supabase
-    .from(KOAPTIX_HOME_LATEST_PAYLOAD_VIEW)
-    .select("*")
-    .single();
-
-  if (error) {
-    throw new Error(`Failed to load KOAPTIX home payload: ${error.message}`);
-  }
-
-  if (!data) {
-    throw new Error("KOAPTIX home payload view returned no rows");
-  }
-
-  const latestPayload = buildPublicHomePayload(
-    data as unknown as KoaptixHomePayloadViewRow,
-    topN,
-    chartPoints,
-  );
-
-  if (latestPayload) return latestPayload;
-
-  throw new OfficialIndexPublicExposureBlockedError();
 }
