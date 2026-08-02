@@ -22,6 +22,57 @@ import validate_publication_result
 UUID_A = "11111111-1111-4111-8111-111111111111"
 UUID_B = "22222222-2222-4222-8222-222222222222"
 
+PRIMARY_DEFINITION_PROFILE = "PRIMARY_PRODUCTION"
+COMPATIBILITY_DEFINITION_PROFILE = "SANITIZED_SCHEMA_ONLY_COMMENT_OMISSION_V1"
+AUDITED_COMPATIBILITY_COMMENT = "  -- 임시로 기록 기능 생략(의존성 제거)"
+AUDITED_COMPATIBILITY_COMMENT_SHA256 = (
+    "FB7F69E60E6FA5E5192CA08FE1E060814D8FA8D4B51C1EA0A9B6962727FE7F77"
+)
+AUDITED_COMMENT_SET_SHA256 = (
+    "A8E86FDC0E23B7ECE7E5F88F7FC53865A14D1F7D7C7BB9A7033B9AA51582230F"
+)
+
+
+def canonicalize_routine_definition(raw: bytes) -> str:
+    """Reference implementation of the migration-900 primary byte contract."""
+    text = raw.decode("utf-8", errors="strict")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [line.rstrip(" \t") for line in text.split("\n")]
+    while lines and lines[-1] == "":
+        lines.pop()
+    return "\n".join(lines) + "\n"
+
+
+def definition_sha256(raw: bytes) -> str:
+    canonical = canonicalize_routine_definition(raw)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest().upper()
+
+
+def selected_definition_matches(
+    raw: bytes,
+    *,
+    profile: str,
+    primary_sha256: str,
+    compatibility_sha256: str | None = None,
+) -> bool:
+    if profile == PRIMARY_DEFINITION_PROFILE:
+        selected = primary_sha256
+    elif profile == COMPATIBILITY_DEFINITION_PROFILE:
+        if compatibility_sha256 is None:
+            selected = primary_sha256
+        else:
+            selected = compatibility_sha256
+    else:
+        return False
+    return definition_sha256(raw) == selected
+
+
+def structural_identity_sha256(model: dict[str, object]) -> str:
+    canonical = json.dumps(
+        model, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest().upper()
+
 
 def valid_publication_packet(action: run_publication.ActionSpec) -> dict[str, object]:
     packet: dict[str, object] = {
@@ -729,7 +780,410 @@ class BootstrapAndResultContractTests(unittest.TestCase):
             validate_publication_result.validate_rollback(changed)
 
 
+class Migration900DefinitionFingerprintTests(unittest.TestCase):
+    def test_primary_canonicalization_accepts_only_raw_formatting_variants(self) -> None:
+        canonical = "create function fixture()\nbegin\n  return 1;\nend;\n"
+        expected = definition_sha256(canonical.encode("utf-8"))
+        variants = {
+            "lf": canonical.encode("utf-8"),
+            "crlf": canonical.replace("\n", "\r\n").encode("utf-8"),
+            "lone_cr": canonical.replace("\n", "\r").encode("utf-8"),
+            "trailing_space_tab": (
+                "create function fixture() \t\n"
+                "begin\t\n"
+                "  return 1;  \n"
+                "end; \n"
+            ).encode("utf-8"),
+            "no_final_lf": canonical.rstrip("\n").encode("utf-8"),
+            "many_final_lf": (canonical + "\n\n").encode("utf-8"),
+        }
+        for label, raw in variants.items():
+            with self.subTest(label=label):
+                self.assertEqual(definition_sha256(raw), expected)
+        with self.assertRaises(UnicodeDecodeError):
+            canonicalize_routine_definition(b"select '\xff';")
+
+    def test_exact_compatibility_profile_isolated_by_whole_definition_hash(self) -> None:
+        primary = (
+            "create function public.run_daily_market_pipeline_legacy(date)\n"
+            "begin\n"
+            f"{AUDITED_COMPATIBILITY_COMMENT}\n"
+            "  v_merge := public.merge_market_source_to_master(p_run_date);\n"
+            "end;\n"
+        ).encode("utf-8")
+        compatibility = primary.replace(
+            (AUDITED_COMPATIBILITY_COMMENT + "\n").encode("utf-8"), b"", 1
+        )
+        primary_sha = definition_sha256(primary)
+        compatibility_sha = definition_sha256(compatibility)
+        self.assertNotEqual(primary_sha, compatibility_sha)
+        self.assertTrue(
+            selected_definition_matches(
+                primary,
+                profile=PRIMARY_DEFINITION_PROFILE,
+                primary_sha256=primary_sha,
+                compatibility_sha256=compatibility_sha,
+            )
+        )
+        self.assertTrue(
+            selected_definition_matches(
+                compatibility,
+                profile=COMPATIBILITY_DEFINITION_PROFILE,
+                primary_sha256=primary_sha,
+                compatibility_sha256=compatibility_sha,
+            )
+        )
+        self.assertFalse(
+            selected_definition_matches(
+                primary,
+                profile=COMPATIBILITY_DEFINITION_PROFILE,
+                primary_sha256=primary_sha,
+                compatibility_sha256=compatibility_sha,
+            )
+        )
+        self.assertFalse(
+            selected_definition_matches(
+                compatibility,
+                profile=PRIMARY_DEFINITION_PROFILE,
+                primary_sha256=primary_sha,
+                compatibility_sha256=compatibility_sha,
+            )
+        )
+        self.assertFalse(
+            selected_definition_matches(
+                primary,
+                profile="UNRECOGNIZED_PROFILE",
+                primary_sha256=primary_sha,
+                compatibility_sha256=compatibility_sha,
+            )
+        )
+
+    def test_audited_comment_identity_and_context_are_exact(self) -> None:
+        self.assertEqual(
+            hashlib.sha256(AUDITED_COMPATIBILITY_COMMENT.encode("utf-8"))
+            .hexdigest()
+            .upper(),
+            AUDITED_COMPATIBILITY_COMMENT_SHA256,
+        )
+        primary = (
+            "create function fixture()\n"
+            "begin\n"
+            f"{AUDITED_COMPATIBILITY_COMMENT}\n"
+            "  v_merge := public.merge_market_source_to_master(p_run_date);\n"
+            "end;\n"
+        ).encode("utf-8")
+        primary_sha = definition_sha256(primary)
+        rejected = {
+            "unknown_full_line_comment": primary.replace(
+                b"begin\n", b"begin\n  -- unknown\n", 1
+            ),
+            "inline_comment": primary.replace(b"begin\n", b"begin -- changed\n", 1),
+            "block_comment": primary.replace(b"begin\n", b"begin\n  /* changed */\n", 1),
+            "duplicate_audited_line": primary.replace(
+                (AUDITED_COMPATIBILITY_COMMENT + "\n").encode("utf-8"),
+                (AUDITED_COMPATIBILITY_COMMENT + "\n" + AUDITED_COMPATIBILITY_COMMENT + "\n").encode("utf-8"),
+                1,
+            ),
+            "moved_audited_line": primary.replace(
+                (
+                    AUDITED_COMPATIBILITY_COMMENT
+                    + "\n  v_merge := public.merge_market_source_to_master(p_run_date);"
+                ).encode("utf-8"),
+                (
+                    "  v_merge := public.merge_market_source_to_master(p_run_date);\n"
+                    + AUDITED_COMPATIBILITY_COMMENT
+                ).encode("utf-8"),
+                1,
+            ),
+            "modified_audited_line": primary.replace(
+                "생략".encode("utf-8"), "제외".encode("utf-8"), 1
+            ),
+            "different_context": primary.replace(
+                b"public.merge_market_source_to_master", b"public.other_callee", 1
+            ),
+        }
+        for label, raw in rejected.items():
+            with self.subTest(label=label):
+                self.assertNotEqual(definition_sha256(raw), primary_sha)
+
+    def test_meaningful_body_changes_never_canonicalize_away(self) -> None:
+        base = (
+            "create function public.fixture(p_ok boolean) returns void\n"
+            "language plpgsql security definer set search_path=public\n"
+            "as $body$\n"
+            "begin\n"
+            "  if p_ok then\n"
+            "    insert into public.target_a(id) values (1);\n"
+            "    perform public.callee_a();\n"
+            "    execute 'update public.dynamic_a set value=1';\n"
+            "    raise notice 'quoted -- value';\n"
+            "  end if;\n"
+            "exception when no_data_found then\n"
+            "  return;\n"
+            "end;\n"
+            "$body$;\n"
+        )
+        base_sha = definition_sha256(base.encode("utf-8"))
+        mutations = {
+            "quoted_dash_text": base.replace("quoted -- value", "quoted -- changed"),
+            "sql_token": base.replace("values (1)", "values (2)"),
+            "mutation_target": base.replace("target_a", "target_b"),
+            "called_routine": base.replace("callee_a", "callee_b"),
+            "condition": base.replace("if p_ok then", "if not p_ok then"),
+            "exception": base.replace("no_data_found", "others"),
+            "dynamic_sql": base.replace("dynamic_a", "dynamic_b"),
+            "writer_removed": base.replace(
+                "    insert into public.target_a(id) values (1);\n", ""
+            ),
+            "statement_reordered": base.replace(
+                "    insert into public.target_a(id) values (1);\n"
+                "    perform public.callee_a();",
+                "    perform public.callee_a();\n"
+                "    insert into public.target_a(id) values (1);",
+            ),
+        }
+        for label, changed in mutations.items():
+            with self.subTest(label=label):
+                self.assertNotEqual(definition_sha256(changed.encode("utf-8")), base_sha)
+
+    def test_layer_one_structural_and_acl_fields_fail_independently(self) -> None:
+        base: dict[str, object] = {
+            "routine_identity": "public.fixture(boolean)",
+            "routine_kind": "FUNCTION",
+            "identity_arguments": "p_ok boolean",
+            "owner_contract": "SHARED_PRE900_ROUTINE_OWNER_AT_MIGRATION_START",
+            "language": "plpgsql",
+            "volatility": "VOLATILE",
+            "parallel": "UNSAFE",
+            "strict": False,
+            "leakproof": False,
+            "security_mode": "SECURITY_DEFINER",
+            "proconfig": ["search_path=public"],
+            "result_type": "void",
+            "returns_set": False,
+            "catalog_dependencies": [],
+            "declared_mutation_targets": ["public.target_a"],
+            "declared_protected_callees": ["public.callee_a()"],
+            "normalized_nonowner_acl": [],
+            "classification": "EXPLICITLY_PROTECTED_BY_EXISTING_900",
+        }
+        expected = structural_identity_sha256(base)
+        mutations: dict[str, object] = {
+            "routine_identity": "public.fixture(integer)",
+            "routine_kind": "PROCEDURE",
+            "identity_arguments": "p_ok integer",
+            "owner_contract": "DIFFERENT_OWNER_CLASS",
+            "language": "sql",
+            "volatility": "STABLE",
+            "parallel": "SAFE",
+            "strict": True,
+            "leakproof": True,
+            "security_mode": "SECURITY_INVOKER",
+            "proconfig": ["search_path=pg_catalog"],
+            "result_type": "integer",
+            "returns_set": True,
+            "catalog_dependencies": ["ROUTINE:n:public.other()"],
+            "declared_mutation_targets": ["public.target_b"],
+            "declared_protected_callees": ["public.callee_b()"],
+            "normalized_nonowner_acl": [{"grantee": "PUBLIC", "privilege": "EXECUTE"}],
+            "classification": "LEXICAL_FALSE_POSITIVE_NONWRITER",
+        }
+        for field, value in mutations.items():
+            with self.subTest(field=field):
+                changed = copy.deepcopy(base)
+                changed[field] = value
+                self.assertNotEqual(structural_identity_sha256(changed), expected)
+
+
 class SqlDefinitionContractTests(unittest.TestCase):
+    def test_migration_900_exact_writer_closure_is_self_contained(self) -> None:
+        sql = (
+            REPO / "supabase/migrations/202607310900_rank_recovery_roles_and_acl.sql"
+        ).read_text(encoding="utf-8")
+        lowered = sql.casefold()
+        protected = {
+            "public.append_daily_rank_history(date)": "function",
+            "public.capture_koaptix_daily_snapshot()": "procedure",
+            "public.refresh_koaptix_front_views_legacy()": "function",
+            "public.refresh_koaptix_latest_rank_board()": "function",
+            "public.run_daily_market_pipeline(date)": "function",
+            "public.run_daily_market_pipeline_legacy(date)": "function",
+            "public.run_koaptix_safe_finalize(date)": "function",
+            "public.sync_rank_snapshot_from_history(date)": "function",
+        }
+        all_candidates = {
+            *protected,
+            "public.build_koaptix_index_snapshot_stage(text,date,date,text[])",
+            "public.merge_market_source_to_master(date)",
+            "public.refresh_koaptix_front_views()",
+            "public.refresh_koaptix_home_kpi()",
+            "public.refresh_koaptix_index_snapshot(date)",
+            "public.refresh_koaptix_total_market_cap_history()",
+            "public.sync_market_daily_aggregates(date)",
+        }
+        self.assertEqual(len(all_candidates), 15)
+        for identity in all_candidates:
+            self.assertIn(identity, lowered)
+        for identity, kind in protected.items():
+            self.assertRegex(
+                lowered,
+                rf"revoke\s+execute\s+on\s+{kind}\s+{re.escape(identity)}\s+from\s+public,anon,authenticated,service_role",
+            )
+        route_values = lowered.split(
+            "insert into koaptix_rank_recovery_writer_route_contract (", 1
+        )[1].split(
+            "update koaptix_rank_recovery_writer_route_contract", 1
+        )[0]
+        self.assertEqual(route_values.count("'explicitly_protected_by_existing_900'"), 6)
+        self.assertEqual(route_values.count("'additional_protected_writer_route'"), 2)
+        self.assertEqual(route_values.count("'lexical_false_positive_nonwriter'"), 7)
+        self.assertIn("count(*) from koaptix_rank_recovery_writer_route_contract where protected_writer", lowered)
+        self.assertIn("pg_catalog.sha256(pg_catalog.convert_to(", lowered)
+        self.assertNotIn("md5(pg_catalog.pg_get_functiondef", lowered)
+        for marker in (
+            "koaptix.migration_900_definition_profile",
+            PRIMARY_DEFINITION_PROFILE.casefold(),
+            COMPATIBILITY_DEFINITION_PROFILE.casefold(),
+            "shared_pre900_routine_owner_at_migration_start",
+            "primary_definition_sha256",
+            "compatibility_definition_sha256",
+            AUDITED_COMPATIBILITY_COMMENT.casefold(),
+            AUDITED_COMPATIBILITY_COMMENT_SHA256.casefold(),
+            AUDITED_COMMENT_SET_SHA256.casefold(),
+            "expected_language",
+            "expected_volatility",
+            "expected_parallel",
+            "expected_strict",
+            "expected_leakproof",
+            "expected_security_mode",
+            "expected_proconfig",
+            "expected_result_type",
+            "expected_returns_set",
+            "expected_catalog_dependencies",
+        ):
+            self.assertIn(marker, lowered)
+        fingerprint_path = lowered.split("-- narrow lexical discovery", 1)[0]
+        self.assertNotIn("e'--[^\\n\\r]*'", fingerprint_path)
+        self.assertIn("acl.grantee<>proc.proowner", lowered)
+        self.assertIn("contract.resolved_oid=candidate.oid", lowered)
+        self.assertIn("authority_unresolved: unclassified protected writer candidate", lowered)
+        self.assertIn("code_without_single_quoted_literals", lowered)
+        self.assertNotIn("direct_or_dynamic_rank_writers", lowered)
+        self.assertNotIn("writer_closure(oid)", lowered)
+        self.assertNotRegex(lowered, r"\bperform\s+public\.")
+        self.assertNotRegex(lowered, r"\bcall\s+public\.")
+
+    def test_migration_900_rollback_uses_exact_dual_acl_authority(self) -> None:
+        sql = (ROOT / "rollback/restore_role_acl_900.sql").read_text(
+            encoding="utf-8"
+        )
+        lowered = sql.casefold()
+        for authority in (
+            "456ecd8f7ca6f9e2791188dc12ee702ecd1c03cef389081781750d264f08611c",
+            "96c98452b894aa9623957ca4a7288a7f80d47b4dc28a8a6966f3c9e3d1dccaed",
+        ):
+            self.assertIn(authority, lowered)
+        for marker in (
+            "koaptix.migration_900_rollback_authority_sha256",
+            "schema_only_default_acl",
+            "production_pre900_compatible",
+            "missing or unrecognized migration-900 rollback authority sha-256",
+            "migration-900 rollback layer-1 structural routine authority drift",
+            "migration-900 rollback selected definition profile drift",
+            "postrollback routine acl fingerprint differs from selected authority",
+            "postrollback relation acl fingerprint differs from selected authority",
+            "postrollback column acl fingerprint has an unexpected mutation grant",
+            "granted by %i",
+        ):
+            self.assertIn(marker, lowered)
+        self.assertGreaterEqual(lowered.count("except"), 4)
+        self.assertIn("primary_definition_sha256", lowered)
+        self.assertIn("compatibility_definition_sha256", lowered)
+        self.assertIn(COMPATIBILITY_DEFINITION_PROFILE.casefold(), lowered)
+        self.assertIn(AUDITED_COMPATIBILITY_COMMENT_SHA256.casefold(), lowered)
+        self.assertNotIn("md5(pg_catalog.pg_get_functiondef", lowered)
+        self.assertIn(
+            "public.capture_koaptix_daily_snapshot()','procedure'", lowered
+        )
+        self.assertIn(
+            "public.refresh_koaptix_front_views_legacy()','function'", lowered
+        )
+        self.assertNotRegex(lowered, r"\bgrant\s+all\b")
+        self.assertNotIn(
+            "revoke all on table public.complex_rank_history", lowered
+        )
+        self.assertNotIn(
+            "grant delete,insert,references,select,trigger,truncate,update", lowered
+        )
+
+    def test_migration_900_and_rollback_share_two_layer_authority(self) -> None:
+        migration = (
+            REPO / "supabase/migrations/202607310900_rank_recovery_roles_and_acl.sql"
+        ).read_text(encoding="utf-8")
+        rollback = (ROOT / "rollback/restore_role_acl_900.sql").read_text(
+            encoding="utf-8"
+        )
+
+        row_pattern = re.compile(
+            r"\(\d+,'(public\.[^']+)','(?:FUNCTION|PROCEDURE)','[^']*','([0-9A-F]{64})',"
+        )
+        migration_authority = dict(row_pattern.findall(migration))
+        rollback_authority = dict(row_pattern.findall(rollback))
+        self.assertEqual(len(migration_authority), 15)
+        self.assertEqual(rollback_authority, migration_authority)
+
+        canonical_markers = (
+            "set local search_path = pg_catalog, pg_temp, public;",
+            "E'[ \\t]+(\\n|$)',E'\\\\1','g'",
+            "E'\\n*$', ''",
+            "pg_catalog.sha256(pg_catalog.convert_to(",
+            "SHARED_PRE900_ROUTINE_OWNER_AT_MIGRATION_START",
+            "PRIMARY_PRODUCTION_PRESENT__SANITIZED_BASELINE_ABSENT",
+            COMPATIBILITY_DEFINITION_PROFILE,
+            AUDITED_COMPATIBILITY_COMMENT,
+            AUDITED_COMPATIBILITY_COMMENT_SHA256,
+            AUDITED_COMMENT_SET_SHA256,
+            "ROUTINE:n:public.current_seoul_date()",
+        )
+        for marker in canonical_markers:
+            self.assertIn(marker, migration)
+            self.assertIn(marker, rollback)
+        for sql in (migration, rollback):
+            self.assertGreaterEqual(sql.count("pg_catalog.pg_get_functiondef("), 2)
+            postcheck_error = (
+                "migration-900 Layer-1 or Layer-2 routine authority changed during migration"
+                if sql is migration
+                else "postrollback migration-900 Layer-1 or Layer-2 routine authority changed"
+            )
+            postcheck = sql.split(postcheck_error, 1)[0].rsplit("if exists (", 1)[1]
+            self.assertIn(
+                "left join pg_catalog.pg_proc proc on proc.oid=contract.resolved_oid",
+                postcheck,
+            )
+            self.assertIn("proc.oid is null", postcheck)
+            self.assertIn("observed.routine_identity is null", postcheck)
+            self.assertIn("observed.catalog_dependencies", postcheck)
+            self.assertIn("from pg_catalog.pg_depend dependency", postcheck)
+            self.assertNotIn("md5(pg_catalog.pg_get_functiondef", sql.casefold())
+            self.assertNotIn("strip_comment", sql.casefold())
+        self.assertNotIn("E'--[^\\n\\r]*'", rollback)
+        migration_fingerprint_path = migration.split("-- Narrow lexical discovery", 1)[0]
+        self.assertNotIn("E'--[^\\n\\r]*'", migration_fingerprint_path)
+
+    def test_migrations_901_through_905_bytes_remain_locked(self) -> None:
+        expected = {
+            "202607310901_rank_canonical_input_contract.sql": "816973FB9DC18939F57A2BB5FBE3F7F40FEA234EB6F4B4FBAF1D13E71BDBB22E",
+            "202607310902_jeonbuk_45_52_membership.sql": "0248E90C5FA7BC6E3877966954D75D9700BD2DE1550201DB58E842D0BCFB38AF",
+            "202607310903_latest_board_atomic_generation.sql": "793BE244C0517F7A5AB951F1C30953C78D36E24973C45939C0BDF64C1D32D84E",
+            "202607310904_rank_canonical_publisher_binding.sql": "47CA0933CD69868F414707BDADE171C5FC4D9B761B53370EC689FDBFBF0C81D0",
+            "202607310905_home_payload_publication_identity.sql": "D1AB7080E4F8167A89A783BC2236C0F92EE25A1A2AA0DD2E692EA10730BA17DE",
+        }
+        for name, digest in expected.items():
+            actual = hashlib.sha256(
+                (REPO / "supabase/migrations" / name).read_bytes()
+            ).hexdigest().upper()
+            self.assertEqual(actual, digest, name)
+
     def test_migration_order_and_typed_component_markers(self) -> None:
         migrations = [
             REPO / f"supabase/migrations/20260731090{i}_{suffix}.sql"
