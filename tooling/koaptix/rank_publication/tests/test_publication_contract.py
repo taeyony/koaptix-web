@@ -31,6 +31,120 @@ AUDITED_COMPATIBILITY_COMMENT_SHA256 = (
 AUDITED_COMMENT_SET_SHA256 = (
     "A8E86FDC0E23B7ECE7E5F88F7FC53865A14D1F7D7C7BB9A7033B9AA51582230F"
 )
+MIGRATION_900_AUTHORITY_AGGREGATE_SHA256 = (
+    "BF8449BDAA1D2E92ACC2AD3F4F0987E83ECE8FB3591AFDD5A534A0A3CC68FC82"
+)
+MIGRATION_900_NORMALIZED_ACL_SHA256 = (
+    "E708AB248301E6936AB16007836E92EBB042F4D8FBC13CAE1B5C404A0D458014"
+)
+
+
+_SQL_TEXT_ARRAY = r"array\[(?:'[^']*'(?:\s*,\s*'[^']*')*)?\](?:::text\[\])?"
+_AUTHORITY_ROW = re.compile(
+    r"\((\d+),'(public\.[^']+)','(FUNCTION|PROCEDURE)','([^']*)',"
+    r"'([0-9A-F]{64})',\s*'([^']+)',(null|'[^']*'),(true|false),\s*"
+    rf"({_SQL_TEXT_ARRAY}),({_SQL_TEXT_ARRAY})",
+    re.MULTILINE,
+)
+
+
+def _sql_text_array(value: str) -> list[str]:
+    return re.findall(r"'([^']*)'", value)
+
+
+def _authority_rows(sql: str, table: str) -> list[dict[str, object]]:
+    marker = f"insert into {table} ("
+    if marker not in sql:
+        return []
+    segment = sql.split(marker, 1)[1].split(f"update {table}", 1)[0]
+    values_match = re.search(r"\)\s*values\s*", segment, re.IGNORECASE)
+    if values_match is None:
+        raise ValueError(f"{table} INSERT has no bounded VALUES block")
+    values_segment = segment[values_match.end() :]
+    rows: list[dict[str, object]] = []
+    cursor = 0
+    for match in _AUTHORITY_ROW.finditer(values_segment):
+        expected_gap = r"\s*" if not rows else r"\s*,\s*"
+        if re.fullmatch(expected_gap, values_segment[cursor : match.start()]) is None:
+            raise ValueError(f"{table} VALUES block was not fully consumed")
+        suffix = values_segment[match.end() :]
+        hash_match = re.match(
+            r",\s*'([0-9A-F]{64})','([0-9A-F]{64})','([0-9A-F]{64})'\)",
+            suffix,
+        )
+        row_close = re.match(r"\s*\)", suffix) if hash_match is None else None
+        if hash_match is None and row_close is None:
+            raise ValueError(f"{table} authority row has an invalid suffix")
+        secondary = match.group(7)
+        rows.append(
+            {
+                "ordinal": int(match.group(1)),
+                "routine_identity": match.group(2),
+                "routine_kind": match.group(3),
+                "identity_arguments": match.group(4),
+                "primary_definition_sha256": match.group(5),
+                "classification": match.group(6),
+                "secondary_classification": (
+                    None if secondary == "null" else secondary.strip("'")
+                ),
+                "protected_writer": match.group(8) == "true",
+                "declared_mutation_targets": _sql_text_array(match.group(9)),
+                "declared_protected_callees": _sql_text_array(match.group(10)),
+                "structural_identity_sha256": (
+                    hash_match.group(1) if hash_match else None
+                ),
+                "normalized_acl_sha256": (
+                    hash_match.group(2) if hash_match else None
+                ),
+                "combined_authority_sha256": (
+                    hash_match.group(3) if hash_match else None
+                ),
+            }
+        )
+        cursor = match.end() + (
+            hash_match.end() if hash_match is not None else row_close.end()
+        )
+    if re.fullmatch(r"\s*;\s*", values_segment[cursor:]) is None:
+        raise ValueError(f"{table} VALUES block has trailing or skipped SQL")
+    return rows
+
+
+def _combined_authority_model(row: dict[str, object]) -> dict[str, object]:
+    compatibility = (
+        row["routine_identity"]
+        == "public.run_daily_market_pipeline_legacy(date)"
+    )
+    return {
+        "routine_identity": row["routine_identity"],
+        "structural_identity_sha256": row["structural_identity_sha256"],
+        "primary_definition_sha256": row["primary_definition_sha256"],
+        "compatibility_profile": (
+            COMPATIBILITY_DEFINITION_PROFILE
+            if compatibility
+            else "PRIMARY_PRODUCTION_ONLY"
+        ),
+        "compatibility_definition_sha256": (
+            "E97A55726F16027C1344E8F4B968F3040E4FA325CDB7F9C40F366238ECB39535"
+            if compatibility
+            else None
+        ),
+        "audited_comment_set_sha256": (
+            AUDITED_COMMENT_SET_SHA256 if compatibility else None
+        ),
+        "normalized_acl_sha256": row["normalized_acl_sha256"],
+        "classification": row["classification"],
+        "secondary_classification": row["secondary_classification"],
+        "protected_writer": row["protected_writer"],
+        "declared_mutation_targets": row["declared_mutation_targets"],
+        "declared_protected_callees": row["declared_protected_callees"],
+    }
+
+
+def _canonical_sha256(value: object) -> str:
+    canonical = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest().upper()
 
 
 def canonicalize_routine_definition(raw: bytes) -> str:
@@ -1170,12 +1284,466 @@ class SqlDefinitionContractTests(unittest.TestCase):
         migration_fingerprint_path = migration.split("-- Narrow lexical discovery", 1)[0]
         self.assertNotIn("E'--[^\\n\\r]*'", migration_fingerprint_path)
 
-    def test_migrations_901_through_905_bytes_remain_locked(self) -> None:
+    def test_migration_904_reproduces_exact_migration_900_authority(self) -> None:
+        migration_900 = (
+            REPO / "supabase/migrations/202607310900_rank_recovery_roles_and_acl.sql"
+        ).read_text(encoding="utf-8")
+        migration_904 = (
+            REPO
+            / "supabase/migrations/202607310904_rank_canonical_publisher_binding.sql"
+        ).read_text(encoding="utf-8")
+        rows_900 = _authority_rows(
+            migration_900, "koaptix_rank_recovery_writer_route_contract"
+        )
+        rows_904 = _authority_rows(
+            migration_904, "koaptix_migration_904_writer_authority"
+        )
+
+        self.assertEqual(len(rows_900), 15)
+        self.assertEqual(len(rows_904), 15)
+        self.assertEqual([row["ordinal"] for row in rows_900], list(range(1, 16)))
+        self.assertEqual([row["ordinal"] for row in rows_904], list(range(1, 16)))
+        self.assertEqual(len({row["routine_identity"] for row in rows_904}), 15)
+        common_fields = (
+            "ordinal",
+            "routine_identity",
+            "routine_kind",
+            "identity_arguments",
+            "primary_definition_sha256",
+            "classification",
+            "secondary_classification",
+            "protected_writer",
+            "declared_mutation_targets",
+            "declared_protected_callees",
+        )
+        self.assertEqual(
+            [{key: row[key] for key in common_fields} for row in rows_904],
+            [{key: row[key] for key in common_fields} for row in rows_900],
+        )
+        self.assertEqual(sum(bool(row["protected_writer"]) for row in rows_904), 8)
+        self.assertEqual(sum(not bool(row["protected_writer"]) for row in rows_904), 7)
+        self.assertEqual(
+            sum(
+                row["classification"] == "LEXICAL_FALSE_POSITIVE_NONWRITER"
+                for row in rows_904
+            ),
+            7,
+        )
+
+        for row in rows_904:
+            self.assertRegex(str(row["structural_identity_sha256"]), r"^[0-9A-F]{64}$")
+            self.assertEqual(
+                row["normalized_acl_sha256"],
+                MIGRATION_900_NORMALIZED_ACL_SHA256,
+            )
+            self.assertEqual(
+                _canonical_sha256(_combined_authority_model(row)),
+                row["combined_authority_sha256"],
+                row["routine_identity"],
+            )
+
+        aggregate_model = [
+            {
+                "routine_identity": row["routine_identity"],
+                "combined_authority_sha256": row["combined_authority_sha256"],
+            }
+            for row in sorted(rows_904, key=lambda row: int(row["ordinal"]))
+        ]
+        self.assertEqual(
+            _canonical_sha256(aggregate_model),
+            MIGRATION_900_AUTHORITY_AGGREGATE_SHA256,
+        )
+        self.assertIn(MIGRATION_900_AUTHORITY_AGGREGATE_SHA256, migration_904)
+
+    def test_migration_904_uses_evidence_bound_writer_closure(self) -> None:
+        sql = (
+            REPO
+            / "supabase/migrations/202607310904_rank_canonical_publisher_binding.sql"
+        ).read_text(encoding="utf-8")
+        lowered = sql.casefold()
+        preflight_end = lowered.index("$migration_900_authority$;")
+        first_persistent_change = lowered.index(
+            "grant select,update on public.koaptix_latest_board_publication"
+        )
+        self.assertLess(preflight_end, first_persistent_change)
+        owner_gate_end = lowered.index("$owner_and_predefined_writer_gate$;")
+        self.assertLess(owner_gate_end, first_persistent_change)
+
+        for marker in (
+            "koaptix_migration_904_writer_authority",
+            "koaptix_migration_904_routine_observation",
+            "koaptix_migration_904_nonwriter_acl_baseline",
+            "koaptix_migration_904_allowed_writer",
+            "koaptix_migration_904_pg17_command_type_contract",
+            "koaptix_migration_904_protected_relation",
+            "koaptix_migration_904_prosqlbody_observation",
+            "koaptix_migration_904_lexical_observation",
+            "koaptix_migration_904_dynamic_candidate",
+            "koaptix_migration_904_discovered_writer",
+            "migration-900/904 combined row authority fingerprint drift",
+            "migration-900 selected definition fingerprint drift",
+            "accepted migration-900 nonwriter acl changed during migration 904",
+            "final executable migration-900 protected writer remains",
+            "unknown dynamic writer behavior remains",
+            "unknown actual writer discovered",
+            "code_without_comments_or_literals",
+            "direct_static_writer",
+            "direct_static_truncate_target",
+            "direct_static_truncate_writer",
+            "direct_prosqlbody_writer",
+            "writer_call_edge(caller_oid,callee_oid)",
+            "writer_closure(resolved_oid)",
+            "proc.prosrc as routine_source",
+            "v_state='double_quote'",
+            "__quoted_noncanonical_identifier__",
+            "unsupported user-routine language remains outside lexical mutation evidence",
+            "expected_definition_sha256",
+            "rank recovery prerequisite role identity or attributes drifted",
+            "protected relation owner contract drift",
+            "pg_write_all_data membership remains",
+            "final protected relation has an unapproved effective writer",
+            "final protected relation has an unapproved effective column writer",
+            "a nonowner direct execute grant remains on a migration-900 protected writer",
+            "a nonowner role retains effective execute on a migration-900 protected writer",
+            "final writer closure contains an unapproved direct acl entry",
+            "final writer closure contains an unapproved effective grantee",
+            "post-904 append writer definition or structure drift",
+        ):
+            self.assertIn(marker, lowered)
+
+        self.assertNotIn("direct_or_dynamic_rank_writers", lowered)
+        self.assertNotIn("f.prosecdef and f.body", lowered)
+        self.assertNotIn("and f.body ~ '(rank|snapshot|latest_board|market_pipeline)'", lowered)
+        self.assertNotIn("revoke execute on all functions", lowered)
+        self.assertNotIn("revoke all on all functions", lowered)
+        self.assertRegex(
+            lowered,
+            r"\(insert\[\[:space:\]\]\+into\|merge\[\[:space:\]\]\+into\|update\|delete",
+        )
+        self.assertIn("v_state='block_comment'", lowered)
+        self.assertIn("v_state='double_quote'", lowered)
+        self.assertIn("v_block_depth := v_block_depth+1", lowered)
+        self.assertIn("normalized_identifier_code", lowered)
+        self.assertIn("only[[:space:]]+", lowered)
+        self.assertIn("(truncate_match.captures)[2]", lowered)
+        self.assertIn("regexp_split_to_table", lowered)
+        self.assertIn("restart[[:space:]]+identity", lowered)
+        self.assertIn("continue[[:space:]]+identity", lowered)
+        self.assertIn("cascade|restrict", lowered)
+        self.assertIn("target.relation_identity=pg_catalog.lower", lowered)
+        self.assertIn("membership.roleid=v_pg_write_all_data", lowered)
+        self.assertIn("refresh[[:space:]]+materialized", lowered)
+        self.assertIn("\\mcopy\\m[[:space:]]+", lowered)
+        self.assertIn("[[:space:]]+\\mfrom\\m", lowered)
+        self.assertIn("(^|[^a-z0-9_$.])", lowered)
+        self.assertNotIn("(^|[^a-z0-9_$])(", lowered)
+        self.assertNotIn("'^execute(select|show|values|with)'", lowered)
+        self.assertIn("v_normalized_fragment !~ e'(--|/\\\\*)'", lowered)
+        self.assertIn("and proc.prosqlbody is null", lowered)
+        self.assertIn("append_daily_rank_history|capture_koaptix_daily_snapshot", lowered)
+        self.assertIn("e74cdcf102b7d89a8db22853a1b89a5f330dc8d66e5bcfa82158dc403f0ca026", lowered)
+
+        direct_static_segment = lowered.split(
+            "with recursive direct_static_writer as (", 1
+        )[1].split("), direct_static_truncate_target as (", 1)[0]
+        self.assertNotIn("truncate", direct_static_segment)
+
+        exact_relation_owner_contract = {
+            "public.complex_rank_history": "shared_pre900_routine_owner_at_migration_start",
+            "public.koaptix_rank_snapshot": "shared_pre900_routine_owner_at_migration_start",
+            "public.koaptix_latest_board_read_model": "shared_pre900_routine_owner_at_migration_start",
+            "public.koaptix_rank_input_authority_manifest": "role:koaptix_rank_authority_owner",
+            "public.koaptix_rank_input_manifest_revocation": "role:koaptix_rank_authority_owner",
+            "public.koaptix_latest_board_generation": "role:koaptix_rank_publication_owner",
+            "public.koaptix_latest_board_generation_surface": "role:koaptix_rank_publication_owner",
+            "public.koaptix_latest_board_generation_universe": "role:koaptix_rank_publication_owner",
+            "public.koaptix_latest_board_generation_row": "role:koaptix_rank_publication_owner",
+            "public.koaptix_latest_board_generation_global_row": "role:koaptix_rank_publication_owner",
+            "public.koaptix_rank_publication_history_stage": "role:koaptix_rank_publication_owner",
+            "public.koaptix_rank_publication_snapshot_stage": "role:koaptix_rank_publication_owner",
+            "public.koaptix_latest_board_publication_event": "role:koaptix_rank_publication_owner",
+            "public.koaptix_latest_board_publication": "role:koaptix_rank_publication_owner",
+        }
+        for ordinal, (relation_identity, owner_contract) in enumerate(
+            exact_relation_owner_contract.items(), start=1
+        ):
+            self.assertIn(
+                f"({ordinal},'{relation_identity}','{owner_contract}')", lowered
+            )
+
+        exact_new_writers = {
+            "public.koaptix_insert_latest_board_generation_packet(jsonb,text,text,text,date,text[],boolean)": None,
+            "public.koaptix_seal_rank_input_manifest(jsonb)": "koaptix_rank_manifest_sealer",
+            "public.koaptix_revoke_rank_input_manifest(jsonb)": "koaptix_rank_manifest_revoker",
+            "public.koaptix_seed_latest_board_compatibility_generation(jsonb)": "koaptix_rank_bootstrap_seeder",
+            "public.koaptix_build_rank_publication_generation(jsonb)": "koaptix_rank_generation_builder",
+            "public.koaptix_publish_latest_board_generation(jsonb)": "koaptix_rank_generation_publisher",
+            "public.koaptix_rollback_latest_board_publication(jsonb)": "koaptix_rank_publication_rollback",
+        }
+        for identity, role in exact_new_writers.items():
+            self.assertIn(identity, lowered)
+            if role is not None:
+                self.assertIn(role, lowered)
+
+        for digest in (
+            "CF8FAF65267CAECF7282E7A242F361B6597E2A6492733DC885FEA6C2BEC6E868",
+            "4CB990F6323E2340306A9E95778AD842E2F80AAD6519603BB06E5C7BDCEB88EA",
+            "F7677886B59878E06DC9EA9D9A58D6514570D3F507E300E9FA454C58E4F2EAA9",
+            "BA0883B6355BEBE724B791DE1BD3E7CCB9AE7F8A8FECA372AE7D357F5F9BA2C0",
+            "7F7330F630E642B3854F124EFD94293FE71F4458C863D1051C82D10FCA62A600",
+            "D376843000B7B90261F3FB757C59532C2ACF47835566FDD09A2E375ED0D35A68",
+            "78CA9F12A3DE31CD4C9F8178A95F776CA0F894D9F57112A9DB347EE84520643E",
+        ):
+            self.assertIn(digest.casefold(), lowered)
+
+        nonwriters = [
+            "public.build_koaptix_index_snapshot_stage(text,date,date,text[])",
+            "public.merge_market_source_to_master(date)",
+            "public.refresh_koaptix_front_views()",
+            "public.refresh_koaptix_home_kpi()",
+            "public.refresh_koaptix_index_snapshot(date)",
+            "public.refresh_koaptix_total_market_cap_history()",
+            "public.sync_market_daily_aggregates(date)",
+        ]
+        for identity in nonwriters:
+            self.assertNotRegex(
+                lowered,
+                rf"revoke\s+(?:all|execute)\s+on\s+(?:function|procedure)\s+{re.escape(identity)}",
+            )
+
+    def test_migration_904_pg17_prosqlbody_decoder_contract(self) -> None:
+        sql = (
+            REPO
+            / "supabase/migrations/202607310904_rank_canonical_publisher_binding.sql"
+        ).read_text(encoding="utf-8")
+        lowered = sql.casefold()
+
+        command_rows = re.findall(
+            r"\(([1-5]),'cmd_(select|update|insert|delete|merge)',"
+            r"(true|false),'begin_atomic_(select|update|insert|delete|merge)'\)",
+            lowered,
+        )
+        self.assertEqual(
+            list(dict.fromkeys(command_rows)),
+            [
+                ("1", "select", "false", "select"),
+                ("2", "update", "true", "update"),
+                ("3", "insert", "true", "insert"),
+                ("4", "delete", "true", "delete"),
+                ("5", "merge", "true", "merge"),
+            ],
+        )
+        for marker in (
+            "pg_proc.prosqlbody",
+            "proc.prosqlbody::text",
+            ":commandtype[[:space:]]+([0-9]+)",
+            ":hasmodifyingcte[[:space:]]+true",
+            ":utilitystmt[[:space:]]+\\\\{",
+            ":relid[[:space:]]+([0-9]+)",
+            ":funcid[[:space:]]+([0-9]+)",
+            "node_tree_sha256",
+            "direct_relation_oids",
+            "direct_routine_oids",
+            "unknown postgresql-17 prosqlbody command or utility behavior remains",
+            "current_setting('server_version_num')::integer not between 170000 and 179999",
+        ):
+            self.assertIn(marker, lowered)
+        self.assertIsNotNone(
+            re.search(
+                r"from\s+pg_catalog\.pg_proc\s+proc.*?where\s+proc\.prosqlbody\s+is\s+not\s+null",
+                lowered,
+                re.DOTALL,
+            ),
+        )
+        lexical_loop = lowered.split("do $lexical_observation$", 1)[1].split(
+            "$lexical_observation$;", 1
+        )[0]
+        self.assertIn("and proc.prosqlbody is null", lexical_loop)
+        self.assertNotIn("pg_get_functiondef(proc.oid)", lexical_loop)
+        self.assertNotIn("lower(pg_get_functiondef", lowered)
+
+    def test_migration_904_static_authority_adversarial_drift_is_detectable(self) -> None:
+        migration_900 = (
+            REPO / "supabase/migrations/202607310900_rank_recovery_roles_and_acl.sql"
+        ).read_text(encoding="utf-8")
+        migration_904 = (
+            REPO
+            / "supabase/migrations/202607310904_rank_canonical_publisher_binding.sql"
+        ).read_text(encoding="utf-8")
+        reference_rows = _authority_rows(
+            migration_900, "koaptix_rank_recovery_writer_route_contract"
+        )
+        common_fields = (
+            "ordinal",
+            "routine_identity",
+            "routine_kind",
+            "identity_arguments",
+            "primary_definition_sha256",
+            "classification",
+            "secondary_classification",
+            "protected_writer",
+            "declared_mutation_targets",
+            "declared_protected_callees",
+        )
+
+        def accepted(candidate: str) -> bool:
+            try:
+                rows = _authority_rows(
+                    candidate, "koaptix_migration_904_writer_authority"
+                )
+            except ValueError:
+                return False
+            if len(rows) != 15:
+                return False
+            if [
+                {key: row[key] for key in common_fields} for row in rows
+            ] != [
+                {key: row[key] for key in common_fields} for row in reference_rows
+            ]:
+                return False
+            if any(
+                row["normalized_acl_sha256"]
+                != MIGRATION_900_NORMALIZED_ACL_SHA256
+                or _canonical_sha256(_combined_authority_model(row))
+                != row["combined_authority_sha256"]
+                for row in rows
+            ):
+                return False
+            aggregate = [
+                {
+                    "routine_identity": row["routine_identity"],
+                    "combined_authority_sha256": row["combined_authority_sha256"],
+                }
+                for row in sorted(rows, key=lambda row: int(row["ordinal"]))
+            ]
+            return (
+                _canonical_sha256(aggregate)
+                == MIGRATION_900_AUTHORITY_AGGREGATE_SHA256
+                and MIGRATION_900_AUTHORITY_AGGREGATE_SHA256 in candidate
+            )
+
+        self.assertTrue(accepted(migration_904))
+        mutations = {
+            "unconsumed_values_gap": migration_904.replace(
+                "),\n  (2,'public.build_koaptix_index_snapshot_stage",
+                ") /* unexpected gap */,\n  (2,'public.build_koaptix_index_snapshot_stage",
+                1,
+            ),
+            "duplicate_ordinal": migration_904.replace(
+                "(2,'public.build_koaptix_index_snapshot_stage",
+                "(1,'public.build_koaptix_index_snapshot_stage",
+                1,
+            ),
+            "identity_arguments": migration_904.replace(
+                "'p_run_date date','0EDA4A6E", "'p_run_date timestamp','0EDA4A6E", 1
+            ),
+            "definition": migration_904.replace("0EDA4A6E", "1EDA4A6E", 1),
+            "classification": migration_904.replace(
+                "'EXPLICITLY_PROTECTED_BY_EXISTING_900',null,true",
+                "'LEXICAL_FALSE_POSITIVE_NONWRITER',null,true",
+                1,
+            ),
+            "protected_flag": migration_904.replace(
+                "'EXPLICITLY_PROTECTED_BY_EXISTING_900',null,true",
+                "'EXPLICITLY_PROTECTED_BY_EXISTING_900',null,false",
+                1,
+            ),
+            "mutation_target": migration_904.replace(
+                "array['public.complex_rank_history'],array[]::text[]",
+                "array['public.koaptix_rank_snapshot'],array[]::text[]",
+                1,
+            ),
+            "protected_callee": migration_904.replace(
+                "array['public.koaptix_index_snapshot_stage'],array[]::text[]",
+                "array['public.koaptix_index_snapshot_stage'],"
+                "array['public.append_daily_rank_history(date)']",
+                1,
+            ),
+            "structural": migration_904.replace("248975F4", "348975F4", 1),
+            "acl": migration_904.replace("E708AB24", "F708AB24", 1),
+            "combined": migration_904.replace("FDAC8434", "EDAC8434", 1),
+            "aggregate": migration_904.replace("BF8449BD", "AF8449BD"),
+        }
+        for label, candidate in mutations.items():
+            with self.subTest(label=label):
+                self.assertNotEqual(candidate, migration_904)
+                self.assertFalse(accepted(candidate))
+
+    def test_migration_904_effective_structural_overlays_are_locked(self) -> None:
+        sql = (
+            REPO
+            / "supabase/migrations/202607310904_rank_canonical_publisher_binding.sql"
+        ).read_text(encoding="utf-8")
+        lowered = sql.casefold()
+        authority_prefix = lowered.split(
+            "create temporary table koaptix_migration_904_routine_observation", 1
+        )[0]
+        authority_updates = re.findall(
+            r"update\s+koaptix_migration_904_writer_authority\b.*?;",
+            authority_prefix,
+            re.DOTALL,
+        )
+        self.assertEqual(len(authority_updates), 6)
+        for marker in (
+            "expected_owner_contract text not null default 'shared_pre900_routine_owner_at_migration_start'",
+            "expected_language text not null default 'plpgsql'",
+            "expected_volatility text not null default 'volatile'",
+            "expected_parallel text not null default 'unsafe'",
+            "expected_strict boolean not null default false",
+            "expected_leakproof boolean not null default false",
+            "expected_security_mode text not null default 'security_definer'",
+            "expected_proconfig text[] not null default array['search_path=public']",
+            "expected_result_type text default 'jsonb'",
+            "expected_returns_set boolean not null default false",
+            "expected_catalog_dependencies text[] not null default array[]::text[]",
+        ):
+            self.assertIn(marker, lowered)
+
+        exact_updates = (
+            r"set expected_security_mode='security_invoker',\s*"
+            r"expected_proconfig=array\[\]::text\[\],\s*"
+            r"expected_result_type='void'\s*where routine_identity="
+            r"'public\.build_koaptix_index_snapshot_stage\(text,date,date,text\[\]\)'",
+            r"set expected_security_mode='security_invoker',\s*"
+            r"expected_proconfig=array\['search_path=\"\"'\],\s*"
+            r"expected_result_type=null\s*where routine_identity="
+            r"'public\.capture_koaptix_daily_snapshot\(\)'",
+            r"set expected_security_mode='security_invoker',\s*"
+            r"expected_result_type='integer'\s*where routine_identity="
+            r"'public\.refresh_koaptix_index_snapshot\(date\)'",
+            r"set compatibility_definition_sha256="
+            r"'e97a55726f16027c1344e8f4b968f3040e4fa325cdb7f9c40f366238ecb39535',\s*"
+            r"compatibility_profile='sanitized_schema_only_comment_omission_v1',\s*"
+            r"audited_comment_set_sha256="
+            r"'a8e86fdc0e23b7ece7e5f88f7fc53865a14d1f7d7c7bb9a7033b9aa51582230f',\s*"
+            r"expected_catalog_dependencies=array\['routine:n:public\.current_seoul_date\(\)'\]",
+        )
+        for pattern in exact_updates:
+            self.assertRegex(lowered, pattern)
+        for identity in (
+            "public.refresh_koaptix_front_views()",
+            "public.refresh_koaptix_home_kpi()",
+            "public.refresh_koaptix_latest_rank_board()",
+            "public.refresh_koaptix_total_market_cap_history()",
+        ):
+            self.assertIn(identity, lowered)
+
+    def test_reconciliation_unchanged_tracked_files_remain_locked(self) -> None:
+        expected = {
+            REPO / "supabase/migrations/202607310900_rank_recovery_roles_and_acl.sql": "5D6DFBA902D2BB178439293D44FE899D41B44667FF285DC9FDB74C4A2664C20F",
+            REPO / "supabase/migrations/202607310905_home_payload_publication_identity.sql": "D1AB7080E4F8167A89A783BC2236C0F92EE25A1A2AA0DD2E692EA10730BA17DE",
+            REPO / "tests/rankPublicationContract.test.ts": "3457F2E16C543D80007AC616736BCD1B4DCA0D862B1BD1F950ED9A8FD8CCA3D6",
+        }
+        for path, digest in expected.items():
+            self.assertEqual(
+                hashlib.sha256(path.read_bytes()).hexdigest().upper(), digest, path.name
+            )
+
+    def test_immutable_migrations_901_902_903_905_bytes_remain_locked(self) -> None:
         expected = {
             "202607310901_rank_canonical_input_contract.sql": "816973FB9DC18939F57A2BB5FBE3F7F40FEA234EB6F4B4FBAF1D13E71BDBB22E",
             "202607310902_jeonbuk_45_52_membership.sql": "0248E90C5FA7BC6E3877966954D75D9700BD2DE1550201DB58E842D0BCFB38AF",
             "202607310903_latest_board_atomic_generation.sql": "793BE244C0517F7A5AB951F1C30953C78D36E24973C45939C0BDF64C1D32D84E",
-            "202607310904_rank_canonical_publisher_binding.sql": "47CA0933CD69868F414707BDADE171C5FC4D9B761B53370EC689FDBFBF0C81D0",
             "202607310905_home_payload_publication_identity.sql": "D1AB7080E4F8167A89A783BC2236C0F92EE25A1A2AA0DD2E692EA10730BA17DE",
         }
         for name, digest in expected.items():
@@ -1351,70 +1919,84 @@ class SqlDefinitionContractTests(unittest.TestCase):
             self.assertIn(marker, lowered)
         self.assertTrue(sql.rstrip().lower().endswith("commit;"))
 
-    def test_full_predata_rollback_is_guarded_and_complete(self) -> None:
+    def test_migration_904_only_pre_execution_rollback_is_guarded_and_exact(self) -> None:
         sql = (
             ROOT / "rollback/restore_pre_execution_definitions.sql"
         ).read_text(encoding="utf-8")
         lowered = sql.lower()
-        self.assertIn("full definition rollback is prohibited", lowered)
+        self.assertIn("migration-904 definition rollback is prohibited", lowered)
         self.assertIn("koaptix_rank_input_authority_manifest", lowered)
         self.assertIn("koaptix_latest_board_publication", lowered)
         self.assertIn(
-            "set local search_path = pg_catalog, public, pg_temp;",
+            "set local search_path = pg_catalog, pg_temp, public;",
             lowered,
         )
         for marker in (
-            "a.pid<>pg_backend_pid()",
-            "a.datname=current_database()",
-            "a.backend_type='client backend'",
-            "zero other client backends in the current database",
+            "activity.pid<>pg_catalog.pg_backend_pid()",
+            "activity.datname=current_database()",
+            "activity.backend_type='client backend'",
+            "requires zero other client backends",
+            "koaptix.rollback.migration_904_reconciliation_proof_exact",
+            "migration_904_reconciliation_pre_execution_definition_rollback_approval",
+            "koaptix_rollback_904_nonwriter_baseline",
+            "koaptix_rollback_904_relation_baseline",
+            "migration-900 protected-writer owner-only closure changed during rollback",
+            "accepted migration-900 nonwriter changed during rollback",
+            "migration-901/902/903 object was removed by migration-904 rollback",
+            "expected_name(routine_identity,grantee_name)",
+            "expected_acl as (",
+            "actual_acl as (",
+            "except all",
+            "required nonowner execute acl set or grantor drift",
+            "95a426d928ef646720ae7f81e1b919d619703af981ce124d2ce1ce6280d4892f",
+            "0eda4a6ee8f755375ad841a07926ac85b3cfd964687d06d059b1be26c90497ec",
         ):
             self.assertIn(marker, lowered)
-        self.assertNotIn("a.usename in (", lowered)
-        for view in (
-            "v_koaptix_latest_universe_rank_board_u",
-            "v_koaptix_latest_rank_board",
-            "v_koaptix_home_kpi",
-            "v_koaptix_complex_detail_sheet",
-            "v_koaptix_latest_universe_rank_board",
-        ):
-            self.assertIn(f"create or replace view public.{view}", lowered)
-        for entrypoint in (
-            "koaptix_seed_latest_board_compatibility_generation",
-            "koaptix_build_rank_publication_generation",
-            "koaptix_publish_latest_board_generation",
-            "koaptix_rollback_latest_board_publication",
-        ):
-            self.assertIn(f"drop function public.{entrypoint}(jsonb)", lowered)
-        functions_903 = {
-            "koaptix_jsonb_has_exact_keys",
-            "koaptix_compact_jsonb_array",
-            "koaptix_service_rows_digest",
-            "koaptix_global_rows_digest",
-            "koaptix_service_date_vector_digest",
-            "koaptix_reject_latest_board_immutable_mutation",
-            "koaptix_compact_jsonb_object",
-            "koaptix_jsonb_array_has_exact_object_keys",
-            "koaptix_generation_surface_components_json",
-            "koaptix_surface_component_manifest_digest",
-            "koaptix_combined_surface_manifest_digest",
-            "koaptix_verify_latest_board_generation",
-            "koaptix_assert_rank_input_authority",
-            "koaptix_assert_generation_authority",
-            "koaptix_insert_latest_board_generation_packet",
-            "koaptix_require_publication_event_pointer_commit",
-            "koaptix_guard_latest_board_publication_pointer",
-            "koaptix_assert_latest_board_action_packet_header",
-            "koaptix_seed_latest_board_compatibility_generation",
-            "koaptix_build_rank_publication_generation",
-            "koaptix_publish_latest_board_generation",
-            "koaptix_rollback_latest_board_publication",
+        exact_required_acl = {
+            (
+                "public.koaptix_compute_rank_input_authority(date)",
+                "koaptix_rank_authority_owner",
+            ),
+            (
+                "public.koaptix_compute_rank_input_authority(date)",
+                "koaptix_rank_authority_reader",
+            ),
+            (
+                "public.koaptix_seal_rank_input_manifest(jsonb)",
+                "koaptix_rank_manifest_sealer",
+            ),
+            (
+                "public.koaptix_revoke_rank_input_manifest(jsonb)",
+                "koaptix_rank_manifest_revoker",
+            ),
         }
-        dropped_functions = set(
-            re.findall(r"drop\s+function\s+public\.([a-z0-9_]+)\s*\(", lowered)
+        for routine_identity, grantee_name in exact_required_acl:
+            self.assertIn(
+                f"('{routine_identity}','{grantee_name}')", lowered
+            )
+        self.assertIn("proc.proowner as grantor", lowered)
+        self.assertIn("where acl.grantee<>proc.proowner", lowered)
+        self.assertNotIn("activity.usename in (", lowered)
+        dropped_functions = re.findall(
+            r"drop\s+function\s+(public\.[a-z0-9_]+\([^;]+\))\s*;", lowered
         )
-        self.assertEqual(len(functions_903), 22)
-        self.assertTrue(functions_903 <= dropped_functions)
+        self.assertEqual(
+            dropped_functions,
+            [
+                "public.koaptix_revoke_rank_input_manifest(jsonb)",
+                "public.koaptix_seal_rank_input_manifest(jsonb)",
+                "public.koaptix_compute_rank_input_authority(date)",
+            ],
+        )
+        for prohibited in (
+            "drop role ",
+            "drop table ",
+            "drop view ",
+            "drop policy ",
+            "grant execute on function public.append_daily_rank_history(date) to service_role",
+            "create or replace view public.",
+        ):
+            self.assertNotIn(prohibited, lowered)
         self.assertTrue(lowered.rstrip().endswith("commit;"))
 
 
