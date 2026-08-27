@@ -331,9 +331,21 @@ begin
     select 1
     from koaptix_migration_904_writer_authority authority
     join pg_catalog.pg_proc proc on proc.oid=authority.resolved_oid
-    cross join lateral pg_catalog.aclexplode(
+    where authority.protected_writer
+      and coalesce(pg_catalog.array_ndims(
+            coalesce(proc.proacl,pg_catalog.acldefault('f',proc.proowner))
+          ),0)>1
+  ) then
+    raise exception using errcode='22023',message='M904_ACLEXPLODE_MULTIDIMENSIONAL_ACL_01';
+  end if;
+  if exists (
+    select 1
+    from koaptix_migration_904_writer_authority authority
+    join pg_catalog.pg_proc proc on proc.oid=authority.resolved_oid
+    cross join lateral pg_catalog.unnest(
       coalesce(proc.proacl,pg_catalog.acldefault('f',proc.proowner))
-    ) acl
+    ) with ordinality acl_source(acl_item,acl_ordinal)
+    cross join lateral pg_catalog.aclexplode(array[acl_source.acl_item]::aclitem[]) acl
     where authority.protected_writer
       and acl.privilege_type='EXECUTE'
       and acl.grantee<>proc.proowner
@@ -691,8 +703,217 @@ select jsonb_build_object(
 from digests;
 $function$;
 
+-- KOAPTIX_M904_OWNER_TRANSFER_BOOTSTRAP_AUTHORITY_BEGIN
+do $koaptix_m904_owner_bootstrap_pre$
+declare
+  v_expected_roles constant text[]:=array['koaptix_rank_authority_owner','koaptix_rank_publication_owner','koaptix_rank_authority_reader','koaptix_rank_manifest_sealer','koaptix_rank_manifest_revoker','koaptix_rank_bootstrap_seeder','koaptix_rank_generation_builder','koaptix_rank_generation_publisher','koaptix_rank_publication_rollback'];
+  v_target_roles constant text[]:=array['koaptix_rank_authority_owner','koaptix_rank_publication_owner'];
+  v_role text;
+  v_mismatch jsonb;
+begin
+  if current_user<>'postgres' or session_user<>'postgres' then
+    raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_EXECUTOR_IDENTITY';
+  end if;
+  with expected (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select role_name,'postgres'::text,'supabase_admin'::text,true,false,false
+    from unnest(v_expected_roles) role_name
+  ), actual (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select granted_role.rolname::text,member_role.rolname::text,
+           grantor_role.rolname::text,am.admin_option,
+           am.inherit_option,am.set_option
+    from pg_catalog.pg_auth_members am
+    join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
+    join pg_catalog.pg_roles member_role on member_role.oid=am.member
+    join pg_catalog.pg_roles grantor_role on grantor_role.oid=am.grantor
+    where granted_role.rolname=any(v_expected_roles)
+       or member_role.rolname=any(v_expected_roles)
+  ), mismatch as (
+    (select 'UNEXPECTED'::text as mismatch_kind,actual.* from actual
+     except all select 'UNEXPECTED'::text,expected.* from expected)
+    union all
+    (select 'MISSING'::text as mismatch_kind,expected.* from expected
+     except all select 'MISSING'::text,actual.* from actual)
+  )
+  select pg_catalog.jsonb_build_object(
+           'kind',mismatch_kind,'granted_role',granted_role_name,
+           'member_role',member_role_name,'grantor_role',grantor_role_name,
+           'admin_option',admin_option,'inherit_option',inherit_option,
+           'set_option',set_option)
+    into v_mismatch
+  from mismatch
+  order by mismatch_kind,granted_role_name,member_role_name,grantor_role_name
+  limit 1;
+  if v_mismatch is not null then
+    raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_PRE_MEMBERSHIP_GRAPH';
+  end if;
+  if (select r.rolname from pg_catalog.pg_namespace n join pg_catalog.pg_roles r on r.oid=n.nspowner where n.nspname='public')
+       is distinct from 'pg_database_owner' then
+    raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_PRE_SCHEMA_OWNER';
+  end if;
+  foreach v_role in array v_target_roles loop
+    if pg_catalog.pg_has_role('postgres',v_role,'SET')
+       or not pg_catalog.has_schema_privilege(v_role,'public','USAGE')
+       or pg_catalog.has_schema_privilege(v_role,'public','CREATE')
+       or exists (
+         select 1 from pg_catalog.pg_auth_members am
+         join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
+         join pg_catalog.pg_roles member_role on member_role.oid=am.member
+         where granted_role.rolname=v_role and member_role.rolname='postgres'
+           and am.grantor=(select oid from pg_catalog.pg_roles where rolname='postgres')
+       ) then
+      raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_PRE_TARGET_STATE';
+    end if;
+  end loop;
+end;
+$koaptix_m904_owner_bootstrap_pre$;
+
+grant koaptix_rank_authority_owner to postgres with admin false, inherit false, set true granted by postgres;
+grant koaptix_rank_publication_owner to postgres with admin false, inherit false, set true granted by postgres;
+
+do $koaptix_m904_owner_bootstrap_membership$
+declare
+  v_expected_roles constant text[]:=array['koaptix_rank_authority_owner','koaptix_rank_publication_owner','koaptix_rank_authority_reader','koaptix_rank_manifest_sealer','koaptix_rank_manifest_revoker','koaptix_rank_bootstrap_seeder','koaptix_rank_generation_builder','koaptix_rank_generation_publisher','koaptix_rank_publication_rollback'];
+  v_target_roles constant text[]:=array['koaptix_rank_authority_owner','koaptix_rank_publication_owner'];
+  v_role text;
+  v_mismatch jsonb;
+begin
+  with expected (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select role_name,'postgres'::text,'supabase_admin'::text,true,false,false
+    from unnest(v_expected_roles) role_name
+    union all
+    select role_name,'postgres'::text,'postgres'::text,false,false,true
+    from unnest(v_target_roles) role_name
+  ), actual (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select granted_role.rolname::text,member_role.rolname::text,
+           grantor_role.rolname::text,am.admin_option,
+           am.inherit_option,am.set_option
+    from pg_catalog.pg_auth_members am
+    join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
+    join pg_catalog.pg_roles member_role on member_role.oid=am.member
+    join pg_catalog.pg_roles grantor_role on grantor_role.oid=am.grantor
+    where granted_role.rolname=any(v_expected_roles)
+       or member_role.rolname=any(v_expected_roles)
+  ), mismatch as (
+    (select 'UNEXPECTED'::text as mismatch_kind,actual.* from actual
+     except all select 'UNEXPECTED'::text,expected.* from expected)
+    union all
+    (select 'MISSING'::text as mismatch_kind,expected.* from expected
+     except all select 'MISSING'::text,actual.* from actual)
+  )
+  select pg_catalog.jsonb_build_object(
+           'kind',mismatch_kind,'granted_role',granted_role_name,
+           'member_role',member_role_name,'grantor_role',grantor_role_name,
+           'admin_option',admin_option,'inherit_option',inherit_option,
+           'set_option',set_option)
+    into v_mismatch
+  from mismatch
+  order by mismatch_kind,granted_role_name,member_role_name,grantor_role_name
+  limit 1;
+  if v_mismatch is not null then
+    raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_ACTIVE_MEMBERSHIP_GRAPH';
+  end if;
+  foreach v_role in array v_target_roles loop
+    if not pg_catalog.pg_has_role('postgres',v_role,'SET') then
+      raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_SET_OPTION';
+    end if;
+  end loop;
+end;
+$koaptix_m904_owner_bootstrap_membership$;
+
+grant create on schema public to koaptix_rank_authority_owner;
+grant create on schema public to koaptix_rank_publication_owner;
+
+do $koaptix_m904_owner_bootstrap_schema$
+declare
+  v_target_roles constant text[]:=array['koaptix_rank_authority_owner','koaptix_rank_publication_owner'];
+  v_role text;
+begin
+  if (select r.rolname from pg_catalog.pg_namespace n join pg_catalog.pg_roles r on r.oid=n.nspowner where n.nspname='public')
+       is distinct from 'pg_database_owner' then
+    raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_ACTIVE_SCHEMA_OWNER';
+  end if;
+  foreach v_role in array v_target_roles loop
+    if not pg_catalog.has_schema_privilege(v_role,'public','USAGE')
+       or not pg_catalog.has_schema_privilege(v_role,'public','CREATE') then
+      raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_ACTIVE_SCHEMA_ACL';
+    end if;
+  end loop;
+  if exists (
+    select 1 from pg_catalog.pg_namespace n
+    where n.nspname='public'
+      and coalesce(pg_catalog.array_ndims(
+            coalesce(n.nspacl,pg_catalog.acldefault('n',n.nspowner))
+          ),0)>1
+  ) then
+    raise exception using errcode='22023',message='M904_ACLEXPLODE_MULTIDIMENSIONAL_ACL_02';
+  end if;
+  if exists (
+    select 1 from pg_catalog.pg_namespace n
+    cross join lateral pg_catalog.unnest(
+      coalesce(n.nspacl,pg_catalog.acldefault('n',n.nspowner))
+    ) with ordinality acl_source(acl_item,acl_ordinal)
+    cross join lateral pg_catalog.aclexplode(array[acl_source.acl_item]::aclitem[]) acl
+    left join pg_catalog.pg_roles grantee on grantee.oid=acl.grantee
+    where n.nspname='public' and acl.privilege_type='CREATE'
+      and coalesce(grantee.rolname,'PUBLIC')<>'pg_database_owner'
+      and not coalesce(grantee.rolname,'PUBLIC')=any(v_target_roles)
+  ) then
+    raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_ACTIVE_SCHEMA_ACL_EXPANSION';
+  end if;
+end;
+$koaptix_m904_owner_bootstrap_schema$;
+
+do $koaptix_m904_compute_owner_pre$
+begin
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.koaptix_compute_rank_input_authority(date)'
+         )) is distinct from 'postgres'
+     or not pg_catalog.pg_has_role(
+       'postgres','koaptix_rank_publication_owner','SET'
+     ) then
+    raise exception using errcode='P0001',message='M904_COMPUTE_OWNER_PRE_AUTHORITY';
+  end if;
+end;
+$koaptix_m904_compute_owner_pre$;
+
 alter function public.koaptix_compute_rank_input_authority(date)
   owner to koaptix_rank_publication_owner;
+do $koaptix_m904_compute_owner_transferred$
+begin
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.koaptix_compute_rank_input_authority(date)'
+         )) is distinct from 'koaptix_rank_publication_owner' then
+    raise exception using errcode='P0001',message='M904_COMPUTE_OWNER_TRANSFER';
+  end if;
+end;
+$koaptix_m904_compute_owner_transferred$;
+set local role koaptix_rank_publication_owner;
+do $koaptix_m904_compute_owner_role$
+begin
+  if current_user<>'koaptix_rank_publication_owner'
+     or session_user<>'postgres' then
+    raise exception using errcode='P0001',message='M904_COMPUTE_OWNER_ROLE';
+  end if;
+end;
+$koaptix_m904_compute_owner_role$;
 revoke all on function public.koaptix_compute_rank_input_authority(date)
   from public,anon,authenticated,service_role,koaptix_rank_manifest_sealer,
        koaptix_rank_manifest_revoker,koaptix_rank_bootstrap_seeder,
@@ -701,6 +922,19 @@ revoke all on function public.koaptix_compute_rank_input_authority(date)
 grant execute on function public.koaptix_compute_rank_input_authority(date)
   to koaptix_rank_authority_owner,koaptix_rank_publication_owner,
      koaptix_rank_authority_reader;
+reset role;
+do $koaptix_m904_compute_owner_reset$
+begin
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.koaptix_compute_rank_input_authority(date)'
+         )) is distinct from 'koaptix_rank_publication_owner' then
+    raise exception using errcode='P0001',message='M904_COMPUTE_OWNER_RESET';
+  end if;
+end;
+$koaptix_m904_compute_owner_reset$;
 
 create or replace function public.koaptix_seal_rank_input_manifest(p_packet jsonb)
 returns jsonb
@@ -877,8 +1111,45 @@ begin
 end;
 $function$;
 
+do $koaptix_m904_seal_owner_pre$
+begin
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.koaptix_seal_rank_input_manifest(jsonb)'
+         )) is distinct from 'postgres'
+     or not pg_catalog.pg_has_role(
+       'postgres','koaptix_rank_authority_owner','SET'
+     ) then
+    raise exception using errcode='P0001',message='M904_SEAL_OWNER_PRE_AUTHORITY';
+  end if;
+end;
+$koaptix_m904_seal_owner_pre$;
+
 alter function public.koaptix_seal_rank_input_manifest(jsonb)
   owner to koaptix_rank_authority_owner;
+do $koaptix_m904_seal_owner_transferred$
+begin
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.koaptix_seal_rank_input_manifest(jsonb)'
+         )) is distinct from 'koaptix_rank_authority_owner' then
+    raise exception using errcode='P0001',message='M904_SEAL_OWNER_TRANSFER';
+  end if;
+end;
+$koaptix_m904_seal_owner_transferred$;
+set local role koaptix_rank_authority_owner;
+do $koaptix_m904_seal_owner_role$
+begin
+  if current_user<>'koaptix_rank_authority_owner'
+     or session_user<>'postgres' then
+    raise exception using errcode='P0001',message='M904_SEAL_OWNER_ROLE';
+  end if;
+end;
+$koaptix_m904_seal_owner_role$;
 revoke all on function public.koaptix_seal_rank_input_manifest(jsonb)
   from public,anon,authenticated,service_role,koaptix_rank_authority_reader,
        koaptix_rank_manifest_revoker,koaptix_rank_bootstrap_seeder,
@@ -886,6 +1157,19 @@ revoke all on function public.koaptix_seal_rank_input_manifest(jsonb)
        koaptix_rank_publication_rollback;
 grant execute on function public.koaptix_seal_rank_input_manifest(jsonb)
   to koaptix_rank_manifest_sealer;
+reset role;
+do $koaptix_m904_seal_owner_reset$
+begin
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.koaptix_seal_rank_input_manifest(jsonb)'
+         )) is distinct from 'koaptix_rank_authority_owner' then
+    raise exception using errcode='P0001',message='M904_SEAL_OWNER_RESET';
+  end if;
+end;
+$koaptix_m904_seal_owner_reset$;
 
 create or replace function public.koaptix_revoke_rank_input_manifest(p_packet jsonb)
 returns jsonb
@@ -967,8 +1251,45 @@ begin
 end;
 $function$;
 
+do $koaptix_m904_revoke_owner_pre$
+begin
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.koaptix_revoke_rank_input_manifest(jsonb)'
+         )) is distinct from 'postgres'
+     or not pg_catalog.pg_has_role(
+       'postgres','koaptix_rank_authority_owner','SET'
+     ) then
+    raise exception using errcode='P0001',message='M904_REVOKE_OWNER_PRE_AUTHORITY';
+  end if;
+end;
+$koaptix_m904_revoke_owner_pre$;
+
 alter function public.koaptix_revoke_rank_input_manifest(jsonb)
   owner to koaptix_rank_authority_owner;
+do $koaptix_m904_revoke_owner_transferred$
+begin
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.koaptix_revoke_rank_input_manifest(jsonb)'
+         )) is distinct from 'koaptix_rank_authority_owner' then
+    raise exception using errcode='P0001',message='M904_REVOKE_OWNER_TRANSFER';
+  end if;
+end;
+$koaptix_m904_revoke_owner_transferred$;
+set local role koaptix_rank_authority_owner;
+do $koaptix_m904_revoke_owner_role$
+begin
+  if current_user<>'koaptix_rank_authority_owner'
+     or session_user<>'postgres' then
+    raise exception using errcode='P0001',message='M904_REVOKE_OWNER_ROLE';
+  end if;
+end;
+$koaptix_m904_revoke_owner_role$;
 revoke all on function public.koaptix_revoke_rank_input_manifest(jsonb)
   from public,anon,authenticated,service_role,koaptix_rank_authority_reader,
        koaptix_rank_manifest_sealer,koaptix_rank_bootstrap_seeder,
@@ -976,6 +1297,19 @@ revoke all on function public.koaptix_revoke_rank_input_manifest(jsonb)
        koaptix_rank_publication_rollback;
 grant execute on function public.koaptix_revoke_rank_input_manifest(jsonb)
   to koaptix_rank_manifest_revoker;
+reset role;
+do $koaptix_m904_revoke_owner_reset$
+begin
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.koaptix_revoke_rank_input_manifest(jsonb)'
+         )) is distinct from 'koaptix_rank_authority_owner' then
+    raise exception using errcode='P0001',message='M904_REVOKE_OWNER_RESET';
+  end if;
+end;
+$koaptix_m904_revoke_owner_reset$;
 
 create or replace function public.append_daily_rank_history(p_run_date date)
 returns jsonb
@@ -1218,611 +1552,624 @@ begin
 end;
 $function$;
 
+do $koaptix_m904_append_owner_pre$
+begin
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.append_daily_rank_history(date)'
+         )) is distinct from 'postgres'
+     or not pg_catalog.pg_has_role(
+       'postgres','koaptix_rank_publication_owner','SET'
+     ) then
+    raise exception using errcode='P0001',message='M904_APPEND_OWNER_PRE_AUTHORITY';
+  end if;
+end;
+$koaptix_m904_append_owner_pre$;
+
 alter function public.append_daily_rank_history(date)
   owner to koaptix_rank_publication_owner;
+do $koaptix_m904_append_owner_transferred$
+begin
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.append_daily_rank_history(date)'
+         )) is distinct from 'koaptix_rank_publication_owner' then
+    raise exception using errcode='P0001',message='M904_APPEND_OWNER_TRANSFER';
+  end if;
+end;
+$koaptix_m904_append_owner_transferred$;
+set local role koaptix_rank_publication_owner;
+do $koaptix_m904_append_owner_role$
+begin
+  if current_user<>'koaptix_rank_publication_owner'
+     or session_user<>'postgres' then
+    raise exception using errcode='P0001',message='M904_APPEND_OWNER_ROLE';
+  end if;
+end;
+$koaptix_m904_append_owner_role$;
 revoke all on function public.append_daily_rank_history(date)
   from public,anon,authenticated,service_role,koaptix_rank_authority_reader,
        koaptix_rank_manifest_sealer,koaptix_rank_manifest_revoker,
        koaptix_rank_bootstrap_seeder,koaptix_rank_generation_builder,
        koaptix_rank_generation_publisher,koaptix_rank_publication_rollback;
-
--- This compatibility function becomes an owner-internal implementation detail.
--- The compatibility helper receives no action-role EXECUTE. The integrated
--- Transaction-A entrypoint alone is granted to koaptix_rank_generation_builder.
-
--- Legacy-helper revocations are intentionally not implicit in this migration.
--- They are defined in 202607310900_rank_recovery_roles_and_acl.sql and require
--- their own reviewed ROLE_GRANT_DEFINITION deployment approval first.
-
--- Build a transaction-local lexical observation after all committed definitions
--- exist. The scanner preserves character positions while removing SQL comments
--- and literal contents, including nested block comments and dollar-quoted inner
--- strings. It never supplies authority: it only discovers candidates that are
--- reconciled against the exact allowed-writer inventory above.
---
--- SQL-standard bodies are deliberately excluded from that lexical path. PostgreSQL
--- stores those bodies as parsed pg_node_tree values in pg_proc.prosqlbody, so the
--- PostgreSQL-17 decoder below classifies their Query nodes and dependency OIDs.
-create temporary table koaptix_migration_904_pg17_command_type_contract (
-  command_type smallint primary key,
-  symbolic_name text not null unique,
-  mutating boolean not null,
-  fixture_contract text not null unique
-) on commit drop;
-
--- PostgreSQL 17 QueryCommandType meanings, proven again by the official fixture
--- suite before this candidate is locked: SELECT=1, UPDATE=2, INSERT=3, DELETE=4,
--- MERGE=5. The migration refuses another major version or an unknown value.
-insert into koaptix_migration_904_pg17_command_type_contract values
-  (1,'CMD_SELECT',false,'BEGIN_ATOMIC_SELECT'),
-  (2,'CMD_UPDATE',true,'BEGIN_ATOMIC_UPDATE'),
-  (3,'CMD_INSERT',true,'BEGIN_ATOMIC_INSERT'),
-  (4,'CMD_DELETE',true,'BEGIN_ATOMIC_DELETE'),
-  (5,'CMD_MERGE',true,'BEGIN_ATOMIC_MERGE');
-
-create temporary table koaptix_migration_904_prosqlbody_observation (
-  resolved_oid oid primary key,
-  routine_identity text not null,
-  schema_name text not null,
-  routine_name text not null,
-  node_tree_sha256 text not null check (node_tree_sha256 ~ '^[0-9A-F]{64}$'),
-  command_types smallint[] not null,
-  has_modifying_cte boolean not null,
-  has_utility boolean not null,
-  direct_relation_oids oid[] not null,
-  direct_routine_oids oid[] not null,
-  unresolved_behavior boolean not null
-) on commit drop;
-
-do $prosqlbody_observation$
+reset role;
+do $koaptix_m904_append_owner_reset$
 begin
-  if current_setting('server_version_num')::integer not between 170000 and 179999 then
-    raise exception 'AUTHORITY_UNRESOLVED: PostgreSQL-17 prosqlbody decoder cannot run on server version %',
-      current_setting('server_version_num');
-  end if;
-
-  if (select count(*) from koaptix_migration_904_pg17_command_type_contract)<>5
-     or (select count(*) from koaptix_migration_904_pg17_command_type_contract where mutating)<>4
-     or exists (
-       select 1
-       from koaptix_migration_904_pg17_command_type_contract
-       where (command_type,symbolic_name,mutating,fixture_contract) not in (
-         (1,'CMD_SELECT',false,'BEGIN_ATOMIC_SELECT'),
-         (2,'CMD_UPDATE',true,'BEGIN_ATOMIC_UPDATE'),
-         (3,'CMD_INSERT',true,'BEGIN_ATOMIC_INSERT'),
-         (4,'CMD_DELETE',true,'BEGIN_ATOMIC_DELETE'),
-         (5,'CMD_MERGE',true,'BEGIN_ATOMIC_MERGE')
-       )
-     ) then
-    raise exception 'AUTHORITY_UNRESOLVED: PostgreSQL-17 QueryCommandType fixture contract drift';
-  end if;
-
-  if (select count(*) from koaptix_migration_904_protected_relation)<>14
-     or exists (
-       select 1
-       from koaptix_migration_904_protected_relation protected
-       left join pg_catalog.pg_class relation_row on relation_row.oid=protected.resolved_oid
-       where protected.resolved_oid is null
-          or protected.expected_owner_oid is null
-          or relation_row.oid is null
-          or relation_row.relowner is distinct from protected.expected_owner_oid
-     ) then
-    raise exception 'AUTHORITY_UNRESOLVED: protected relation identity or owner contract drift';
-  end if;
-
-  insert into koaptix_migration_904_prosqlbody_observation (
-    resolved_oid,routine_identity,schema_name,routine_name,node_tree_sha256,
-    command_types,has_modifying_cte,has_utility,
-    direct_relation_oids,direct_routine_oids,unresolved_behavior
-  )
-  select proc.oid,
-         pg_catalog.format('%I.%I(%s)',namespace.nspname,proc.proname,
-           pg_catalog.oidvectortypes(proc.proargtypes)),
-         namespace.nspname,proc.proname,
-         upper(pg_catalog.encode(pg_catalog.sha256(
-           pg_catalog.convert_to(proc.prosqlbody::text,'UTF8')
-         ),'hex')),
-         parsed.command_types,
-         proc.prosqlbody::text ~ E':hasModifyingCTE[[:space:]]+true',
-         proc.prosqlbody::text ~ E':utilityStmt[[:space:]]+\\{',
-         parsed.direct_relation_oids,
-         parsed.direct_routine_oids,
-         pg_catalog.cardinality(parsed.command_types)=0
-           or exists (
-             select 1
-             from pg_catalog.unnest(parsed.command_types) extracted(command_type)
-             left join koaptix_migration_904_pg17_command_type_contract contract
-               on contract.command_type=extracted.command_type
-             where contract.command_type is null
-           )
-           or proc.prosqlbody::text ~ E':utilityStmt[[:space:]]+\\{'
-  from pg_catalog.pg_proc proc
-  join pg_catalog.pg_namespace namespace on namespace.oid=proc.pronamespace
-  cross join lateral (
-    select
-      coalesce((
-        select pg_catalog.array_agg(distinct match[1]::smallint order by match[1]::smallint)
-        from pg_catalog.regexp_matches(
-          proc.prosqlbody::text,E':commandType[[:space:]]+([0-9]+)','g'
-        ) match
-      ),array[]::smallint[]) as command_types,
-      coalesce((
-        select pg_catalog.array_agg(distinct relation_oid order by relation_oid)
-        from (
-          select match[1]::oid as relation_oid
-          from pg_catalog.regexp_matches(
-            proc.prosqlbody::text,E':relid[[:space:]]+([0-9]+)','g'
-          ) match
-          join pg_catalog.pg_class relation_row on relation_row.oid=match[1]::oid
-        ) relation_dependencies
-      ),array[]::oid[]) as direct_relation_oids,
-      coalesce((
-        select pg_catalog.array_agg(distinct routine_oid order by routine_oid)
-        from (
-          select match[1]::oid as routine_oid
-          from pg_catalog.regexp_matches(
-            proc.prosqlbody::text,E':funcid[[:space:]]+([0-9]+)','g'
-          ) match
-          join pg_catalog.pg_proc called_proc on called_proc.oid=match[1]::oid
-        ) routine_dependencies
-      ),array[]::oid[]) as direct_routine_oids
-  ) parsed
-  where proc.prosqlbody is not null
-    and namespace.nspname not in ('pg_catalog','information_schema')
-    and namespace.nspname not like 'pg_toast%'
-    and namespace.nspname not like 'pg_temp_%'
-    and proc.prokind in ('f','p')
-    and not exists (
-      select 1
-      from pg_catalog.pg_depend dependency
-      where dependency.classid='pg_catalog.pg_proc'::pg_catalog.regclass
-        and dependency.objid=proc.oid
-        and dependency.refclassid='pg_catalog.pg_extension'::pg_catalog.regclass
-        and dependency.deptype='e'
-    );
-
-  if exists (
-    select 1
-    from koaptix_migration_904_prosqlbody_observation observation
-    where observation.node_tree_sha256 !~ '^[0-9A-F]{64}$'
-       or observation.unresolved_behavior
-  ) then
-    raise exception 'AUTHORITY_UNRESOLVED: unknown PostgreSQL-17 prosqlbody command or utility behavior remains';
+  if current_user<>'postgres' or session_user<>'postgres'
+     or (select pg_catalog.pg_get_userbyid(proc.proowner)
+         from pg_catalog.pg_proc proc
+         where proc.oid=pg_catalog.to_regprocedure(
+           'public.append_daily_rank_history(date)'
+         )) is distinct from 'koaptix_rank_publication_owner' then
+    raise exception using errcode='P0001',message='M904_APPEND_OWNER_RESET';
   end if;
 end;
-$prosqlbody_observation$;
+$koaptix_m904_append_owner_reset$;
+revoke create on schema public from koaptix_rank_authority_owner restrict;
+revoke create on schema public from koaptix_rank_publication_owner restrict;
+revoke koaptix_rank_authority_owner from postgres granted by postgres restrict;
+revoke koaptix_rank_publication_owner from postgres granted by postgres restrict;
 
-create temporary table koaptix_migration_904_lexical_observation (
-  resolved_oid oid primary key,
-  routine_identity text not null,
-  schema_name text not null,
-  routine_name text not null,
-  body_without_comments text not null,
-  code_without_comments_or_literals text not null,
-  normalized_identifier_code text not null
-) on commit drop;
-
-create temporary table koaptix_migration_904_dynamic_candidate (
-  resolved_oid oid not null,
-  execute_ordinal integer not null,
-  fragment_sha256 text not null,
-  protected_mutation_or_call_evidence boolean not null,
-  simple_constant_read boolean not null,
-  unresolved_behavior boolean not null,
-  primary key (resolved_oid,execute_ordinal)
-) on commit drop;
-
-do $lexical_observation$
+do $koaptix_m904_owner_bootstrap_post$
 declare
-  v_routine record;
-  v_input text;
-  v_body_without_comments text;
-  v_code text;
-  v_search_code text;
-  v_normalized_code text;
-  v_normalized_fragment text;
-  v_state text;
-  v_outer_tag text;
-  v_dollar_tag text;
-  v_candidate_tag text;
-  v_character text;
-  v_next_character text;
-  v_index integer;
-  v_length integer;
-  v_block_depth integer;
-  v_search_position integer;
-  v_execute_position integer;
-  v_statement_end integer;
-  v_execute_ordinal integer;
-  v_fragment text;
-  v_compact_fragment text;
-  v_protected_evidence boolean;
-  v_simple_constant_read boolean;
-  v_escape_string boolean;
+  v_expected_roles constant text[]:=array['koaptix_rank_authority_owner','koaptix_rank_publication_owner','koaptix_rank_authority_reader','koaptix_rank_manifest_sealer','koaptix_rank_manifest_revoker','koaptix_rank_bootstrap_seeder','koaptix_rank_generation_builder','koaptix_rank_generation_publisher','koaptix_rank_publication_rollback'];
+  v_target_roles constant text[]:=array['koaptix_rank_authority_owner','koaptix_rank_publication_owner'];
+  v_role text;
+  v_mismatch jsonb;
+  v_object record;
+  v_actual_owner text;
+  v_owner_count integer:=0;
 begin
-  if exists (
-    select 1
-    from pg_catalog.pg_proc proc
-    join pg_catalog.pg_namespace namespace on namespace.oid=proc.pronamespace
-    join pg_catalog.pg_language language on language.oid=proc.prolang
-    where namespace.nspname not in ('pg_catalog','information_schema')
-      and namespace.nspname not like 'pg_toast%'
-      and namespace.nspname not like 'pg_temp_%'
-      and proc.prokind in ('f','p')
-      and language.lanname not in ('plpgsql','sql')
-      and not exists (
-        select 1
-        from pg_catalog.pg_depend dependency
-        where dependency.classid='pg_catalog.pg_proc'::pg_catalog.regclass
-          and dependency.objid=proc.oid
-          and dependency.refclassid='pg_catalog.pg_extension'::pg_catalog.regclass
-          and dependency.deptype='e'
-      )
-  ) then
-    raise exception 'AUTHORITY_UNRESOLVED: unsupported user-routine language remains outside lexical mutation evidence';
+  if current_user<>'postgres' or session_user<>'postgres' then
+    raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_POST_EXECUTOR_IDENTITY';
   end if;
-
-  for v_routine in
-    select proc.oid,namespace.nspname,proc.proname,proc.proargtypes,
-           proc.prosrc as routine_source
-    from pg_catalog.pg_proc proc
-    join pg_catalog.pg_namespace namespace on namespace.oid=proc.pronamespace
-    join pg_catalog.pg_language language on language.oid=proc.prolang
-    where namespace.nspname not in ('pg_catalog','information_schema')
-      and namespace.nspname not like 'pg_toast%'
-      and namespace.nspname not like 'pg_temp_%'
-       and proc.prokind in ('f','p')
-       and language.lanname in ('plpgsql','sql')
-       and proc.prosqlbody is null
-       and not exists (
-        select 1
-        from pg_catalog.pg_depend dependency
-        where dependency.classid='pg_catalog.pg_proc'::pg_catalog.regclass
-          and dependency.objid=proc.oid
-          and dependency.refclassid='pg_catalog.pg_extension'::pg_catalog.regclass
-          and dependency.deptype='e'
-      )
-    order by proc.oid
-  loop
-    -- Scan only executable source. Function headers and default expressions are
-    -- not caller evidence and can contain misleading dollar tags or names.
-    v_input := v_routine.routine_source;
-    v_body_without_comments := '';
-    v_code := '';
-    v_state := 'NORMAL';
-    v_dollar_tag := null;
-    v_index := 1;
-    v_length := pg_catalog.char_length(v_input);
-    v_block_depth := 0;
-    v_escape_string := false;
-    v_outer_tag := null;
-
-    while v_index<=v_length loop
-      v_character := pg_catalog.substr(v_input,v_index,1);
-      v_next_character := case when v_index<v_length
-        then pg_catalog.substr(v_input,v_index+1,1) else '' end;
-
-      if v_state='LINE_COMMENT' then
-        if v_character in (E'\n',E'\r') then
-          v_state := 'NORMAL';
-          v_body_without_comments := v_body_without_comments||v_character;
-          v_code := v_code||v_character;
-        else
-          v_body_without_comments := v_body_without_comments||' ';
-          v_code := v_code||' ';
-        end if;
-        v_index := v_index+1;
-      elsif v_state='BLOCK_COMMENT' then
-        if v_character='/' and v_next_character='*' then
-          v_block_depth := v_block_depth+1;
-          v_body_without_comments := v_body_without_comments||'  ';
-          v_code := v_code||'  ';
-          v_index := v_index+2;
-        elsif v_character='*' and v_next_character='/' then
-          v_block_depth := v_block_depth-1;
-          v_body_without_comments := v_body_without_comments||'  ';
-          v_code := v_code||'  ';
-          v_index := v_index+2;
-          if v_block_depth=0 then
-            v_state := 'NORMAL';
-          end if;
-        else
-          if v_character in (E'\n',E'\r') then
-            v_body_without_comments := v_body_without_comments||v_character;
-            v_code := v_code||v_character;
-          else
-            v_body_without_comments := v_body_without_comments||' ';
-            v_code := v_code||' ';
-          end if;
-          v_index := v_index+1;
-        end if;
-      elsif v_state='DOUBLE_QUOTE' then
-        v_body_without_comments := v_body_without_comments||v_character;
-        v_code := v_code||v_character;
-        if v_character='"' and v_next_character='"' then
-          v_body_without_comments := v_body_without_comments||v_next_character;
-          v_code := v_code||v_next_character;
-          v_index := v_index+2;
-        else
-          if v_character='"' then
-            v_state := 'NORMAL';
-          end if;
-          v_index := v_index+1;
-        end if;
-      elsif v_state='SINGLE_QUOTE' then
-        v_body_without_comments := v_body_without_comments||v_character;
-        v_code := v_code||case when v_character in (E'\n',E'\r')
-          then v_character else ' ' end;
-        if v_escape_string and v_character=E'\\' and v_index<v_length then
-          v_body_without_comments := v_body_without_comments||v_next_character;
-          v_code := v_code||case when v_next_character in (E'\n',E'\r')
-            then v_next_character else ' ' end;
-          v_index := v_index+2;
-        elsif v_character='''' and v_next_character='''' then
-          v_body_without_comments := v_body_without_comments||v_next_character;
-          v_code := v_code||' ';
-          v_index := v_index+2;
-        else
-          if v_character='''' then
-            v_state := 'NORMAL';
-            v_escape_string := false;
-          end if;
-          v_index := v_index+1;
-        end if;
-      elsif v_state='DOLLAR_QUOTE' then
-        if pg_catalog.substr(v_input,v_index,pg_catalog.char_length(v_dollar_tag))=v_dollar_tag then
-          v_body_without_comments := v_body_without_comments||v_dollar_tag;
-          v_code := v_code||pg_catalog.repeat(' ',pg_catalog.char_length(v_dollar_tag));
-          v_index := v_index+pg_catalog.char_length(v_dollar_tag);
-          v_state := 'NORMAL';
-          v_dollar_tag := null;
-        else
-          v_body_without_comments := v_body_without_comments||v_character;
-          v_code := v_code||case when v_character in (E'\n',E'\r')
-            then v_character else ' ' end;
-          v_index := v_index+1;
-        end if;
-      else
-        if v_character='-' and v_next_character='-' then
-          v_state := 'LINE_COMMENT';
-          v_body_without_comments := v_body_without_comments||'  ';
-          v_code := v_code||'  ';
-          v_index := v_index+2;
-        elsif v_character='/' and v_next_character='*' then
-          v_state := 'BLOCK_COMMENT';
-          v_block_depth := 1;
-          v_body_without_comments := v_body_without_comments||'  ';
-          v_code := v_code||'  ';
-          v_index := v_index+2;
-        elsif v_character='''' then
-          v_state := 'SINGLE_QUOTE';
-          v_escape_string := v_index>1
-            and lower(pg_catalog.substr(v_input,v_index-1,1))='e'
-            and (
-              v_index=2
-              or pg_catalog.substr(v_input,v_index-2,1) !~ '[a-z0-9_$]'
-            );
-          v_body_without_comments := v_body_without_comments||v_character;
-          v_code := v_code||' ';
-          v_index := v_index+1;
-        elsif v_character='"' then
-          v_state := 'DOUBLE_QUOTE';
-          v_body_without_comments := v_body_without_comments||v_character;
-          v_code := v_code||v_character;
-          v_index := v_index+1;
-        elsif v_character='$' then
-          v_candidate_tag := pg_catalog.substring(
-            pg_catalog.substr(v_input,v_index),
-            E'^(\\$[A-Za-z_][A-Za-z0-9_]*\\$|\\$\\$)'
-          );
-          if v_candidate_tag is null then
-            v_body_without_comments := v_body_without_comments||v_character;
-            v_code := v_code||v_character;
-            v_index := v_index+1;
-          elsif v_candidate_tag=v_outer_tag then
-            v_body_without_comments := v_body_without_comments||
-              pg_catalog.repeat(' ',pg_catalog.char_length(v_candidate_tag));
-            v_code := v_code||pg_catalog.repeat(' ',pg_catalog.char_length(v_candidate_tag));
-            v_index := v_index+pg_catalog.char_length(v_candidate_tag);
-          else
-            v_state := 'DOLLAR_QUOTE';
-            v_dollar_tag := v_candidate_tag;
-            v_body_without_comments := v_body_without_comments||v_candidate_tag;
-            v_code := v_code||pg_catalog.repeat(' ',pg_catalog.char_length(v_candidate_tag));
-            v_index := v_index+pg_catalog.char_length(v_candidate_tag);
-          end if;
-        else
-          v_body_without_comments := v_body_without_comments||v_character;
-          v_code := v_code||v_character;
-          v_index := v_index+1;
-        end if;
-      end if;
-    end loop;
-
-    if v_state not in ('NORMAL','LINE_COMMENT') or v_block_depth<>0
-       or pg_catalog.char_length(v_body_without_comments)<>v_length
-       or pg_catalog.char_length(v_code)<>v_length then
-      raise exception 'AUTHORITY_UNRESOLVED: routine lexical normalization failed for %, state %, block %, input %, body %, code %, outer %',
-        v_routine.oid,v_state,v_block_depth,v_length,
-        pg_catalog.char_length(v_body_without_comments),
-        pg_catalog.char_length(v_code),v_outer_tag;
+  with expected (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select role_name,'postgres'::text,'supabase_admin'::text,true,false,false
+    from unnest(v_expected_roles) role_name
+  ), actual (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select granted_role.rolname::text,member_role.rolname::text,
+           grantor_role.rolname::text,am.admin_option,
+           am.inherit_option,am.set_option
+    from pg_catalog.pg_auth_members am
+    join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
+    join pg_catalog.pg_roles member_role on member_role.oid=am.member
+    join pg_catalog.pg_roles grantor_role on grantor_role.oid=am.grantor
+    where granted_role.rolname=any(v_expected_roles)
+       or member_role.rolname=any(v_expected_roles)
+  ), mismatch as (
+    (select 'UNEXPECTED'::text as mismatch_kind,actual.* from actual
+     except all select 'UNEXPECTED'::text,expected.* from expected)
+    union all
+    (select 'MISSING'::text as mismatch_kind,expected.* from expected
+     except all select 'MISSING'::text,actual.* from actual)
+  )
+  select pg_catalog.jsonb_build_object(
+           'kind',mismatch_kind,'granted_role',granted_role_name,
+           'member_role',member_role_name,'grantor_role',grantor_role_name,
+           'admin_option',admin_option,'inherit_option',inherit_option,
+           'set_option',set_option)
+    into v_mismatch
+  from mismatch
+  order by mismatch_kind,granted_role_name,member_role_name,grantor_role_name
+  limit 1;
+  if v_mismatch is not null then
+    raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_POST_MEMBERSHIP_GRAPH';
+  end if;
+  if (select r.rolname from pg_catalog.pg_namespace n join pg_catalog.pg_roles r on r.oid=n.nspowner where n.nspname='public')
+       is distinct from 'pg_database_owner' then
+    raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_POST_SCHEMA_OWNER';
+  end if;
+  foreach v_role in array v_target_roles loop
+    if pg_catalog.pg_has_role('postgres',v_role,'SET')
+       or not pg_catalog.has_schema_privilege(v_role,'public','USAGE')
+       or pg_catalog.has_schema_privilege(v_role,'public','CREATE')
+       or exists (
+         select 1 from pg_catalog.pg_auth_members am
+         join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
+         join pg_catalog.pg_roles member_role on member_role.oid=am.member
+         where granted_role.rolname=v_role and member_role.rolname='postgres'
+           and am.grantor=(select oid from pg_catalog.pg_roles where rolname='postgres')
+       ) then
+      raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_POST_TARGET_STATE';
     end if;
-
-    v_search_code := lower(v_code);
-    v_normalized_code := lower(pg_catalog.regexp_replace(
-      pg_catalog.regexp_replace(
-        v_code,E'"([a-z_][a-z0-9_$]*)"',E'\\1','g'
-      ),
-      E'"([^"]|"")*"','__quoted_noncanonical_identifier__','g'
-    ));
-    insert into koaptix_migration_904_lexical_observation (
-      resolved_oid,routine_identity,schema_name,routine_name,
-      body_without_comments,code_without_comments_or_literals,
-      normalized_identifier_code
-    ) values (
-      v_routine.oid,
-      pg_catalog.format('%I.%I(%s)',v_routine.nspname,v_routine.proname,
-        pg_catalog.oidvectortypes(v_routine.proargtypes)),
-      v_routine.nspname,v_routine.proname,
-      v_body_without_comments,v_code,v_normalized_code
-    );
-
-    v_search_position := 1;
-    v_execute_ordinal := 0;
-    loop
-      v_execute_position := pg_catalog.regexp_instr(
-        v_search_code,E'\\mexecute\\M',v_search_position,1,0
-      );
-      exit when v_execute_position=0;
-      v_execute_ordinal := v_execute_ordinal+1;
-      v_statement_end := pg_catalog.regexp_instr(
-        v_code,';',v_execute_position,1,0
-      );
-      if v_statement_end=0 then
-        v_statement_end := v_length+1;
-      end if;
-      v_fragment := pg_catalog.substr(
-        v_body_without_comments,v_execute_position,
-        v_statement_end-v_execute_position+
-          case when v_statement_end<=v_length then 1 else 0 end
-      );
-      v_normalized_fragment := lower(pg_catalog.regexp_replace(
-        pg_catalog.regexp_replace(
-          v_fragment,E'"([a-z_][a-z0-9_$]*)"',E'\\1','g'
-        ),
-        E'"([^"]|"")*"','__quoted_noncanonical_identifier__','g'
-      ));
-      v_compact_fragment := pg_catalog.regexp_replace(
-        v_normalized_fragment,E'[[:space:]''"|]+','','g'
-      );
-      v_protected_evidence :=
-        v_compact_fragment ~
-          '^execute.*(insertinto|mergeinto|update|deletefrom|truncate(table)?|refreshmaterializedview)(only)?(public\.)?(complex_rank_history|koaptix_rank_snapshot|koaptix_latest_board_read_model|koaptix_rank_input_authority_manifest|koaptix_rank_input_manifest_revocation|koaptix_latest_board_generation|koaptix_latest_board_generation_surface|koaptix_latest_board_generation_universe|koaptix_latest_board_generation_row|koaptix_latest_board_generation_global_row|koaptix_rank_publication_history_stage|koaptix_rank_publication_snapshot_stage|koaptix_latest_board_publication_event|koaptix_latest_board_publication)'
-        or v_compact_fragment ~
-          '^execute.*copy(public\.)?(complex_rank_history|koaptix_rank_snapshot|koaptix_latest_board_read_model|koaptix_rank_input_authority_manifest|koaptix_rank_input_manifest_revocation|koaptix_latest_board_generation|koaptix_latest_board_generation_surface|koaptix_latest_board_generation_universe|koaptix_latest_board_generation_row|koaptix_latest_board_generation_global_row|koaptix_rank_publication_history_stage|koaptix_rank_publication_snapshot_stage|koaptix_latest_board_publication_event|koaptix_latest_board_publication)(\([^)]*\))?from'
-        or v_normalized_fragment ~
-          E'\\mexecute\\M.*[^a-z0-9_$.](public[[:space:]]*\\.[[:space:]]*)?(append_daily_rank_history|capture_koaptix_daily_snapshot|refresh_koaptix_front_views_legacy|refresh_koaptix_latest_rank_board|run_daily_market_pipeline|run_daily_market_pipeline_legacy|run_koaptix_safe_finalize|sync_rank_snapshot_from_history|koaptix_seal_rank_input_manifest|koaptix_revoke_rank_input_manifest|koaptix_seed_latest_board_compatibility_generation|koaptix_build_rank_publication_generation|koaptix_publish_latest_board_generation|koaptix_rollback_latest_board_publication)[[:space:]]*\\(';
-      v_simple_constant_read := not v_protected_evidence
-        and v_normalized_fragment ~ E'^execute[[:space:]]+''([^'']|'''')*''[[:space:]]*;[[:space:]]*$'
-        and v_compact_fragment ~ '^execute(select|show|values)'
-        and v_normalized_fragment !~ E'(--|/\\*)';
-      insert into koaptix_migration_904_dynamic_candidate (
-        resolved_oid,execute_ordinal,fragment_sha256,
-        protected_mutation_or_call_evidence,simple_constant_read,
-        unresolved_behavior
-      ) values (
-        v_routine.oid,v_execute_ordinal,
-        upper(pg_catalog.encode(pg_catalog.sha256(
-          pg_catalog.convert_to(v_fragment,'UTF8')
-        ),'hex')),
-        v_protected_evidence,v_simple_constant_read,
-        v_protected_evidence or not v_simple_constant_read
-      );
-      v_search_position := case when v_statement_end<=v_length
-        then v_statement_end+1 else v_length+1 end;
-      exit when v_search_position>v_length;
-    end loop;
   end loop;
+  if exists (
+    select 1 from pg_catalog.pg_namespace n
+    where n.nspname='public'
+      and coalesce(pg_catalog.array_ndims(
+            coalesce(n.nspacl,pg_catalog.acldefault('n',n.nspowner))
+          ),0)>1
+  ) then
+    raise exception using errcode='22023',message='M904_ACLEXPLODE_MULTIDIMENSIONAL_ACL_03';
+  end if;
+  if exists (
+    select 1 from pg_catalog.pg_namespace n
+    cross join lateral pg_catalog.unnest(
+      coalesce(n.nspacl,pg_catalog.acldefault('n',n.nspowner))
+    ) with ordinality acl_source(acl_item,acl_ordinal)
+    cross join lateral pg_catalog.aclexplode(array[acl_source.acl_item]::aclitem[]) acl
+    left join pg_catalog.pg_roles grantee on grantee.oid=acl.grantee
+    where n.nspname='public' and acl.privilege_type='CREATE'
+      and coalesce(grantee.rolname,'PUBLIC')<>'pg_database_owner'
+  ) then
+    raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_POST_SCHEMA_ACL_EXPANSION';
+  end if;
+  for v_object in select * from (values
+      ('FUNCTION','public.koaptix_compute_rank_input_authority(date)','koaptix_rank_publication_owner'),
+      ('FUNCTION','public.koaptix_seal_rank_input_manifest(jsonb)','koaptix_rank_authority_owner'),
+      ('FUNCTION','public.koaptix_revoke_rank_input_manifest(jsonb)','koaptix_rank_authority_owner'),
+      ('FUNCTION','public.append_daily_rank_history(date)','koaptix_rank_publication_owner')
+    ) expected(kind,object_identity,expected_owner)
+  loop
+    v_actual_owner:=null;
+    if v_object.kind='FUNCTION' then
+      select pg_catalog.pg_get_userbyid(p.proowner) into v_actual_owner
+      from pg_catalog.pg_proc p where p.oid=pg_catalog.to_regprocedure(v_object.object_identity);
+    else
+      select pg_catalog.pg_get_userbyid(c.relowner) into v_actual_owner
+      from pg_catalog.pg_class c where c.oid=pg_catalog.to_regclass(v_object.object_identity);
+    end if;
+    if v_actual_owner is distinct from v_object.expected_owner then
+      raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_OWNER_MANIFEST';
+    end if;
+    v_owner_count:=v_owner_count+1;
+  end loop;
+  if v_owner_count<>4 then
+    raise exception using errcode='P0001',message='M904_OWNER_BOOTSTRAP_OWNER_COUNT';
+  end if;
 end;
-$lexical_observation$;
+$koaptix_m904_owner_bootstrap_post$;
 
 update koaptix_migration_904_allowed_writer allowed
 set resolved_oid=pg_catalog.to_regprocedure(allowed.routine_identity);
 
-create temporary table koaptix_migration_904_discovered_writer
-on commit drop as
-with recursive direct_static_writer as (
-  select observation.resolved_oid
-  from koaptix_migration_904_lexical_observation observation
-  where observation.normalized_identifier_code ~
-    '\m(insert[[:space:]]+into|merge[[:space:]]+into|update|delete[[:space:]]+from|refresh[[:space:]]+materialized[[:space:]]+view)\M[[:space:]]+(only[[:space:]]+)?(public[[:space:]]*\.[[:space:]]*)?(complex_rank_history|koaptix_rank_snapshot|koaptix_latest_board_read_model|koaptix_rank_input_authority_manifest|koaptix_rank_input_manifest_revocation|koaptix_latest_board_generation|koaptix_latest_board_generation_surface|koaptix_latest_board_generation_universe|koaptix_latest_board_generation_row|koaptix_latest_board_generation_global_row|koaptix_rank_publication_history_stage|koaptix_rank_publication_snapshot_stage|koaptix_latest_board_publication_event|koaptix_latest_board_publication)\M'
-     or observation.normalized_identifier_code ~
-       '\mcopy\M[[:space:]]+(public[[:space:]]*\.[[:space:]]*)?(complex_rank_history|koaptix_rank_snapshot|koaptix_latest_board_read_model|koaptix_rank_input_authority_manifest|koaptix_rank_input_manifest_revocation|koaptix_latest_board_generation|koaptix_latest_board_generation_surface|koaptix_latest_board_generation_universe|koaptix_latest_board_generation_row|koaptix_latest_board_generation_global_row|koaptix_rank_publication_history_stage|koaptix_rank_publication_snapshot_stage|koaptix_latest_board_publication_event|koaptix_latest_board_publication)\M([[:space:]]*\([^;)]*\))?[[:space:]]+\mfrom\M'
-), direct_static_truncate_target as (
-  select observation.resolved_oid,
-         pg_catalog.btrim(pg_catalog.regexp_replace(
-           pg_catalog.regexp_replace(
-             pg_catalog.regexp_replace(
-               pg_catalog.regexp_replace(
-                 target.target_text,
-                 E'[[:space:]]+(restart[[:space:]]+identity|continue[[:space:]]+identity|cascade|restrict)([[:space:]].*)?$',
-                 '', 'i'
-               ),
-               E'^[[:space:]]*only[[:space:]]+', '', 'i'
-             ),
-             E'[[:space:]]*\\*[[:space:]]*$', '', 'i'
-           ),
-           E'[[:space:]]*\\.[[:space:]]*', '.', 'g'
-         )) as relation_identity
-  from koaptix_migration_904_lexical_observation observation
-  cross join lateral pg_catalog.regexp_matches(
-    observation.normalized_identifier_code,
-    E'\\mtruncate\\M[[:space:]]+(table[[:space:]]+)?([^;]*)',
-    'g'
-  ) truncate_match(captures)
-  cross join lateral pg_catalog.regexp_split_to_table(
-    (truncate_match.captures)[2], E'[[:space:]]*,[[:space:]]*'
-  ) target(target_text)
-), direct_static_truncate_writer as (
-  select distinct target.resolved_oid
-  from direct_static_truncate_target target
-  join koaptix_migration_904_protected_relation protected
-    on target.relation_identity=pg_catalog.lower(protected.relation_identity)
-    or target.relation_identity=pg_catalog.lower(
-      pg_catalog.split_part(protected.relation_identity,'.',2)
-    )
-), direct_prosqlbody_writer as (
-  select observation.resolved_oid
-  from koaptix_migration_904_prosqlbody_observation observation
-  where exists (
-          select 1
-          from pg_catalog.unnest(observation.command_types) extracted(command_type)
-          join koaptix_migration_904_pg17_command_type_contract contract
-            on contract.command_type=extracted.command_type
-          where contract.mutating
-        )
-    and exists (
-          select 1
-          from pg_catalog.unnest(observation.direct_relation_oids) extracted(relation_oid)
-          join koaptix_migration_904_protected_relation protected
-            on protected.resolved_oid=extracted.relation_oid
-        )
-), writer_call_edge(caller_oid,callee_oid) as (
-  select caller.resolved_oid,callee.oid
-  from koaptix_migration_904_lexical_observation caller
-  join pg_catalog.pg_proc callee on caller.normalized_identifier_code ~ (
-    '(^|[^a-z0-9_$.])('||
-    lower((select namespace.nspname from pg_catalog.pg_namespace namespace
-           where namespace.oid=callee.pronamespace))||
-    '[[:space:]]*\.[[:space:]]*)?'||lower(callee.proname)||'[[:space:]]*\('
-  )
-  union
-  select caller.resolved_oid,called.callee_oid
-  from koaptix_migration_904_prosqlbody_observation caller
-  cross join lateral pg_catalog.unnest(caller.direct_routine_oids) called(callee_oid)
-), writer_closure(resolved_oid) as (
-  select authority.resolved_oid
-  from koaptix_migration_904_writer_authority authority
-  where authority.protected_writer
-  union
-  select direct_writer.resolved_oid from direct_static_writer direct_writer
-  union
-  select direct_writer.resolved_oid from direct_static_truncate_writer direct_writer
-  union
-  select direct_writer.resolved_oid from direct_prosqlbody_writer direct_writer
-  union
-  select edge.caller_oid
-  from writer_call_edge edge
-  join writer_closure prior on prior.resolved_oid=edge.callee_oid
-)
-select distinct closure.resolved_oid,
-       pg_catalog.format('%I.%I(%s)',namespace.nspname,proc.proname,
-         pg_catalog.oidvectortypes(proc.proargtypes)) as routine_identity
-from writer_closure closure
-join pg_catalog.pg_proc proc on proc.oid=closure.resolved_oid
-join pg_catalog.pg_namespace namespace on namespace.oid=proc.pronamespace;
+-- Preserve the two official zero-argument helper interfaces without allowing
+-- either pre-900 body to rebuild a serving view from legacy history. The
+-- publisher-backed compatibility views are ordinary views and follow the
+-- active publication pointer without a refresh mutation. These helpers verify
+-- the active generation authority and require the installed view to have
+-- exactly one public relation source: the canonical GLOBAL_LATEST published view.
+create or replace function public.refresh_koaptix_latest_rank_board()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $function$
+declare
+  v_surface oid:=pg_catalog.to_regclass('public.v_koaptix_latest_rank_board');
+  v_publisher oid:=pg_catalog.to_regclass('public.v_koaptix_latest_global_rank_board_published');
+  v_generation_id uuid;
+  v_verification jsonb;
+begin
+  select publication.active_generation_id
+    into strict v_generation_id
+  from public.koaptix_latest_board_publication publication
+  where publication.singleton_id;
+  v_verification:=public.koaptix_verify_latest_board_generation(v_generation_id);
+  if coalesce((v_verification->>'verified')::boolean,false) is not true
+     or (v_verification->>'generation_id')::uuid is distinct from v_generation_id then
+    raise exception using
+      errcode='P0001',
+      message='refresh_koaptix_latest_rank_board() active generation verification failed';
+  end if;
+  perform public.koaptix_assert_generation_authority(v_generation_id);
+  if v_surface is null
+     or v_publisher is null
+     or (select relation_row.relkind from pg_catalog.pg_class relation_row where relation_row.oid=v_surface) is distinct from 'v'::"char"
+     or (select relation_row.relkind from pg_catalog.pg_class relation_row where relation_row.oid=v_publisher) is distinct from 'v'::"char"
+     or not exists (
+       select 1
+       from pg_catalog.pg_rewrite rewrite_rule
+       join pg_catalog.pg_depend dependency
+         on dependency.classid='pg_catalog.pg_rewrite'::pg_catalog.regclass
+        and dependency.objid=rewrite_rule.oid
+        and dependency.refclassid='pg_catalog.pg_class'::pg_catalog.regclass
+        and dependency.refobjid=v_publisher
+        and dependency.deptype='n'
+       where rewrite_rule.ev_class=v_surface
+         and rewrite_rule.rulename='_RETURN'
+     )
+     or exists (
+       select 1
+       from pg_catalog.pg_rewrite rewrite_rule
+       join pg_catalog.pg_depend dependency
+         on dependency.classid='pg_catalog.pg_rewrite'::pg_catalog.regclass
+        and dependency.objid=rewrite_rule.oid
+        and dependency.refclassid='pg_catalog.pg_class'::pg_catalog.regclass
+       join pg_catalog.pg_class referenced_relation
+         on referenced_relation.oid=dependency.refobjid
+       join pg_catalog.pg_namespace referenced_namespace
+         on referenced_namespace.oid=referenced_relation.relnamespace
+       where rewrite_rule.ev_class=v_surface
+         and rewrite_rule.rulename='_RETURN'
+         and referenced_namespace.nspname='public'
+         and dependency.refobjid<>all(array[v_surface,v_publisher])
+     ) then
+    raise exception using
+      errcode='P0001',
+      message='refresh_koaptix_latest_rank_board() publisher binding drift';
+  end if;
+  return;
+end;
+$function$;
 
-do $final_assertions$
+create or replace function public.refresh_koaptix_home_kpi()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $function$
+declare
+  v_surface oid:=pg_catalog.to_regclass('public.v_koaptix_home_kpi');
+  v_publisher oid:=pg_catalog.to_regclass('public.v_koaptix_latest_global_rank_board_published');
+  v_generation_id uuid;
+  v_verification jsonb;
+begin
+  select publication.active_generation_id
+    into strict v_generation_id
+  from public.koaptix_latest_board_publication publication
+  where publication.singleton_id;
+  v_verification:=public.koaptix_verify_latest_board_generation(v_generation_id);
+  if coalesce((v_verification->>'verified')::boolean,false) is not true
+     or (v_verification->>'generation_id')::uuid is distinct from v_generation_id then
+    raise exception using
+      errcode='P0001',
+      message='refresh_koaptix_home_kpi() active generation verification failed';
+  end if;
+  perform public.koaptix_assert_generation_authority(v_generation_id);
+  if v_surface is null
+     or v_publisher is null
+     or (select relation_row.relkind from pg_catalog.pg_class relation_row where relation_row.oid=v_surface) is distinct from 'v'::"char"
+     or (select relation_row.relkind from pg_catalog.pg_class relation_row where relation_row.oid=v_publisher) is distinct from 'v'::"char"
+     or not exists (
+       select 1
+       from pg_catalog.pg_rewrite rewrite_rule
+       join pg_catalog.pg_depend dependency
+         on dependency.classid='pg_catalog.pg_rewrite'::pg_catalog.regclass
+        and dependency.objid=rewrite_rule.oid
+        and dependency.refclassid='pg_catalog.pg_class'::pg_catalog.regclass
+        and dependency.refobjid=v_publisher
+        and dependency.deptype='n'
+       where rewrite_rule.ev_class=v_surface
+         and rewrite_rule.rulename='_RETURN'
+     )
+     or exists (
+       select 1
+       from pg_catalog.pg_rewrite rewrite_rule
+       join pg_catalog.pg_depend dependency
+         on dependency.classid='pg_catalog.pg_rewrite'::pg_catalog.regclass
+        and dependency.objid=rewrite_rule.oid
+        and dependency.refclassid='pg_catalog.pg_class'::pg_catalog.regclass
+       join pg_catalog.pg_class referenced_relation
+         on referenced_relation.oid=dependency.refobjid
+       join pg_catalog.pg_namespace referenced_namespace
+         on referenced_namespace.oid=referenced_relation.relnamespace
+       where rewrite_rule.ev_class=v_surface
+         and rewrite_rule.rulename='_RETURN'
+         and referenced_namespace.nspname='public'
+         and dependency.refobjid<>all(array[v_surface,v_publisher])
+     ) then
+    raise exception using
+      errcode='P0001',
+      message='refresh_koaptix_home_kpi() publisher binding drift';
+  end if;
+  return;
+end;
+$function$;
+
+-- Preserve the date-taking compatibility interface without allowing its
+-- pre-900 direct-history bridge to delete or insert snapshot rows. A normal
+-- success now means that the requested date is already the active sealed
+-- canonical publication; the legacy JSON shape is retained without mutation.
+create or replace function public.sync_rank_snapshot_from_history(p_run_date date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $function$
+declare
+  v_generation_id uuid;
+  v_source_authority_kind text;
+  v_affected_rank_date date;
+  v_snapshot_date date;
+  v_previous_snapshot_date date;
+  v_verification jsonb;
+begin
+  if p_run_date is null then
+    raise exception using
+      errcode='P0001',
+      message='sync_rank_snapshot_from_history(date) requires a non-null run date';
+  end if;
+
+  select publication.active_generation_id,
+         generation.source_authority_kind,
+         generation.affected_rank_date,
+         surface.snapshot_date,
+         surface.previous_snapshot_date
+    into v_generation_id,
+         v_source_authority_kind,
+         v_affected_rank_date,
+         v_snapshot_date,
+         v_previous_snapshot_date
+  from public.koaptix_latest_board_publication publication
+  join public.koaptix_latest_board_generation generation
+    on generation.generation_id=publication.active_generation_id
+  join public.koaptix_latest_board_generation_surface surface
+    on surface.generation_id=generation.generation_id
+   and surface.surface_code='GLOBAL_LATEST'
+  where publication.singleton_id;
+
+  if v_generation_id is null then
+    raise exception using
+      errcode='P0001',
+      message='sync_rank_snapshot_from_history(date) canonical publisher state unavailable';
+  end if;
+
+  v_verification:=public.koaptix_verify_latest_board_generation(v_generation_id);
+  if coalesce((v_verification->>'verified')::boolean,false) is not true
+     or (v_verification->>'generation_id')::uuid is distinct from v_generation_id then
+    raise exception using
+      errcode='P0001',
+      message='sync_rank_snapshot_from_history(date) active generation verification failed';
+  end if;
+  perform public.koaptix_assert_generation_authority(v_generation_id);
+
+  if v_source_authority_kind is distinct from 'SEALED_RANK_INPUT_MANIFEST'
+     or v_affected_rank_date is distinct from p_run_date
+     or v_snapshot_date is distinct from p_run_date then
+    raise exception using
+      errcode='P0001',
+      message='sync_rank_snapshot_from_history(date) publisher date binding failed';
+  end if;
+
+  return jsonb_build_object(
+    'target_table','public.koaptix_rank_snapshot',
+    'inserted_rows',0,
+    'previous_snapshot_date',v_previous_snapshot_date
+  );
+end;
+$function$;
+
+do $m904_publisher_helper_poststate$
+begin
+  if exists (
+    select 1
+    from (values
+      (
+        'public.refresh_koaptix_latest_rank_board()',
+        'void',
+        $latest_body$
+declare
+  v_surface oid:=pg_catalog.to_regclass('public.v_koaptix_latest_rank_board');
+  v_publisher oid:=pg_catalog.to_regclass('public.v_koaptix_latest_global_rank_board_published');
+  v_generation_id uuid;
+  v_verification jsonb;
+begin
+  select publication.active_generation_id
+    into strict v_generation_id
+  from public.koaptix_latest_board_publication publication
+  where publication.singleton_id;
+  v_verification:=public.koaptix_verify_latest_board_generation(v_generation_id);
+  if coalesce((v_verification->>'verified')::boolean,false) is not true
+     or (v_verification->>'generation_id')::uuid is distinct from v_generation_id then
+    raise exception using
+      errcode='P0001',
+      message='refresh_koaptix_latest_rank_board() active generation verification failed';
+  end if;
+  perform public.koaptix_assert_generation_authority(v_generation_id);
+  if v_surface is null
+     or v_publisher is null
+     or (select relation_row.relkind from pg_catalog.pg_class relation_row where relation_row.oid=v_surface) is distinct from 'v'::"char"
+     or (select relation_row.relkind from pg_catalog.pg_class relation_row where relation_row.oid=v_publisher) is distinct from 'v'::"char"
+     or not exists (
+       select 1
+       from pg_catalog.pg_rewrite rewrite_rule
+       join pg_catalog.pg_depend dependency
+         on dependency.classid='pg_catalog.pg_rewrite'::pg_catalog.regclass
+        and dependency.objid=rewrite_rule.oid
+        and dependency.refclassid='pg_catalog.pg_class'::pg_catalog.regclass
+        and dependency.refobjid=v_publisher
+        and dependency.deptype='n'
+       where rewrite_rule.ev_class=v_surface
+         and rewrite_rule.rulename='_RETURN'
+     )
+     or exists (
+       select 1
+       from pg_catalog.pg_rewrite rewrite_rule
+       join pg_catalog.pg_depend dependency
+         on dependency.classid='pg_catalog.pg_rewrite'::pg_catalog.regclass
+        and dependency.objid=rewrite_rule.oid
+        and dependency.refclassid='pg_catalog.pg_class'::pg_catalog.regclass
+       join pg_catalog.pg_class referenced_relation
+         on referenced_relation.oid=dependency.refobjid
+       join pg_catalog.pg_namespace referenced_namespace
+         on referenced_namespace.oid=referenced_relation.relnamespace
+       where rewrite_rule.ev_class=v_surface
+         and rewrite_rule.rulename='_RETURN'
+         and referenced_namespace.nspname='public'
+         and dependency.refobjid<>all(array[v_surface,v_publisher])
+     ) then
+    raise exception using
+      errcode='P0001',
+      message='refresh_koaptix_latest_rank_board() publisher binding drift';
+  end if;
+  return;
+end;
+$latest_body$
+      ),
+      (
+        'public.refresh_koaptix_home_kpi()',
+        'void',
+        $home_body$
+declare
+  v_surface oid:=pg_catalog.to_regclass('public.v_koaptix_home_kpi');
+  v_publisher oid:=pg_catalog.to_regclass('public.v_koaptix_latest_global_rank_board_published');
+  v_generation_id uuid;
+  v_verification jsonb;
+begin
+  select publication.active_generation_id
+    into strict v_generation_id
+  from public.koaptix_latest_board_publication publication
+  where publication.singleton_id;
+  v_verification:=public.koaptix_verify_latest_board_generation(v_generation_id);
+  if coalesce((v_verification->>'verified')::boolean,false) is not true
+     or (v_verification->>'generation_id')::uuid is distinct from v_generation_id then
+    raise exception using
+      errcode='P0001',
+      message='refresh_koaptix_home_kpi() active generation verification failed';
+  end if;
+  perform public.koaptix_assert_generation_authority(v_generation_id);
+  if v_surface is null
+     or v_publisher is null
+     or (select relation_row.relkind from pg_catalog.pg_class relation_row where relation_row.oid=v_surface) is distinct from 'v'::"char"
+     or (select relation_row.relkind from pg_catalog.pg_class relation_row where relation_row.oid=v_publisher) is distinct from 'v'::"char"
+     or not exists (
+       select 1
+       from pg_catalog.pg_rewrite rewrite_rule
+       join pg_catalog.pg_depend dependency
+         on dependency.classid='pg_catalog.pg_rewrite'::pg_catalog.regclass
+        and dependency.objid=rewrite_rule.oid
+        and dependency.refclassid='pg_catalog.pg_class'::pg_catalog.regclass
+        and dependency.refobjid=v_publisher
+        and dependency.deptype='n'
+       where rewrite_rule.ev_class=v_surface
+         and rewrite_rule.rulename='_RETURN'
+     )
+     or exists (
+       select 1
+       from pg_catalog.pg_rewrite rewrite_rule
+       join pg_catalog.pg_depend dependency
+         on dependency.classid='pg_catalog.pg_rewrite'::pg_catalog.regclass
+        and dependency.objid=rewrite_rule.oid
+        and dependency.refclassid='pg_catalog.pg_class'::pg_catalog.regclass
+       join pg_catalog.pg_class referenced_relation
+         on referenced_relation.oid=dependency.refobjid
+       join pg_catalog.pg_namespace referenced_namespace
+         on referenced_namespace.oid=referenced_relation.relnamespace
+       where rewrite_rule.ev_class=v_surface
+         and rewrite_rule.rulename='_RETURN'
+         and referenced_namespace.nspname='public'
+         and dependency.refobjid<>all(array[v_surface,v_publisher])
+     ) then
+    raise exception using
+      errcode='P0001',
+      message='refresh_koaptix_home_kpi() publisher binding drift';
+  end if;
+  return;
+end;
+$home_body$
+      ),
+      (
+        'public.sync_rank_snapshot_from_history(date)',
+        'jsonb',
+        $sync_body$
+declare
+  v_generation_id uuid;
+  v_source_authority_kind text;
+  v_affected_rank_date date;
+  v_snapshot_date date;
+  v_previous_snapshot_date date;
+  v_verification jsonb;
+begin
+  if p_run_date is null then
+    raise exception using
+      errcode='P0001',
+      message='sync_rank_snapshot_from_history(date) requires a non-null run date';
+  end if;
+
+  select publication.active_generation_id,
+         generation.source_authority_kind,
+         generation.affected_rank_date,
+         surface.snapshot_date,
+         surface.previous_snapshot_date
+    into v_generation_id,
+         v_source_authority_kind,
+         v_affected_rank_date,
+         v_snapshot_date,
+         v_previous_snapshot_date
+  from public.koaptix_latest_board_publication publication
+  join public.koaptix_latest_board_generation generation
+    on generation.generation_id=publication.active_generation_id
+  join public.koaptix_latest_board_generation_surface surface
+    on surface.generation_id=generation.generation_id
+   and surface.surface_code='GLOBAL_LATEST'
+  where publication.singleton_id;
+
+  if v_generation_id is null then
+    raise exception using
+      errcode='P0001',
+      message='sync_rank_snapshot_from_history(date) canonical publisher state unavailable';
+  end if;
+
+  v_verification:=public.koaptix_verify_latest_board_generation(v_generation_id);
+  if coalesce((v_verification->>'verified')::boolean,false) is not true
+     or (v_verification->>'generation_id')::uuid is distinct from v_generation_id then
+    raise exception using
+      errcode='P0001',
+      message='sync_rank_snapshot_from_history(date) active generation verification failed';
+  end if;
+  perform public.koaptix_assert_generation_authority(v_generation_id);
+
+  if v_source_authority_kind is distinct from 'SEALED_RANK_INPUT_MANIFEST'
+     or v_affected_rank_date is distinct from p_run_date
+     or v_snapshot_date is distinct from p_run_date then
+    raise exception using
+      errcode='P0001',
+      message='sync_rank_snapshot_from_history(date) publisher date binding failed';
+  end if;
+
+  return jsonb_build_object(
+    'target_table','public.koaptix_rank_snapshot',
+    'inserted_rows',0,
+    'previous_snapshot_date',v_previous_snapshot_date
+  );
+end;
+$sync_body$
+      )
+    ) expected(routine_identity,result_type,prosrc)
+    join koaptix_migration_904_writer_authority authority
+      using (routine_identity)
+    join koaptix_migration_904_routine_observation observation
+      using (routine_identity)
+    left join pg_catalog.pg_proc proc
+      on proc.oid=authority.resolved_oid
+    left join pg_catalog.pg_language language
+      on language.oid=proc.prolang
+    where proc.oid is null
+       or pg_catalog.to_regprocedure(expected.routine_identity) is distinct from proc.oid
+       or language.lanname<>'plpgsql'
+       or proc.prokind<>'f'
+       or proc.provolatile<>'v'
+       or proc.proparallel<>'u'
+       or proc.proisstrict
+       or proc.proleakproof
+       or not proc.prosecdef
+       or proc.proretset
+       or coalesce(proc.proconfig,array[]::text[])
+            is distinct from array['search_path=public']::text[]
+       or pg_catalog.pg_get_function_result(proc.oid)<>expected.result_type
+       or pg_catalog.btrim(proc.prosrc)<>pg_catalog.btrim(expected.prosrc)
+       or proc.proowner is distinct from observation.owner_oid
+       or proc.proacl is distinct from observation.raw_acl
+  ) then
+    raise exception 'AUTHORITY_UNRESOLVED: publisher-backed helper replacement poststate drift';
+  end if;
+end;
+$m904_publisher_helper_poststate$;
+
+-- KOAPTIX_M904_LOCAL_CONTRACT_V2_BEGIN
+-- Bounded positive postconditions for exact M900-M904-controlled targets.
+do $m904_local_contract_v2$
 declare
   v_role text;
   v_table text;
@@ -1831,62 +2178,94 @@ declare
   v_expected_signature text;
   v_column record;
 begin
-  if not exists (
-       select 1 from information_schema.columns
-       where table_schema='pg_catalog' and table_name='pg_auth_members'
-         and column_name='inherit_option'
-     ) or not exists (
-       select 1 from information_schema.columns
-       where table_schema='pg_catalog' and table_name='pg_auth_members'
-         and column_name='set_option'
-     ) then
-    raise exception 'per-membership INHERIT/SET options are required';
+
+  if exists (
+    select 1
+    from (values
+      ('koaptix_rank_authority_owner'),
+      ('koaptix_rank_publication_owner'),
+      ('koaptix_rank_authority_reader'),
+      ('koaptix_rank_manifest_sealer'),
+      ('koaptix_rank_manifest_revoker'),
+      ('koaptix_rank_bootstrap_seeder'),
+      ('koaptix_rank_generation_builder'),
+      ('koaptix_rank_generation_publisher'),
+      ('koaptix_rank_publication_rollback')
+    ) expected(role_name)
+    left join pg_catalog.pg_roles role_row
+      on role_row.rolname=expected.role_name
+    where role_row.oid is null
+       or role_row.rolcanlogin
+       or role_row.rolsuper
+       or role_row.rolcreatedb
+       or role_row.rolcreaterole
+       or role_row.rolinherit
+       or role_row.rolreplication
+       or role_row.rolbypassrls
+  ) then
+    raise exception using errcode='P0001',
+      message='M904_LOCAL_CONTRACT_V2: CONTROLLED_ROLE_ATTRIBUTE_MISMATCH';
   end if;
 
-  if (select count(*) from pg_catalog.pg_roles
-      where rolname in (
-        'koaptix_rank_authority_owner','koaptix_rank_publication_owner',
-        'koaptix_rank_authority_reader','koaptix_rank_manifest_sealer',
-        'koaptix_rank_manifest_revoker','koaptix_rank_bootstrap_seeder',
-        'koaptix_rank_generation_builder','koaptix_rank_generation_publisher',
-        'koaptix_rank_publication_rollback'
-      ))<>9
-     or exists (
-       select 1 from pg_catalog.pg_roles
-       where rolname in (
-         'koaptix_rank_authority_owner','koaptix_rank_publication_owner',
-         'koaptix_rank_authority_reader','koaptix_rank_manifest_sealer',
-         'koaptix_rank_manifest_revoker','koaptix_rank_bootstrap_seeder',
-         'koaptix_rank_generation_builder','koaptix_rank_generation_publisher',
-         'koaptix_rank_publication_rollback'
-       )
-         and (rolcanlogin or rolsuper or rolcreatedb or rolcreaterole or rolinherit
-           or rolreplication or rolbypassrls)
-     ) then
-    raise exception 'rank recovery prerequisite role identity or attributes drifted';
+
+
+  if exists (
+    with protected_role(role_name) as (
+      values
+        ('koaptix_rank_authority_owner'),
+        ('koaptix_rank_publication_owner'),
+        ('koaptix_rank_authority_reader'),
+        ('koaptix_rank_manifest_sealer'),
+        ('koaptix_rank_manifest_revoker'),
+        ('koaptix_rank_bootstrap_seeder'),
+        ('koaptix_rank_generation_builder'),
+        ('koaptix_rank_generation_publisher'),
+        ('koaptix_rank_publication_rollback')
+    ), expected (
+      granted_role_name,member_role_name,grantor_role_name,
+      admin_option,inherit_option,set_option
+    ) as (
+      select role_name,'postgres'::text,'supabase_admin'::text,
+             true,false,false
+      from protected_role
+    ), actual (
+      granted_role_name,member_role_name,grantor_role_name,
+      admin_option,inherit_option,set_option
+    ) as (
+      select granted_role.rolname::text,member_role.rolname::text,
+             grantor_role.rolname::text,am.admin_option,
+             am.inherit_option,am.set_option
+      from pg_catalog.pg_auth_members am
+      join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
+      join pg_catalog.pg_roles member_role on member_role.oid=am.member
+      join pg_catalog.pg_roles grantor_role on grantor_role.oid=am.grantor
+      where granted_role.rolname in (select role_name from protected_role)
+         or member_role.rolname in (select role_name from protected_role)
+    ), mismatch as (
+      (select * from expected except all select * from actual)
+      union all
+      (select * from actual except all select * from expected)
+    )
+    select 1 from mismatch
+  ) then
+    raise exception using errcode='P0001',
+      message='904 definition deployment requires exact accepted post-M900 nine-edge recovery-role membership graph';
   end if;
 
   if exists (
     select 1
-    from pg_catalog.pg_auth_members am
-    join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
-    join pg_catalog.pg_roles member_role on member_role.oid=am.member
-    where granted_role.rolname in (
-      'koaptix_rank_authority_owner','koaptix_rank_publication_owner',
-      'koaptix_rank_authority_reader','koaptix_rank_manifest_sealer',
-      'koaptix_rank_manifest_revoker','koaptix_rank_bootstrap_seeder',
-      'koaptix_rank_generation_builder','koaptix_rank_generation_publisher',
-      'koaptix_rank_publication_rollback'
-    ) or member_role.rolname in (
-      'koaptix_rank_authority_owner','koaptix_rank_publication_owner',
-      'koaptix_rank_authority_reader','koaptix_rank_manifest_sealer',
-      'koaptix_rank_manifest_revoker','koaptix_rank_bootstrap_seeder',
-      'koaptix_rank_generation_builder','koaptix_rank_generation_publisher',
-      'koaptix_rank_publication_rollback'
-    )
+    from koaptix_migration_904_protected_relation protected
+    left join pg_catalog.pg_class relation_row
+      on relation_row.oid=protected.resolved_oid
+    where protected.resolved_oid is null
+       or protected.expected_owner_oid is null
+       or relation_row.oid is null
+       or relation_row.relowner is distinct from protected.expected_owner_oid
   ) then
-    raise exception 'definition deployment requires zero inbound and outbound recovery-role membership';
+    raise exception using errcode='P0001',
+      message='M904_LOCAL_CONTRACT_V2: CONTROLLED_RELATION_OWNER_MISMATCH';
   end if;
+
 
   foreach v_role in array array[
     'anon','authenticated','service_role',
@@ -2044,9 +2423,9 @@ begin
     end loop;
   end loop;
 
-  -- CREATE OR REPLACE preserves the append routine OID. Every other accepted
-  -- Migration-900 routine must remain byte-, owner-, structure- and ACL-identical
-  -- to the observation taken before this migration changed persistent objects.
+  -- CREATE OR REPLACE preserves the append routine and compatibility-helper OIDs.
+  -- Every other Migration-900 routine remains byte-, owner-, structure- and
+  -- ACL-identical to the pre-mutation observation.
   if exists (
     select 1
     from koaptix_migration_904_writer_authority authority
@@ -2056,7 +2435,12 @@ begin
     where proc.oid is null
        or pg_catalog.to_regprocedure(authority.routine_identity) is distinct from authority.resolved_oid
        or (
-         authority.routine_identity<>'public.append_daily_rank_history(date)'
+         authority.routine_identity not in (
+           'public.append_daily_rank_history(date)',
+           'public.refresh_koaptix_home_kpi()',
+           'public.refresh_koaptix_latest_rank_board()',
+           'public.sync_rank_snapshot_from_history(date)'
+         )
          and (
            proc.proowner is distinct from observation.owner_oid
            or proc.prokind is distinct from case observation.routine_kind when 'FUNCTION' then 'f'::"char" else 'p'::"char" end
@@ -2110,10 +2494,7 @@ begin
     raise exception 'final executable Migration-900 protected writer remains';
   end if;
 
-  if (select count(*) from koaptix_migration_904_allowed_writer)<>15
-     or (select count(*) from koaptix_migration_904_allowed_writer
-         where authority_source='MIGRATION_900_PROTECTED_WRITER')<>8
-     or exists (
+  if exists (
        select 1
        from koaptix_migration_904_allowed_writer allowed
        left join pg_catalog.pg_proc proc on proc.oid=allowed.resolved_oid
@@ -2182,18 +2563,6 @@ begin
     raise exception 'AUTHORITY_UNRESOLVED: exact final allowed-writer inventory drift';
   end if;
 
-  if exists (
-    select 1
-    from koaptix_migration_904_allowed_writer allowed
-    join pg_catalog.pg_proc proc on proc.oid=allowed.resolved_oid
-    join pg_catalog.pg_proc overload
-      on overload.pronamespace=proc.pronamespace
-     and overload.proname=proc.proname
-     and overload.oid<>proc.oid
-     and overload.prokind in ('f','p')
-  ) then
-    raise exception 'AUTHORITY_UNRESOLVED: allowed writer routine name is overload-ambiguous';
-  end if;
 
   if exists (
     select 1
@@ -2228,38 +2597,37 @@ begin
     raise exception 'AUTHORITY_UNRESOLVED: post-904 append writer definition or structure drift';
   end if;
 
+
   if exists (
     select 1
-    from koaptix_migration_904_dynamic_candidate candidate
-    left join koaptix_migration_904_writer_authority authority
-      on authority.resolved_oid=candidate.resolved_oid
+    from koaptix_migration_904_writer_authority authority
+    cross join lateral pg_catalog.unnest(
+      authority.declared_mutation_targets
+    ) target(identity)
+    left join koaptix_migration_904_protected_relation protected
+      on protected.resolved_oid=pg_catalog.to_regclass(target.identity)
+    where authority.protected_writer
+      and protected.resolved_oid is null
+  ) then
+    raise exception using
+      errcode='P0001',
+      message='M904_LOCAL_CONTRACT_V2: DECLARED_RELATION_NOT_CANONICAL';
+  end if;
+
+  if exists (
+    select 1
+    from koaptix_migration_904_writer_authority authority
+    cross join lateral pg_catalog.unnest(
+      authority.declared_protected_callees
+    ) callee(identity)
     left join koaptix_migration_904_allowed_writer allowed
-      on allowed.resolved_oid=candidate.resolved_oid
-    where authority.resolved_oid is null
+      on allowed.resolved_oid=pg_catalog.to_regprocedure(callee.identity)
+    where authority.protected_writer
       and allowed.resolved_oid is null
-      and candidate.unresolved_behavior
   ) then
-    raise exception 'AUTHORITY_UNRESOLVED: unknown dynamic writer behavior remains';
-  end if;
-
-  if exists (
-    select 1
-    from koaptix_migration_904_discovered_writer discovered
-    left join koaptix_migration_904_allowed_writer allowed
-      on allowed.resolved_oid=discovered.resolved_oid
-    where allowed.resolved_oid is null
-  ) then
-    raise exception 'AUTHORITY_UNRESOLVED: unknown actual writer discovered';
-  end if;
-
-  if exists (
-    select 1
-    from koaptix_migration_904_allowed_writer allowed
-    left join koaptix_migration_904_discovered_writer discovered
-      on discovered.resolved_oid=allowed.resolved_oid
-    where discovered.resolved_oid is null
-  ) then
-    raise exception 'AUTHORITY_UNRESOLVED: allowed protected writer omitted from closure';
+    raise exception using
+      errcode='P0001',
+      message='M904_LOCAL_CONTRACT_V2: DECLARED_CALLEE_NOT_CANONICAL';
   end if;
 
   if exists (
@@ -2268,9 +2636,22 @@ begin
     join pg_catalog.pg_proc proc on proc.oid=allowed.resolved_oid
     left join pg_catalog.pg_roles allowed_role
       on allowed_role.rolname=allowed.allowed_execute_role
-    cross join lateral pg_catalog.aclexplode(
+    where coalesce(pg_catalog.array_ndims(
+            coalesce(proc.proacl,pg_catalog.acldefault('f',proc.proowner))
+          ),0)>1
+  ) then
+    raise exception using errcode='22023',message='M904_ACLEXPLODE_MULTIDIMENSIONAL_ACL_04';
+  end if;
+  if exists (
+    select 1
+    from koaptix_migration_904_allowed_writer allowed
+    join pg_catalog.pg_proc proc on proc.oid=allowed.resolved_oid
+    left join pg_catalog.pg_roles allowed_role
+      on allowed_role.rolname=allowed.allowed_execute_role
+    cross join lateral pg_catalog.unnest(
       coalesce(proc.proacl,pg_catalog.acldefault('f',proc.proowner))
-    ) acl
+    ) with ordinality acl_source(acl_item,acl_ordinal)
+    cross join lateral pg_catalog.aclexplode(array[acl_source.acl_item]::aclitem[]) acl
     where acl.privilege_type<>'EXECUTE'
        or not (
          acl.grantee=proc.proowner
@@ -2291,11 +2672,24 @@ begin
     join pg_catalog.pg_proc proc on proc.oid=allowed.resolved_oid
     join pg_catalog.pg_roles allowed_role
       on allowed_role.rolname=allowed.allowed_execute_role
+    where coalesce(pg_catalog.array_ndims(
+            coalesce(proc.proacl,pg_catalog.acldefault('f',proc.proowner))
+          ),0)>1
+  ) then
+    raise exception using errcode='22023',message='M904_ACLEXPLODE_MULTIDIMENSIONAL_ACL_05';
+  end if;
+  if exists (
+    select 1
+    from koaptix_migration_904_allowed_writer allowed
+    join pg_catalog.pg_proc proc on proc.oid=allowed.resolved_oid
+    join pg_catalog.pg_roles allowed_role
+      on allowed_role.rolname=allowed.allowed_execute_role
     where not exists (
       select 1
-      from pg_catalog.aclexplode(
+      from pg_catalog.unnest(
         coalesce(proc.proacl,pg_catalog.acldefault('f',proc.proowner))
-      ) acl
+      ) with ordinality acl_source(acl_item,acl_ordinal)
+      cross join lateral pg_catalog.aclexplode(array[acl_source.acl_item]::aclitem[]) acl
       where acl.privilege_type='EXECUTE'
         and acl.grantee=allowed_role.oid
         and acl.grantor=proc.proowner
@@ -2320,6 +2714,6 @@ begin
     raise exception 'final writer closure contains an unapproved effective grantee';
   end if;
 end;
-$final_assertions$;
+$m904_local_contract_v2$;
 
 commit;
