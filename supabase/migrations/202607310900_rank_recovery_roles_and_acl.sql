@@ -419,6 +419,8 @@ create role koaptix_rank_publication_rollback nologin nosuperuser nocreatedb noc
   noinherit noreplication nobypassrls;
 
 do $block$
+declare
+  v_membership_mismatch jsonb;
 begin
   if exists (
     select 1 from pg_catalog.pg_roles
@@ -434,11 +436,32 @@ begin
   ) then
     raise exception 'rank recovery prerequisite role has unsafe attributes';
   end if;
-  if exists (
-    select 1
+  -- PostgreSQL 17 grants each role created by non-superuser CREATEROLE back to
+  -- that creator with ADMIN true, SET false and INHERIT false. Require exactly
+  -- those nine target-bound creator edges and reject every other graph change.
+  with expected (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select role_name,'postgres'::text,'supabase_admin'::text,true,false,false
+    from (values
+      ('koaptix_rank_authority_owner'),('koaptix_rank_publication_owner'),
+      ('koaptix_rank_authority_reader'),('koaptix_rank_manifest_sealer'),
+      ('koaptix_rank_manifest_revoker'),('koaptix_rank_bootstrap_seeder'),
+      ('koaptix_rank_generation_builder'),('koaptix_rank_generation_publisher'),
+      ('koaptix_rank_publication_rollback')
+    ) expected_role(role_name)
+  ), actual (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select granted_role.rolname::text,member_role.rolname::text,
+           grantor_role.rolname::text,am.admin_option,
+           am.inherit_option,am.set_option
     from pg_catalog.pg_auth_members am
     join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
     join pg_catalog.pg_roles member_role on member_role.oid=am.member
+    join pg_catalog.pg_roles grantor_role on grantor_role.oid=am.grantor
     where granted_role.rolname in (
       'koaptix_rank_authority_owner','koaptix_rank_publication_owner',
       'koaptix_rank_authority_reader','koaptix_rank_manifest_sealer',
@@ -453,8 +476,36 @@ begin
          'koaptix_rank_generation_builder','koaptix_rank_generation_publisher',
          'koaptix_rank_publication_rollback'
        )
-  ) then
-    raise exception 'rank recovery roles must have zero inbound and outbound memberships at definition deployment';
+  ), mismatch as (
+    (
+      select 'UNEXPECTED'::text as mismatch_kind,actual.* from actual
+      except all
+      select 'UNEXPECTED'::text,expected.* from expected
+    )
+    union all
+    (
+      select 'MISSING'::text as mismatch_kind,expected.* from expected
+      except all
+      select 'MISSING'::text,actual.* from actual
+    )
+  )
+  select pg_catalog.jsonb_build_object(
+           'kind',mismatch_kind,
+           'granted_role',granted_role_name,
+           'member_role',member_role_name,
+           'grantor_role',grantor_role_name,
+           'admin_option',admin_option,
+           'inherit_option',inherit_option,
+           'set_option',set_option
+         )
+  into v_membership_mismatch
+  from mismatch
+  order by mismatch_kind,granted_role_name,member_role_name,grantor_role_name
+  limit 1;
+
+  if v_membership_mismatch is not null then
+    raise exception 'rank recovery role membership graph differs from exact PostgreSQL 17 creator-admin allowlist: %',
+      v_membership_mismatch;
   end if;
 end;
 $block$;
@@ -500,11 +551,24 @@ begin
     where protected_writer
     order by ordinal
   loop
+    if exists (
+      select 1
+      from pg_catalog.pg_proc proc
+      where proc.oid=route.resolved_oid
+        and coalesce(pg_catalog.array_ndims(
+              coalesce(proc.proacl,pg_catalog.acldefault('f',proc.proowner))
+            ),0)>1
+    ) then
+      raise exception using errcode='22023',message='M900_ACLEXPLODE_MULTIDIMENSIONAL_ACL_01';
+    end if;
     for acl_grantee in
       select distinct acl.grantee,grantee_role.rolname
       from pg_catalog.pg_proc proc
-      cross join lateral pg_catalog.aclexplode(
+      cross join lateral pg_catalog.unnest(
         coalesce(proc.proacl,pg_catalog.acldefault('f',proc.proowner))
+      ) with ordinality acl_source(acl_item,acl_ordinal)
+      cross join lateral pg_catalog.aclexplode(
+        array[acl_source.acl_item]::aclitem[]
       ) acl
       left join pg_catalog.pg_roles grantee_role on grantee_role.oid=acl.grantee
       where proc.oid=route.resolved_oid
@@ -691,8 +755,23 @@ begin
     select 1
     from koaptix_rank_recovery_writer_route_contract contract
     join pg_catalog.pg_proc proc on proc.oid=contract.resolved_oid
-    cross join lateral pg_catalog.aclexplode(
+    where contract.protected_writer
+      and coalesce(pg_catalog.array_ndims(
+            coalesce(proc.proacl,pg_catalog.acldefault('f',proc.proowner))
+          ),0)>1
+  ) then
+    raise exception using errcode='22023',message='M900_ACLEXPLODE_MULTIDIMENSIONAL_ACL_02';
+  end if;
+
+  if exists (
+    select 1
+    from koaptix_rank_recovery_writer_route_contract contract
+    join pg_catalog.pg_proc proc on proc.oid=contract.resolved_oid
+    cross join lateral pg_catalog.unnest(
       coalesce(proc.proacl,pg_catalog.acldefault('f',proc.proowner))
+    ) with ordinality acl_source(acl_item,acl_ordinal)
+    cross join lateral pg_catalog.aclexplode(
+      array[acl_source.acl_item]::aclitem[]
     ) acl
     where contract.protected_writer
       and acl.privilege_type='EXECUTE'

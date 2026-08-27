@@ -81,8 +81,294 @@ left join apt_authority p on p.complex_id=a.complex_id
 where a.is_active is true and a.master_status='active'
   and a.merged_into_complex_id is null;
 
+-- KOAPTIX_M902_OWNER_TRANSFER_BOOTSTRAP_AUTHORITY_BEGIN
+do $koaptix_m902_owner_bootstrap_pre$
+declare
+  v_expected_roles constant text[]:=array['koaptix_rank_authority_owner','koaptix_rank_publication_owner','koaptix_rank_authority_reader','koaptix_rank_manifest_sealer','koaptix_rank_manifest_revoker','koaptix_rank_bootstrap_seeder','koaptix_rank_generation_builder','koaptix_rank_generation_publisher','koaptix_rank_publication_rollback'];
+  v_target_roles constant text[]:=array['koaptix_rank_publication_owner'];
+  v_role text;
+  v_mismatch jsonb;
+begin
+  if current_user<>'postgres' or session_user<>'postgres' then
+    raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_EXECUTOR_IDENTITY';
+  end if;
+  with expected (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select role_name,'postgres'::text,'supabase_admin'::text,true,false,false
+    from unnest(v_expected_roles) role_name
+  ), actual (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select granted_role.rolname::text,member_role.rolname::text,
+           grantor_role.rolname::text,am.admin_option,
+           am.inherit_option,am.set_option
+    from pg_catalog.pg_auth_members am
+    join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
+    join pg_catalog.pg_roles member_role on member_role.oid=am.member
+    join pg_catalog.pg_roles grantor_role on grantor_role.oid=am.grantor
+    where granted_role.rolname=any(v_expected_roles)
+       or member_role.rolname=any(v_expected_roles)
+  ), mismatch as (
+    (select 'UNEXPECTED'::text as mismatch_kind,actual.* from actual
+     except all select 'UNEXPECTED'::text,expected.* from expected)
+    union all
+    (select 'MISSING'::text as mismatch_kind,expected.* from expected
+     except all select 'MISSING'::text,actual.* from actual)
+  )
+  select pg_catalog.jsonb_build_object(
+           'kind',mismatch_kind,'granted_role',granted_role_name,
+           'member_role',member_role_name,'grantor_role',grantor_role_name,
+           'admin_option',admin_option,'inherit_option',inherit_option,
+           'set_option',set_option)
+    into v_mismatch
+  from mismatch
+  order by mismatch_kind,granted_role_name,member_role_name,grantor_role_name
+  limit 1;
+  if v_mismatch is not null then
+    raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_PRE_MEMBERSHIP_GRAPH';
+  end if;
+  if (select r.rolname from pg_catalog.pg_namespace n join pg_catalog.pg_roles r on r.oid=n.nspowner where n.nspname='public')
+       is distinct from 'pg_database_owner' then
+    raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_PRE_SCHEMA_OWNER';
+  end if;
+  foreach v_role in array v_target_roles loop
+    if pg_catalog.pg_has_role('postgres',v_role,'SET')
+       or not pg_catalog.has_schema_privilege(v_role,'public','USAGE')
+       or pg_catalog.has_schema_privilege(v_role,'public','CREATE')
+       or exists (
+         select 1 from pg_catalog.pg_auth_members am
+         join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
+         join pg_catalog.pg_roles member_role on member_role.oid=am.member
+         where granted_role.rolname=v_role and member_role.rolname='postgres'
+           and am.grantor=(select oid from pg_catalog.pg_roles where rolname='postgres')
+       ) then
+      raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_PRE_TARGET_STATE';
+    end if;
+  end loop;
+end;
+$koaptix_m902_owner_bootstrap_pre$;
+
+grant koaptix_rank_publication_owner to postgres with admin false, inherit false, set true granted by postgres;
+
+do $koaptix_m902_owner_bootstrap_membership$
+declare
+  v_expected_roles constant text[]:=array['koaptix_rank_authority_owner','koaptix_rank_publication_owner','koaptix_rank_authority_reader','koaptix_rank_manifest_sealer','koaptix_rank_manifest_revoker','koaptix_rank_bootstrap_seeder','koaptix_rank_generation_builder','koaptix_rank_generation_publisher','koaptix_rank_publication_rollback'];
+  v_target_roles constant text[]:=array['koaptix_rank_publication_owner'];
+  v_role text;
+  v_mismatch jsonb;
+begin
+  with expected (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select role_name,'postgres'::text,'supabase_admin'::text,true,false,false
+    from unnest(v_expected_roles) role_name
+    union all
+    select role_name,'postgres'::text,'postgres'::text,false,false,true
+    from unnest(v_target_roles) role_name
+  ), actual (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select granted_role.rolname::text,member_role.rolname::text,
+           grantor_role.rolname::text,am.admin_option,
+           am.inherit_option,am.set_option
+    from pg_catalog.pg_auth_members am
+    join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
+    join pg_catalog.pg_roles member_role on member_role.oid=am.member
+    join pg_catalog.pg_roles grantor_role on grantor_role.oid=am.grantor
+    where granted_role.rolname=any(v_expected_roles)
+       or member_role.rolname=any(v_expected_roles)
+  ), mismatch as (
+    (select 'UNEXPECTED'::text as mismatch_kind,actual.* from actual
+     except all select 'UNEXPECTED'::text,expected.* from expected)
+    union all
+    (select 'MISSING'::text as mismatch_kind,expected.* from expected
+     except all select 'MISSING'::text,actual.* from actual)
+  )
+  select pg_catalog.jsonb_build_object(
+           'kind',mismatch_kind,'granted_role',granted_role_name,
+           'member_role',member_role_name,'grantor_role',grantor_role_name,
+           'admin_option',admin_option,'inherit_option',inherit_option,
+           'set_option',set_option)
+    into v_mismatch
+  from mismatch
+  order by mismatch_kind,granted_role_name,member_role_name,grantor_role_name
+  limit 1;
+  if v_mismatch is not null then
+    raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_ACTIVE_MEMBERSHIP_GRAPH';
+  end if;
+  foreach v_role in array v_target_roles loop
+    if not pg_catalog.pg_has_role('postgres',v_role,'SET') then
+      raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_SET_OPTION';
+    end if;
+  end loop;
+end;
+$koaptix_m902_owner_bootstrap_membership$;
+
+grant create on schema public to koaptix_rank_publication_owner;
+
+do $koaptix_m902_owner_bootstrap_schema$
+declare
+  v_target_roles constant text[]:=array['koaptix_rank_publication_owner'];
+  v_role text;
+begin
+  if (select r.rolname from pg_catalog.pg_namespace n join pg_catalog.pg_roles r on r.oid=n.nspowner where n.nspname='public')
+       is distinct from 'pg_database_owner' then
+    raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_ACTIVE_SCHEMA_OWNER';
+  end if;
+  foreach v_role in array v_target_roles loop
+    if not pg_catalog.has_schema_privilege(v_role,'public','USAGE')
+       or not pg_catalog.has_schema_privilege(v_role,'public','CREATE') then
+      raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_ACTIVE_SCHEMA_ACL';
+    end if;
+  end loop;
+  if exists (
+    select 1 from pg_catalog.pg_namespace n
+    where n.nspname='public'
+      and coalesce(pg_catalog.array_ndims(
+            coalesce(n.nspacl,pg_catalog.acldefault('n',n.nspowner))
+          ),0)>1
+  ) then
+    raise exception using errcode='22023',message='M902_ACLEXPLODE_MULTIDIMENSIONAL_ACL_01';
+  end if;
+  if exists (
+    select 1 from pg_catalog.pg_namespace n
+    cross join lateral pg_catalog.unnest(
+      coalesce(n.nspacl,pg_catalog.acldefault('n',n.nspowner))
+    ) with ordinality acl_source(acl_item,acl_ordinal)
+    cross join lateral pg_catalog.aclexplode(array[acl_source.acl_item]::aclitem[]) acl
+    left join pg_catalog.pg_roles grantee on grantee.oid=acl.grantee
+    where n.nspname='public' and acl.privilege_type='CREATE'
+      and coalesce(grantee.rolname,'PUBLIC')<>'pg_database_owner'
+      and not coalesce(grantee.rolname,'PUBLIC')=any(v_target_roles)
+  ) then
+    raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_ACTIVE_SCHEMA_ACL_EXPANSION';
+  end if;
+end;
+$koaptix_m902_owner_bootstrap_schema$;
+
 alter view public.v_koaptix_rank_membership_authority_u
   owner to koaptix_rank_publication_owner;
+revoke create on schema public from koaptix_rank_publication_owner restrict;
+revoke koaptix_rank_publication_owner from postgres granted by postgres restrict;
+
+do $koaptix_m902_owner_bootstrap_post$
+declare
+  v_expected_roles constant text[]:=array['koaptix_rank_authority_owner','koaptix_rank_publication_owner','koaptix_rank_authority_reader','koaptix_rank_manifest_sealer','koaptix_rank_manifest_revoker','koaptix_rank_bootstrap_seeder','koaptix_rank_generation_builder','koaptix_rank_generation_publisher','koaptix_rank_publication_rollback'];
+  v_target_roles constant text[]:=array['koaptix_rank_publication_owner'];
+  v_role text;
+  v_mismatch jsonb;
+  v_object record;
+  v_actual_owner text;
+  v_owner_count integer:=0;
+begin
+  if current_user<>'postgres' or session_user<>'postgres' then
+    raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_POST_EXECUTOR_IDENTITY';
+  end if;
+  with expected (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select role_name,'postgres'::text,'supabase_admin'::text,true,false,false
+    from unnest(v_expected_roles) role_name
+  ), actual (
+    granted_role_name,member_role_name,grantor_role_name,
+    admin_option,inherit_option,set_option
+  ) as (
+    select granted_role.rolname::text,member_role.rolname::text,
+           grantor_role.rolname::text,am.admin_option,
+           am.inherit_option,am.set_option
+    from pg_catalog.pg_auth_members am
+    join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
+    join pg_catalog.pg_roles member_role on member_role.oid=am.member
+    join pg_catalog.pg_roles grantor_role on grantor_role.oid=am.grantor
+    where granted_role.rolname=any(v_expected_roles)
+       or member_role.rolname=any(v_expected_roles)
+  ), mismatch as (
+    (select 'UNEXPECTED'::text as mismatch_kind,actual.* from actual
+     except all select 'UNEXPECTED'::text,expected.* from expected)
+    union all
+    (select 'MISSING'::text as mismatch_kind,expected.* from expected
+     except all select 'MISSING'::text,actual.* from actual)
+  )
+  select pg_catalog.jsonb_build_object(
+           'kind',mismatch_kind,'granted_role',granted_role_name,
+           'member_role',member_role_name,'grantor_role',grantor_role_name,
+           'admin_option',admin_option,'inherit_option',inherit_option,
+           'set_option',set_option)
+    into v_mismatch
+  from mismatch
+  order by mismatch_kind,granted_role_name,member_role_name,grantor_role_name
+  limit 1;
+  if v_mismatch is not null then
+    raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_POST_MEMBERSHIP_GRAPH';
+  end if;
+  if (select r.rolname from pg_catalog.pg_namespace n join pg_catalog.pg_roles r on r.oid=n.nspowner where n.nspname='public')
+       is distinct from 'pg_database_owner' then
+    raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_POST_SCHEMA_OWNER';
+  end if;
+  foreach v_role in array v_target_roles loop
+    if pg_catalog.pg_has_role('postgres',v_role,'SET')
+       or not pg_catalog.has_schema_privilege(v_role,'public','USAGE')
+       or pg_catalog.has_schema_privilege(v_role,'public','CREATE')
+       or exists (
+         select 1 from pg_catalog.pg_auth_members am
+         join pg_catalog.pg_roles granted_role on granted_role.oid=am.roleid
+         join pg_catalog.pg_roles member_role on member_role.oid=am.member
+         where granted_role.rolname=v_role and member_role.rolname='postgres'
+           and am.grantor=(select oid from pg_catalog.pg_roles where rolname='postgres')
+       ) then
+      raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_POST_TARGET_STATE';
+    end if;
+  end loop;
+  if exists (
+    select 1 from pg_catalog.pg_namespace n
+    where n.nspname='public'
+      and coalesce(pg_catalog.array_ndims(
+            coalesce(n.nspacl,pg_catalog.acldefault('n',n.nspowner))
+          ),0)>1
+  ) then
+    raise exception using errcode='22023',message='M902_ACLEXPLODE_MULTIDIMENSIONAL_ACL_02';
+  end if;
+  if exists (
+    select 1 from pg_catalog.pg_namespace n
+    cross join lateral pg_catalog.unnest(
+      coalesce(n.nspacl,pg_catalog.acldefault('n',n.nspowner))
+    ) with ordinality acl_source(acl_item,acl_ordinal)
+    cross join lateral pg_catalog.aclexplode(array[acl_source.acl_item]::aclitem[]) acl
+    left join pg_catalog.pg_roles grantee on grantee.oid=acl.grantee
+    where n.nspname='public' and acl.privilege_type='CREATE'
+      and coalesce(grantee.rolname,'PUBLIC')<>'pg_database_owner'
+  ) then
+    raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_POST_SCHEMA_ACL_EXPANSION';
+  end if;
+  for v_object in select * from (values
+      ('RELATION','public.v_koaptix_rank_membership_authority_u','koaptix_rank_publication_owner')
+    ) expected(kind,object_identity,expected_owner)
+  loop
+    v_actual_owner:=null;
+    if v_object.kind='FUNCTION' then
+      select pg_catalog.pg_get_userbyid(p.proowner) into v_actual_owner
+      from pg_catalog.pg_proc p where p.oid=pg_catalog.to_regprocedure(v_object.object_identity);
+    else
+      select pg_catalog.pg_get_userbyid(c.relowner) into v_actual_owner
+      from pg_catalog.pg_class c where c.oid=pg_catalog.to_regclass(v_object.object_identity);
+    end if;
+    if v_actual_owner is distinct from v_object.expected_owner then
+      raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_OWNER_MANIFEST';
+    end if;
+    v_owner_count:=v_owner_count+1;
+  end loop;
+  if v_owner_count<>1 then
+    raise exception using errcode='P0001',message='M902_OWNER_BOOTSTRAP_OWNER_COUNT';
+  end if;
+end;
+$koaptix_m902_owner_bootstrap_post$;
+-- KOAPTIX_M902_OWNER_TRANSFER_BOOTSTRAP_AUTHORITY_END
 revoke all on public.v_koaptix_rank_membership_authority_u
   from public,anon,authenticated,service_role,
        koaptix_rank_authority_reader,koaptix_rank_manifest_sealer,
