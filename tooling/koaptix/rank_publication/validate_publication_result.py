@@ -24,29 +24,74 @@ MODES = {
     "PUBLICATION_RESULT": ROOT / "publication_result_schema.json",
     "INITIAL_SEED_RESULT": ROOT / "initial_seed_result_schema.json",
 }
-EXPECTED_BOOTSTRAP = {
-    "GLOBAL_LATEST": {
-        "snapshot_date": "2026-07-31",
-        "previous_snapshot_date": "2026-07-30",
-        "date_vector_sha256": None,
-        "universe_count": 1,
-        "row_count": 13497,
-        "full_row_digest_sha256": "C560F484EA049B56A6251A34FB4C4E39047E24CB2610A0824DADFE114EC92908",
-        "component_manifest_sha256": "DED5CE75CCD8B4A36F064AD59D3BF43F7DD1D8CEADD33AD43E9150ED7826DB6C",
+BOOTSTRAP_AUTHORITY_KIND = "BOOTSTRAP_COMPATIBILITY_BUNDLE"
+BOOTSTRAP_SEED_QUERY_SHA256 = (
+    "FB458788A70981BAD55A909D49D7AED3BE3772FA1A8DBA3AC89E799791E82A59"
+)
+BOOTSTRAP_SERVICE_VECTOR_FILE_SHA256 = (
+    "5838DF7C3ED197498E23B4330D3CC8D985F9009F79A652EA19B92C0B9AE97E85"
+)
+BOOTSTRAP_SERVICE_VECTOR_SHA256 = (
+    "6E7BA473DDCC0C25F3F46FFEE443BA41CC9D2435F448531189F843AB28FA82F7"
+)
+BOOTSTRAP_SERVICE_COMPONENT = {
+    "snapshot_date": None,
+    "previous_snapshot_date": None,
+    "date_vector_sha256": BOOTSTRAP_SERVICE_VECTOR_SHA256,
+    "universe_count": 225,
+    "row_count": 40484,
+    "full_row_digest_sha256": "FB31BF64DF0000EABDD3827581D6B40FEC2D22EE64582C4B1AB28FE6A26D8008",
+    "component_manifest_sha256": "A1CCACBCE1AF6EE106840E482A97A303813F096EA616F7D3837D865CFA8707E2",
+}
+EXPECTED_BOOTSTRAP_BY_AUTHORITY = {
+    "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1": {
+        "source_authority_kind": BOOTSTRAP_AUTHORITY_KIND,
+        "source_authority_key": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1",
+        "bootstrap_control_sha256": "30B8AD8904E3ADC4942F59D3C7AB7C3D01CC16928BB87FA9509747666E4B4941",
+        "total_component_rows": 53981,
+        "combined_surface_manifest_sha256": "F2C78A29E43EAAD77AF815AB2723B3ED5202D70384E7145DDF01BCFC2041DE63",
+        "components": {
+            "GLOBAL_LATEST": {
+                "snapshot_date": "2026-07-31",
+                "previous_snapshot_date": "2026-07-30",
+                "date_vector_sha256": None,
+                "universe_count": 1,
+                "row_count": 13497,
+                "full_row_digest_sha256": "C560F484EA049B56A6251A34FB4C4E39047E24CB2610A0824DADFE114EC92908",
+                "component_manifest_sha256": "DED5CE75CCD8B4A36F064AD59D3BF43F7DD1D8CEADD33AD43E9150ED7826DB6C",
+            },
+            "UNIVERSE_SERVICE": BOOTSTRAP_SERVICE_COMPONENT,
+        },
     },
-    "UNIVERSE_SERVICE": {
-        "snapshot_date": None,
-        "previous_snapshot_date": None,
-        "date_vector_sha256": "6E7BA473DDCC0C25F3F46FFEE443BA41CC9D2435F448531189F843AB28FA82F7",
-        "universe_count": 225,
-        "row_count": 40484,
-        "full_row_digest_sha256": "FB31BF64DF0000EABDD3827581D6B40FEC2D22EE64582C4B1AB28FE6A26D8008",
-        "component_manifest_sha256": "A1CCACBCE1AF6EE106840E482A97A303813F096EA616F7D3837D865CFA8707E2",
+    "BOOTSTRAP_COMPATIBILITY_BUNDLE_V2": {
+        "source_authority_kind": BOOTSTRAP_AUTHORITY_KIND,
+        "source_authority_key": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V2",
+        "bootstrap_control_sha256": "F8C42997F5220DFB3E61405AAAC2F79D139028E87B69C5F8CA6933354D0E8875",
+        "total_component_rows": 53981,
+        "combined_surface_manifest_sha256": "D59ED800AD9E99F409E21AA57BFFDFE2D66F2971C2C4C622186A1844A6C3C1BD",
+        "components": {
+            "GLOBAL_LATEST": {
+                "snapshot_date": "2026-08-26",
+                "previous_snapshot_date": "2026-08-25",
+                "date_vector_sha256": None,
+                "universe_count": 1,
+                "row_count": 13497,
+                "full_row_digest_sha256": "E62394980D8A76FBEEAC8CDE7EED176934CE7280B7732ED4A4007B29E82B5FCB",
+                "component_manifest_sha256": "B7B2305831883D5018EECD5B557738C1741B0D6BD2392E18D319466507C5FF82",
+            },
+            "UNIVERSE_SERVICE": BOOTSTRAP_SERVICE_COMPONENT,
+        },
     },
 }
-EXPECTED_BOOTSTRAP_COMBINED = (
-    "F2C78A29E43EAAD77AF815AB2723B3ED5202D70384E7145DDF01BCFC2041DE63"
-)
+
+# Historical aliases remain V1-only so existing consumers do not silently
+# reinterpret a V1 control as a branch selector.
+EXPECTED_BOOTSTRAP = EXPECTED_BOOTSTRAP_BY_AUTHORITY[
+    "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1"
+]["components"]
+EXPECTED_BOOTSTRAP_COMBINED = EXPECTED_BOOTSTRAP_BY_AUTHORITY[
+    "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1"
+]["combined_surface_manifest_sha256"]
 
 
 class SemanticError(ValueError):
@@ -240,9 +285,18 @@ def _stdlib_schema_validate(
             encoded = [json.dumps(item, sort_keys=True, separators=(",", ":")) for item in value]
             if len(encoded) != len(set(encoded)):
                 raise SchemaViolation(f"{path}: array items are not unique")
+        prefix_items = schema.get("prefixItems", [])
+        if not isinstance(prefix_items, list):
+            raise SchemaViolation(f"{path}: prefixItems must be an array")
+        for index, member in enumerate(prefix_items):
+            if index >= len(value):
+                break
+            _stdlib_schema_validate(value[index], member, root, f"{path}[{index}]")
         if "items" in schema:
-            for index, item in enumerate(value):
-                _stdlib_schema_validate(item, schema["items"], root, f"{path}[{index}]")
+            for index in range(len(prefix_items), len(value)):
+                _stdlib_schema_validate(
+                    value[index], schema["items"], root, f"{path}[{index}]"
+                )
 
     if isinstance(value, dict):
         required = schema.get("required", [])
@@ -298,6 +352,62 @@ def component_map(components: object) -> dict[str, Mapping[str, Any]]:
     return mapped
 
 
+def bootstrap_authority_record(
+    authority_kind: object,
+    authority_key: object,
+    context: str,
+) -> Mapping[str, Any]:
+    require(
+        authority_kind == BOOTSTRAP_AUTHORITY_KIND,
+        f"{context} bootstrap authority kind is not exact",
+    )
+    require(
+        isinstance(authority_key, str)
+        and authority_key in EXPECTED_BOOTSTRAP_BY_AUTHORITY,
+        f"{context} bootstrap authority key must select exact V1 or V2",
+    )
+    return EXPECTED_BOOTSTRAP_BY_AUTHORITY[authority_key]
+
+
+def validate_exact_bootstrap_branch(
+    components_value: object,
+    total_component_rows: object,
+    combined_surface_manifest_sha256: object,
+    expected: Mapping[str, Any],
+    context: str,
+) -> dict[str, Mapping[str, Any]]:
+    require(
+        isinstance(components_value, list)
+        and [item.get("surface_code") for item in components_value if isinstance(item, dict)]
+        == ["GLOBAL_LATEST", "UNIVERSE_SERVICE"],
+        f"{context} bootstrap surface order is not exact",
+    )
+    components = component_map(components_value)
+    validate_component_manifests(components, combined_surface_manifest_sha256)
+    require(
+        total_component_rows == expected["total_component_rows"],
+        f"{context} bootstrap aggregate mismatch",
+    )
+    require(
+        combined_surface_manifest_sha256
+        == expected["combined_surface_manifest_sha256"],
+        f"{context} bootstrap combined manifest mismatch",
+    )
+    for code, expected_component in expected["components"].items():
+        component = components[code]
+        for key, value in expected_component.items():
+            require(
+                component.get(key) == value,
+                f"{context} bootstrap {code} {key} mismatch",
+            )
+    require(
+        sum(int(item["row_count"]) for item in components.values())
+        == expected["total_component_rows"],
+        f"{context} bootstrap component rows do not equal the aggregate",
+    )
+    return components
+
+
 def compare_prefixed_pairs(mapping: Mapping[str, Any]) -> None:
     expected_keys = [key for key in mapping if key.startswith("expected_")]
     require(expected_keys, "gate evidence contains no expected values")
@@ -332,16 +442,25 @@ def validate_event_pointer(
 
 def validate_initial_seed(document: Mapping[str, Any]) -> None:
     require(document["outcome"] == "SUCCESSFUL_BOOTSTRAP_PUBLICATION", "unexpected initial-seed outcome")
-    require(document["source_authority_kind"] == "BOOTSTRAP_COMPATIBILITY_BUNDLE", "invalid seed authority kind")
-    require(document["source_authority_key"] == "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1", "invalid seed authority key")
+    expected = bootstrap_authority_record(
+        document["source_authority_kind"],
+        document["source_authority_key"],
+        "initial-seed",
+    )
     require(
         document["authorization_proof_exact"]
         == "SEPARATE_INITIAL_READ_MODEL_SEED_EXECUTION_APPROVAL",
         "invalid seed authorization proof",
     )
     require(document["affected_universe_codes"] == [], "bootstrap affected universes must be empty")
-    require(document["total_component_rows"] == 53981, "bootstrap aggregate row count mismatch")
-    require(document["combined_surface_manifest_sha256"] == EXPECTED_BOOTSTRAP_COMBINED, "bootstrap combined manifest mismatch")
+    expected_hashes = {
+        "seed_query_sha256": BOOTSTRAP_SEED_QUERY_SHA256,
+        "bootstrap_control_sha256": expected["bootstrap_control_sha256"],
+        "service_vector_file_sha256": BOOTSTRAP_SERVICE_VECTOR_FILE_SHA256,
+        "service_vector_sha256": BOOTSTRAP_SERVICE_VECTOR_SHA256,
+    }
+    for key, value in expected_hashes.items():
+        require(document[key] == value, f"initial-seed completion {key} mismatch")
     require(document["official_history_rows_written"] == 0, "bootstrap wrote official history")
     require(document["official_snapshot_rows_written"] == 0, "bootstrap wrote official snapshots")
     require(document["pre_post_row_mismatches"] == 0, "bootstrap row mismatch")
@@ -349,15 +468,13 @@ def validate_initial_seed(document: Mapping[str, Any]) -> None:
     require(document["automatic_retry_count"] == 0, "bootstrap retried")
     require(document["cache_mutations"] == 0, "bootstrap mutated a cache")
 
-    components = component_map(document["surface_components"])
-    validate_component_manifests(
-        components, document["combined_surface_manifest_sha256"]
+    validate_exact_bootstrap_branch(
+        document["surface_components"],
+        document["total_component_rows"],
+        document["combined_surface_manifest_sha256"],
+        expected,
+        "initial-seed",
     )
-    for code, expected in EXPECTED_BOOTSTRAP.items():
-        component = components[code]
-        for key, value in expected.items():
-            require(component.get(key) == value, f"{code} bootstrap {key} mismatch")
-    require(sum(int(item["row_count"]) for item in components.values()) == 53981, "component rows do not sum to aggregate")
 
     require(document["pointer_before"] is None, "initial pointer-before must be null")
     pointer = document["pointer_after"]
@@ -483,22 +600,22 @@ def validate_rollback(document: Mapping[str, Any]) -> None:
             "canonical rollback manifest is not bound to pointer-after",
         )
     else:
-        require(target.get("source_authority_key") == "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1", "rollback bootstrap authority is not exact V1")
-        require(target.get("combined_surface_manifest_sha256") == EXPECTED_BOOTSTRAP_COMBINED, "rollback bootstrap combined manifest mismatch")
+        expected = bootstrap_authority_record(
+            kind,
+            target.get("source_authority_key"),
+            "rollback target",
+        )
         require(
             target.get("target_bundle_matches_pointer_after_generation") is True,
             "rollback bootstrap bundle is not bound to pointer-after",
         )
-        require(
-            target.get("total_component_rows") == 53981,
-            "rollback bootstrap aggregate mismatch",
+        validate_exact_bootstrap_branch(
+            target.get("surface_components"),
+            target.get("total_component_rows"),
+            target.get("combined_surface_manifest_sha256"),
+            expected,
+            "rollback target",
         )
-        for code, expected in EXPECTED_BOOTSTRAP.items():
-            for key, value in expected.items():
-                require(
-                    components[code].get(key) == value,
-                    f"rollback bootstrap {code} {key} mismatch",
-                )
 
 
 def validate_publication(document: Mapping[str, Any]) -> None:

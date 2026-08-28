@@ -493,8 +493,18 @@ def _require_sha256(packet: Mapping[str, Any], key: str) -> str:
     return value
 
 
-def validate_generation_inputs(packet: Mapping[str, Any]) -> dict[str, Any]:
-    """Recompute every surface digest and manifest from the supplied rows."""
+def validate_generation_inputs(
+    packet: Mapping[str, Any],
+    *,
+    expected_initial_seed_vector_rows: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Recompute every surface digest and manifest from the supplied rows.
+
+    Normal BUILD/PUBLISH callers retain the original behavior by omitting
+    ``expected_initial_seed_vector_rows``.  The bootstrap runner supplies the
+    exact immutable vector to additionally close the three initial-seed
+    provenance fields without widening normal publication authority.
+    """
 
     components = _exact_object_array(
         packet, "surface_components", SURFACE_COMPONENT_KEYS
@@ -506,6 +516,27 @@ def validate_generation_inputs(packet: Mapping[str, Any]) -> dict[str, Any]:
     )
     service_rows = _exact_object_array(packet, "service_rows", SERVICE_ROW_KEYS)
     global_rows = _exact_object_array(packet, "global_rows", GLOBAL_ROW_KEYS)
+
+    if expected_initial_seed_vector_rows is not None:
+        packet_generated_at = packet.get("generated_at")
+        _canonical_timestamp_value(
+            packet_generated_at, "initial_seed.generated_at"
+        )
+        execution_run_id = _require_string(packet, "execution_run_id")
+        for index, row in enumerate(service_rows):
+            row_generated_at = row.get("generated_at")
+            _canonical_timestamp_value(
+                row_generated_at,
+                f"initial_seed.service_rows[{index}].generated_at",
+            )
+            if row_generated_at != packet_generated_at:
+                raise ContractError(
+                    "initial-seed service row generated_at differs from packet generated_at"
+                )
+            if row.get("refresh_run_id") != execution_run_id:
+                raise ContractError(
+                    "initial-seed service row refresh_run_id differs from packet execution_run_id"
+                )
 
     service_digest = _row_digest(
         service_rows, SERVICE_DIGEST_KEYS, SERVICE_NUMERIC_TEXT_KEYS
@@ -579,6 +610,12 @@ def validate_generation_inputs(packet: Mapping[str, Any]) -> dict[str, Any]:
         )
 
     service_date_vector = sha256_json(vector_rows)
+    if expected_initial_seed_vector_rows is not None and vector_rows != list(
+        expected_initial_seed_vector_rows
+    ):
+        raise ContractError(
+            "initial-seed source_previous_snapshot_date values differ from the exact accepted vector"
+        )
     global_dates = {
         _canonical_date_value(row.get("snapshot_date"), "global_rows.snapshot_date")
         for row in global_rows

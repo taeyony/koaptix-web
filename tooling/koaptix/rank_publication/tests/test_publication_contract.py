@@ -8,6 +8,7 @@ import re
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,8 +20,23 @@ import run_publication
 import validate_publication_result
 
 
+if not run_publication.QUERY_ROOT.exists():
+    # Run-local candidates mirror changed files only.  Bind unchanged typed
+    # query dependencies from the same repository during candidate tests.
+    run_publication.QUERY_ROOT = (
+        run_initial_seed._repository_root()
+        / "tooling"
+        / "koaptix"
+        / "rank_publication"
+        / "queries"
+    )
+
+
 UUID_A = "11111111-1111-4111-8111-111111111111"
 UUID_B = "22222222-2222-4222-8222-222222222222"
+BOOTSTRAP_V1_KEY = "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1"
+BOOTSTRAP_V2_KEY = "BOOTSTRAP_COMPATIBILITY_BUNDLE_V2"
+BOOTSTRAP_V3_UNKNOWN_KEY = "BOOTSTRAP_COMPATIBILITY_BUNDLE_V3"
 
 PRIMARY_DEFINITION_PROFILE = "PRIMARY_PRODUCTION"
 COMPATIBILITY_DEFINITION_PROFILE = "SANITIZED_SCHEMA_ONLY_COMMENT_OMISSION_V1"
@@ -433,7 +449,10 @@ def exact_publish_result(packet: dict[str, object]) -> dict[str, object]:
     }
 
 
-def exact_seed_result() -> dict[str, object]:
+def exact_seed_result(
+    authority_key: str = BOOTSTRAP_V1_KEY,
+) -> dict[str, object]:
+    authority = run_initial_seed.EXPECTED_BOOTSTRAP_BY_AUTHORITY[authority_key]
     return {
         "action": run_initial_seed.SEED.action,
         "outcome": "PUBLISHED",
@@ -442,61 +461,82 @@ def exact_seed_result() -> dict[str, object]:
         "publication_version": 1,
         "active_generation_id": UUID_A,
         "previous_generation_id": None,
-        "published_at": "2026-08-01T00:00:00Z",
+        "published_at": "2026-08-01T00:00:02Z",
         "surface_count": 2,
         "total_component_rows": 53981,
-        "combined_surface_manifest_sha256": (
-            run_initial_seed.EXPECTED["combined_surface_manifest_sha256"]
-        ),
+        "source_authority_kind": "BOOTSTRAP_COMPATIBILITY_BUNDLE",
+        "source_authority_key": authority_key,
+        "combined_surface_manifest_sha256": authority[
+            "combined_surface_manifest_sha256"
+        ],
         "official_history_rows_written": 0,
         "official_snapshot_rows_written": 0,
         "automatic_retry_count": 0,
     }
 
 
-def valid_initial_seed_result() -> dict[str, object]:
-    recorded = "2026-08-01T00:00:00Z"
+def valid_initial_seed_result(
+    authority_key: str = BOOTSTRAP_V1_KEY,
+) -> dict[str, object]:
+    packet = selector_probe_seed_packet(authority_key)
+    recorded = packet["recorded_at"]
+    expected = validate_publication_result.EXPECTED_BOOTSTRAP_BY_AUTHORITY[
+        authority_key
+    ]
     components = []
     for code in ("GLOBAL_LATEST", "UNIVERSE_SERVICE"):
         components.append(
             {
                 "surface_code": code,
-                **validate_publication_result.EXPECTED_BOOTSTRAP[code],
+                **expected["components"][code],
             }
         )
+    database_result_projection_sha256 = run_initial_seed.sha256_json(
+        run_initial_seed._seed_database_result_projection(
+            exact_seed_result(authority_key)
+        )
+    )
     return {
         "outcome": "SUCCESSFUL_BOOTSTRAP_PUBLICATION",
-        "plan_run_id": "P-BOOTSTRAP.0",
-        "seed_execution_run_id": "E-BOOTSTRAP.0",
-        "generation_id": UUID_A,
+        "plan_run_id": packet["plan_run_id"],
+        "seed_execution_run_id": packet["execution_run_id"],
+        "generation_id": packet["generation_id"],
         "authorization_proof_exact": (
             "SEPARATE_INITIAL_READ_MODEL_SEED_EXECUTION_APPROVAL"
         ),
         "source_authority_kind": "BOOTSTRAP_COMPATIBILITY_BUNDLE",
-        "source_authority_key": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1",
+        "source_authority_key": authority_key,
+        "seed_packet_sha256": run_initial_seed.sha256_json(packet),
+        "seed_query_sha256": validate_publication_result.BOOTSTRAP_SEED_QUERY_SHA256,
+        "bootstrap_control_sha256": expected["bootstrap_control_sha256"],
+        "service_vector_file_sha256": validate_publication_result.BOOTSTRAP_SERVICE_VECTOR_FILE_SHA256,
+        "service_vector_sha256": validate_publication_result.BOOTSTRAP_SERVICE_VECTOR_SHA256,
+        "expected_database_result_projection_sha256": database_result_projection_sha256,
         "affected_universe_codes": [],
         "surface_components": components,
         "total_component_rows": 53981,
-        "combined_surface_manifest_sha256": validate_publication_result.EXPECTED_BOOTSTRAP_COMBINED,
+        "combined_surface_manifest_sha256": expected[
+            "combined_surface_manifest_sha256"
+        ],
         "official_history_rows_written": 0,
         "official_snapshot_rows_written": 0,
         "pre_post_row_mismatches": 0,
         "pre_post_value_mismatches": 0,
         "pointer_before": None,
         "pointer_after": {
-            "generation_id": UUID_A,
+            "generation_id": packet["generation_id"],
             "previous_generation_id": None,
-            "event_id": UUID_B,
+            "event_id": packet["event_id"],
             "publication_version": 1,
             "published_at": recorded,
         },
         "publish_event": {
-            "event_id": UUID_B,
+            "event_id": packet["event_id"],
             "event_type": "PUBLISH",
             "from_generation_id": None,
-            "to_generation_id": UUID_A,
-            "plan_run_id": "P-BOOTSTRAP.0",
-            "execution_run_id": "E-BOOTSTRAP.0",
+            "to_generation_id": packet["generation_id"],
+            "plan_run_id": packet["plan_run_id"],
+            "execution_run_id": packet["execution_run_id"],
             "expected_previous_version": 0,
             "publication_version": 1,
             "recorded_at": recorded,
@@ -504,6 +544,98 @@ def valid_initial_seed_result() -> dict[str, object]:
         "automatic_retry_count": 0,
         "smoke_status": "PASS",
         "cache_mutations": 0,
+    }
+
+
+def valid_bootstrap_rollback_document(
+    authority_key: str = BOOTSTRAP_V1_KEY,
+) -> dict[str, object]:
+    expected = validate_publication_result.EXPECTED_BOOTSTRAP_BY_AUTHORITY[
+        authority_key
+    ]
+    before_event_id = "44444444-4444-4444-8444-444444444444"
+    rollback_event_id = "33333333-3333-4333-8333-333333333333"
+    before = {
+        "generation_id": UUID_B,
+        "previous_generation_id": UUID_A,
+        "event_id": before_event_id,
+        "publication_version": 2,
+        "published_at": "2026-08-31T00:00:00Z",
+    }
+    after = {
+        "generation_id": UUID_A,
+        "previous_generation_id": UUID_B,
+        "event_id": rollback_event_id,
+        "publication_version": 3,
+        "published_at": "2026-08-31T00:01:00Z",
+    }
+    components = [
+        {"surface_code": code, **expected_component}
+        for code, expected_component in expected["components"].items()
+    ]
+    return {
+        "identity": {"plan_run_id": "P-ROLLBACK.0"},
+        "rollback": {
+            "rollback_execution_run_id": "E-ROLLBACK.0",
+            "original_publication_execution_run_id": "E-PUBLISH.0",
+            "original_publish_event_id": before_event_id,
+            "pointer_before": before,
+            "pointer_after": after,
+            "rollback_event": {
+                "event_id": rollback_event_id,
+                "event_type": "ROLLBACK",
+                "from_generation_id": UUID_B,
+                "to_generation_id": UUID_A,
+                "plan_run_id": "P-ROLLBACK.0",
+                "execution_run_id": "E-ROLLBACK.0",
+                "expected_previous_version": 2,
+                "publication_version": 3,
+                "recorded_at": "2026-08-31T00:01:00Z",
+            },
+            "target_authority": {
+                "authority_kind": "BOOTSTRAP_COMPATIBILITY_BUNDLE",
+                "target_generation_id": UUID_A,
+                "source_authority_key": authority_key,
+                "required_surface_codes": [
+                    "GLOBAL_LATEST",
+                    "UNIVERSE_SERVICE",
+                ],
+                "surface_components": components,
+                "total_component_rows": expected["total_component_rows"],
+                "combined_surface_manifest_sha256": expected[
+                    "combined_surface_manifest_sha256"
+                ],
+                "target_bundle_matches_pointer_after_generation": True,
+            },
+        },
+    }
+
+
+def selector_probe_seed_packet(authority_key: str) -> dict[str, object]:
+    """Exact wire key set; selector mismatch is rejected before payload use."""
+
+    return {
+        "schema_version": run_initial_seed.BOOTSTRAP_PACKET_SCHEMA_VERSION,
+        "action": run_initial_seed.SEED.action,
+        "source_authority_kind": "BOOTSTRAP_COMPATIBILITY_BUNDLE",
+        "source_authority_key": authority_key,
+        "plan_run_id": "P-BOOTSTRAP.0",
+        "execution_run_id": "E-BOOTSTRAP.0",
+        "authorization_proof_exact": "SEPARATE_INITIAL_READ_MODEL_SEED_EXECUTION_APPROVAL",
+        "automatic_retry": False,
+        "generation_id": UUID_A,
+        "generated_at": "2026-08-01T00:00:00Z",
+        "verified_at": "2026-08-01T00:00:01Z",
+        "expected_active_generation_id": None,
+        "expected_publication_version": 0,
+        "required_surface_codes": ["GLOBAL_LATEST", "UNIVERSE_SERVICE"],
+        "surface_components": [],
+        "service_universes": [],
+        "service_rows": [],
+        "global_rows": [],
+        "combined_surface_manifest_sha256": "0" * 64,
+        "event_id": UUID_B,
+        "recorded_at": "2026-08-01T00:00:02Z",
     }
 
 
@@ -693,14 +825,20 @@ class PublicationRunnerContractTests(unittest.TestCase):
         seed_packet = {
             "generation_id": UUID_A,
             "event_id": UUID_B,
-            "recorded_at": "2026-08-01T00:00:00Z",
+            "recorded_at": "2026-08-01T00:00:02Z",
         }
         seed_completion = valid_initial_seed_result()
+        seed_authority = run_initial_seed.select_bootstrap_authority(
+            BOOTSTRAP_V1_KEY
+        )
         self.assertEqual(
             run_initial_seed.validate_seed_action_result(
-                seed_result, seed_packet, seed_completion
+                seed_result,
+                seed_packet,
+                seed_completion,
+                seed_authority,
             ),
-            seed_result,
+            run_initial_seed._seed_database_result_projection(seed_result),
         )
 
     def test_runner_source_has_no_retry_loop(self) -> None:
@@ -712,14 +850,40 @@ class PublicationRunnerContractTests(unittest.TestCase):
 
 class BootstrapAndResultContractTests(unittest.TestCase):
     def test_bootstrap_controls_are_exact_and_aggregate_is_not_component(self) -> None:
-        bundle, vector = run_initial_seed.load_and_verify_controls()
+        bundle, vector, authority = run_initial_seed.load_and_verify_controls(
+            BOOTSTRAP_V1_KEY
+        )
         self.assertEqual(len(vector["rows"]), 225)
         self.assertEqual(bundle["surface_count"], 2)
         self.assertEqual([row["row_count"] for row in bundle["components"]], [13497, 40484])
         self.assertNotIn(53981, [row["row_count"] for row in bundle["components"]])
+        self.assertEqual(authority["source_authority_key"], BOOTSTRAP_V1_KEY)
+
+    def test_v2_bootstrap_control_is_exact_and_reuses_v1_vector_subauthority(self) -> None:
+        bundle, vector, authority = run_initial_seed.load_and_verify_controls(
+            BOOTSTRAP_V2_KEY
+        )
+        self.assertEqual(bundle["source_authority_key"], BOOTSTRAP_V2_KEY)
+        self.assertEqual(
+            bundle["status"], "UNAPPLIED_CANDIDATE_NOT_ACCEPTED_CONTROL"
+        )
+        self.assertEqual(len(vector["rows"]), 225)
+        self.assertEqual(
+            authority["service_vector_subauthority"]["authority_key"],
+            BOOTSTRAP_V1_KEY,
+        )
+        self.assertFalse(
+            authority["service_vector_subauthority"]["relabelled_as_v2"]
+        )
+        self.assertEqual(
+            set(authority["row_artifacts"]),
+            {"GLOBAL_LATEST", "UNIVERSE_SERVICE"},
+        )
 
     def test_bootstrap_vector_is_closed_sorted_and_digest_bound(self) -> None:
-        bundle, vector = run_initial_seed.load_and_verify_controls()
+        bundle, vector, _authority = run_initial_seed.load_and_verify_controls(
+            BOOTSTRAP_V1_KEY
+        )
         rows = vector["rows"]
         codes = [row["universe_code"] for row in rows]
         self.assertEqual(codes, sorted(codes))
@@ -730,7 +894,7 @@ class BootstrapAndResultContractTests(unittest.TestCase):
         digest = hashlib.sha256(
             run_publication.canonical_json(rows).encode("utf-8")
         ).hexdigest().upper()
-        self.assertEqual(digest, run_initial_seed.EXPECTED["vector_sha256"])
+        self.assertEqual(digest, run_initial_seed.VECTOR_LOGICAL_SHA256)
         components = {
             item["surface_code"]: item for item in bundle["components"]
         }
@@ -740,18 +904,536 @@ class BootstrapAndResultContractTests(unittest.TestCase):
         self.assertIsNone(
             components["UNIVERSE_SERVICE"]["previous_snapshot_date"]
         )
-        for code, expected in validate_publication_result.EXPECTED_BOOTSTRAP.items():
+        for code, expected in validate_publication_result.EXPECTED_BOOTSTRAP_BY_AUTHORITY[
+            BOOTSTRAP_V1_KEY
+        ]["components"].items():
             for key, value in expected.items():
                 self.assertEqual(components[code][key], value)
+
+    def test_exact_v1_and_v2_initial_completion_branches(self) -> None:
+        for authority_key in (BOOTSTRAP_V1_KEY, BOOTSTRAP_V2_KEY):
+            with self.subTest(authority_key=authority_key):
+                validate_publication_result.validate_document(
+                    "INITIAL_SEED_RESULT",
+                    valid_initial_seed_result(authority_key),
+                )
+
+    def test_initial_schema_rejects_duplicate_or_swapped_surface_pairs(self) -> None:
+        schema = json.loads(
+            (ROOT / "initial_seed_result_schema.json").read_text(encoding="utf-8")
+        )
+        for authority_key in (BOOTSTRAP_V1_KEY, BOOTSTRAP_V2_KEY):
+            document = valid_initial_seed_result(authority_key)
+            validate_publication_result.validate_schema(document, schema)
+            variants = {
+                "swapped": list(reversed(document["surface_components"])),
+                "duplicate-global": [
+                    copy.deepcopy(document["surface_components"][0]),
+                    copy.deepcopy(document["surface_components"][0]),
+                ],
+                "duplicate-service": [
+                    copy.deepcopy(document["surface_components"][1]),
+                    copy.deepcopy(document["surface_components"][1]),
+                ],
+            }
+            for label, components in variants.items():
+                changed = copy.deepcopy(document)
+                changed["surface_components"] = components
+                with self.subTest(authority_key=authority_key, label=label):
+                    with self.assertRaises(
+                        validate_publication_result.SemanticError
+                    ):
+                        validate_publication_result.validate_schema(changed, schema)
+
+    def test_stdlib_schema_fallback_enforces_exact_ordered_surface_pairs(self) -> None:
+        initial_schema = json.loads(
+            (ROOT / "initial_seed_result_schema.json").read_text(encoding="utf-8")
+        )
+        rollback_schema = json.loads(
+            (ROOT / "publication_result_schema.json").read_text(encoding="utf-8")
+        )
+        target_schema = {
+            "$defs": rollback_schema["$defs"],
+            "$ref": "#/$defs/bootstrap_rollback_target_authority",
+        }
+        for authority_key in (BOOTSTRAP_V1_KEY, BOOTSTRAP_V2_KEY):
+            completion = valid_initial_seed_result(authority_key)
+            validate_publication_result._stdlib_schema_validate(
+                completion,
+                initial_schema,
+                initial_schema,
+            )
+            changed = copy.deepcopy(completion)
+            changed["surface_components"] = list(
+                reversed(changed["surface_components"])
+            )
+            with self.subTest(authority_key=authority_key, surface="completion"):
+                with self.assertRaises(
+                    validate_publication_result.SchemaViolation
+                ):
+                    validate_publication_result._stdlib_schema_validate(
+                        changed,
+                        initial_schema,
+                        initial_schema,
+                    )
+
+            target = valid_bootstrap_rollback_document(authority_key)["rollback"][
+                "target_authority"
+            ]
+            validate_publication_result._stdlib_schema_validate(
+                target,
+                target_schema,
+                target_schema,
+            )
+            changed_target = copy.deepcopy(target)
+            changed_target["surface_components"] = [
+                copy.deepcopy(target["surface_components"][0]),
+                copy.deepcopy(target["surface_components"][0]),
+            ]
+            with self.subTest(authority_key=authority_key, surface="rollback"):
+                with self.assertRaises(
+                    validate_publication_result.SchemaViolation
+                ):
+                    validate_publication_result._stdlib_schema_validate(
+                        changed_target,
+                        target_schema,
+                        target_schema,
+                    )
+
+    def test_selector_and_packet_authority_are_bidirectionally_closed(self) -> None:
+        for selector, packet_key in (
+            (BOOTSTRAP_V1_KEY, BOOTSTRAP_V2_KEY),
+            (BOOTSTRAP_V2_KEY, BOOTSTRAP_V1_KEY),
+        ):
+            authority = run_initial_seed.select_bootstrap_authority(selector)
+            bundle = {
+                "source_authority_kind": authority["source_authority_kind"],
+                "source_authority_key": authority["source_authority_key"],
+            }
+            with self.subTest(selector=selector, packet_key=packet_key):
+                with self.assertRaisesRegex(
+                    run_publication.ContractError,
+                    "source_authority_key differs from selector",
+                ):
+                    run_initial_seed.validate_seed_packet(
+                        selector_probe_seed_packet(packet_key),
+                        bundle,
+                        {},
+                        authority,
+                    )
+
+        with self.assertRaisesRegex(
+            run_publication.ContractError,
+            "exact V1 or V2",
+        ):
+            run_initial_seed.select_bootstrap_authority(BOOTSTRAP_V3_UNKNOWN_KEY)
+
+        with self.assertRaises(TypeError):
+            run_initial_seed.load_and_verify_controls(
+                BOOTSTRAP_V1_KEY,
+                bundle_path=Path("arbitrary-control.json"),
+            )
+
+    def test_initial_completion_rejects_every_cross_branch_mix(self) -> None:
+        v1 = validate_publication_result.EXPECTED_BOOTSTRAP_BY_AUTHORITY[
+            BOOTSTRAP_V1_KEY
+        ]
+        v2 = validate_publication_result.EXPECTED_BOOTSTRAP_BY_AUTHORITY[
+            BOOTSTRAP_V2_KEY
+        ]
+        cases: list[tuple[str, dict[str, object]]] = []
+
+        changed = valid_initial_seed_result(BOOTSTRAP_V1_KEY)
+        changed["source_authority_key"] = BOOTSTRAP_V2_KEY
+        cases.append(("V1 completion presented as V2", changed))
+
+        changed = valid_initial_seed_result(BOOTSTRAP_V2_KEY)
+        changed["source_authority_key"] = BOOTSTRAP_V1_KEY
+        cases.append(("V2 completion presented as V1", changed))
+
+        changed = valid_initial_seed_result(BOOTSTRAP_V1_KEY)
+        changed["surface_components"][0] = {
+            "surface_code": "GLOBAL_LATEST",
+            **v2["components"]["GLOBAL_LATEST"],
+        }
+        cases.append(("shared SERVICE cannot mask V2 GLOBAL in V1", changed))
+
+        changed = valid_initial_seed_result(BOOTSTRAP_V2_KEY)
+        changed["surface_components"][0] = {
+            "surface_code": "GLOBAL_LATEST",
+            **v1["components"]["GLOBAL_LATEST"],
+        }
+        cases.append(("shared SERVICE cannot mask V1 GLOBAL in V2", changed))
+
+        changed = valid_initial_seed_result(BOOTSTRAP_V1_KEY)
+        changed["combined_surface_manifest_sha256"] = v2[
+            "combined_surface_manifest_sha256"
+        ]
+        cases.append(("V1 key with V2 combined", changed))
+
+        changed = valid_initial_seed_result(BOOTSTRAP_V2_KEY)
+        changed["combined_surface_manifest_sha256"] = v1[
+            "combined_surface_manifest_sha256"
+        ]
+        cases.append(("V2 key with V1 combined", changed))
+
+        changed = valid_initial_seed_result(BOOTSTRAP_V1_KEY)
+        changed["bootstrap_control_sha256"] = v2["bootstrap_control_sha256"]
+        cases.append(("V1 key with V2 control", changed))
+
+        changed = valid_initial_seed_result(BOOTSTRAP_V2_KEY)
+        changed["source_authority_key"] = BOOTSTRAP_V3_UNKNOWN_KEY
+        cases.append(("unknown V3 key", changed))
+
+        changed = valid_initial_seed_result(BOOTSTRAP_V2_KEY)
+        del changed["source_authority_key"]
+        cases.append(("missing authority key", changed))
+
+        changed = valid_initial_seed_result(BOOTSTRAP_V2_KEY)
+        changed["source_authority_kind"], changed["source_authority_key"] = (
+            changed["source_authority_key"],
+            changed["source_authority_kind"],
+        )
+        cases.append(("swapped authority fields", changed))
+
+        for label, document in cases:
+            with self.subTest(label=label):
+                with self.assertRaises(validate_publication_result.SemanticError):
+                    validate_publication_result.validate_document(
+                        "INITIAL_SEED_RESULT", document
+                    )
+
+    def test_initial_completion_identity_hashes_are_closed(self) -> None:
+        for authority_key in (BOOTSTRAP_V1_KEY, BOOTSTRAP_V2_KEY):
+            for field in (
+                "seed_query_sha256",
+                "bootstrap_control_sha256",
+                "service_vector_file_sha256",
+                "service_vector_sha256",
+            ):
+                changed = valid_initial_seed_result(authority_key)
+                changed[field] = "C" * 64
+                with self.subTest(authority_key=authority_key, field=field):
+                    with self.assertRaises(
+                        validate_publication_result.SemanticError
+                    ):
+                        validate_publication_result.validate_document(
+                            "INITIAL_SEED_RESULT", changed
+                        )
+
+    def test_completion_six_hashes_bind_one_way_without_cycle(self) -> None:
+        fields = (
+            "seed_packet_sha256",
+            "seed_query_sha256",
+            "bootstrap_control_sha256",
+            "service_vector_file_sha256",
+            "service_vector_sha256",
+            "expected_database_result_projection_sha256",
+        )
+        for authority_key in (BOOTSTRAP_V1_KEY, BOOTSTRAP_V2_KEY):
+            packet = selector_probe_seed_packet(authority_key)
+            authority = run_initial_seed.select_bootstrap_authority(authority_key)
+            bundle = {
+                "components": authority["components"],
+                "total_component_rows": authority["total_component_rows"],
+                "combined_surface_manifest_sha256": authority[
+                    "combined_surface_manifest_sha256"
+                ],
+            }
+            completion = valid_initial_seed_result(authority_key)
+            run_initial_seed.validate_seed_completion(
+                completion,
+                packet,
+                bundle,
+                authority,
+            )
+            for field in fields:
+                changed = copy.deepcopy(completion)
+                changed[field] = "C" * 64
+                with self.subTest(authority_key=authority_key, field=field):
+                    with self.assertRaises(run_publication.ContractError):
+                        run_initial_seed.validate_seed_completion(
+                            changed,
+                            packet,
+                            bundle,
+                            authority,
+                        )
+
+    def test_control_and_vector_file_identity_drift_stops_without_fallback(self) -> None:
+        for authority_key in (BOOTSTRAP_V1_KEY, BOOTSTRAP_V2_KEY):
+            authority = run_initial_seed.select_bootstrap_authority(authority_key)
+            with self.subTest(authority_key=authority_key, drift="control bytes"):
+                with mock.patch.object(
+                    run_initial_seed,
+                    "_file_identity",
+                    return_value=(authority["control_bytes"] + 1, authority["control_sha256"]),
+                ):
+                    with self.assertRaisesRegex(
+                        run_publication.ContractError,
+                        "control byte identity drifted",
+                    ):
+                        run_initial_seed.load_and_verify_controls(authority_key)
+
+            with self.subTest(authority_key=authority_key, drift="control hash"):
+                with mock.patch.object(
+                    run_initial_seed,
+                    "_file_identity",
+                    return_value=(authority["control_bytes"], "0" * 64),
+                ):
+                    with self.assertRaisesRegex(
+                        run_publication.ContractError,
+                        "control byte identity drifted",
+                    ):
+                        run_initial_seed.load_and_verify_controls(authority_key)
+
+            for vector_field in ("bytes", "sha256"):
+                vector_identity = (
+                    run_initial_seed.VECTOR_FILE_BYTES
+                    + (1 if vector_field == "bytes" else 0),
+                    (
+                        "0" * 64
+                        if vector_field == "sha256"
+                        else run_initial_seed.VECTOR_FILE_SHA256
+                    ),
+                )
+                with self.subTest(
+                    authority_key=authority_key,
+                    drift=f"vector {vector_field}",
+                ):
+                    with mock.patch.object(
+                        run_initial_seed,
+                        "_file_identity",
+                        side_effect=(
+                            (
+                                authority["control_bytes"],
+                                authority["control_sha256"],
+                            ),
+                            vector_identity,
+                        ),
+                    ):
+                        with self.assertRaisesRegex(
+                            run_publication.ContractError,
+                            "vector byte identity drifted",
+                        ):
+                            run_initial_seed.load_and_verify_controls(
+                                authority_key
+                            )
+
+    def test_v2_row_artifact_byte_and_hash_identity_is_atomic(self) -> None:
+        authority = run_initial_seed.select_bootstrap_authority(
+            BOOTSTRAP_V2_KEY
+        )
+        expected = {
+            "GLOBAL_LATEST": {
+                "path": ".handoff/work/P-KOAPTIX-PRODUCTION-M903-INITIAL-COMPATIBILITY-FRESH-CURRENT-LATEST-IDENTITY-LOCALIZATION-AND-READ-ONLY-CAPTURE.0/capture/current_global_rows_34.json",
+                "bytes": 11909898,
+                "sha256": "4E49ACA2B0AC2DB45347D9F319CF48527D2EB5E9D4EE8953752665D6371DCCA6",
+                "rows": 13497,
+                "fields": 34,
+            },
+            "UNIVERSE_SERVICE": {
+                "path": ".handoff/work/P-KOAPTIX-PRODUCTION-M903-INITIAL-COMPATIBILITY-FRESH-CURRENT-LATEST-IDENTITY-LOCALIZATION-AND-READ-ONLY-CAPTURE.0/capture/current_service_source_rows_24.json",
+                "bytes": 24164710,
+                "sha256": "A260B5D3B156F9BE7785605E1FA121858E4B626FB4998C69876505E35863D021",
+                "rows": 40484,
+                "fields": 24,
+            },
+        }
+        self.assertEqual(authority["row_artifacts"], expected)
+        repository = run_initial_seed._repository_root()
+        expected_artifact_paths = {
+            surface_code: (repository / identity["path"]).resolve()
+            for surface_code, identity in expected.items()
+        }
+
+        for drift_surface in ("GLOBAL_LATEST", "UNIVERSE_SERVICE"):
+            for drift_field in ("bytes", "sha256"):
+                def mocked_identity(
+                    _path: Path,
+                    label: str,
+                    *,
+                    selected_surface: str = drift_surface,
+                    selected_field: str = drift_field,
+                ) -> tuple[int, str]:
+                    if label == "bootstrap control":
+                        return authority["control_bytes"], authority["control_sha256"]
+                    if label == "bootstrap service vector":
+                        return (
+                            run_initial_seed.VECTOR_FILE_BYTES,
+                            run_initial_seed.VECTOR_FILE_SHA256,
+                        )
+                    for surface_code, identity in expected.items():
+                        expected_label = f"{surface_code} row artifact"
+                        expected_path = expected_artifact_paths[surface_code]
+                        if label == expected_label or _path.resolve() == expected_path:
+                            self.assertEqual(label, expected_label)
+                            self.assertEqual(_path.resolve(), expected_path)
+                            artifact_bytes = identity["bytes"]
+                            artifact_sha256 = identity["sha256"]
+                            if surface_code == selected_surface:
+                                if selected_field == "bytes":
+                                    artifact_bytes += 1
+                                else:
+                                    artifact_sha256 = "0" * 64
+                            return artifact_bytes, artifact_sha256
+                    self.fail(f"unexpected identity label: {label}")
+
+                with self.subTest(
+                    surface_code=drift_surface,
+                    field=drift_field,
+                ):
+                    with mock.patch.object(
+                        run_initial_seed,
+                        "_file_identity",
+                        side_effect=mocked_identity,
+                    ):
+                        with self.assertRaisesRegex(
+                            run_publication.ContractError,
+                            f"{drift_surface} row artifact byte identity drifted",
+                        ):
+                            run_initial_seed.load_and_verify_controls(
+                                BOOTSTRAP_V2_KEY
+                            )
+
+        self.assertIsNone(
+            run_initial_seed.select_bootstrap_authority(BOOTSTRAP_V1_KEY)[
+                "row_artifacts"
+            ]
+        )
+
+    def test_vector_logical_digest_drift_fails_with_file_identity_exact(self) -> None:
+        authority = run_initial_seed.select_bootstrap_authority(
+            BOOTSTRAP_V2_KEY
+        )
+        bundle = json.loads(
+            (ROOT / authority["control_file"]).read_text(encoding="utf-8")
+        )
+        vector_path = run_initial_seed._fixed_tooling_dependency(
+            "bootstrap_legacy_source_date_vector.json",
+            "bootstrap service vector",
+        )
+        vector = json.loads(vector_path.read_text(encoding="utf-8"))
+
+        def exact_identity(_path: Path, label: str) -> tuple[int, str]:
+            if label == "bootstrap control":
+                return authority["control_bytes"], authority["control_sha256"]
+            if label == "bootstrap service vector":
+                return (
+                    run_initial_seed.VECTOR_FILE_BYTES,
+                    run_initial_seed.VECTOR_FILE_SHA256,
+                )
+            for surface_code, identity in authority["row_artifacts"].items():
+                if label == f"{surface_code} row artifact":
+                    return identity["bytes"], identity["sha256"]
+            self.fail(f"unexpected identity label: {label}")
+
+        variants = {}
+        changed = copy.deepcopy(vector)
+        changed["vector_sha256"] = "0" * 64
+        variants["declared-logical-digest"] = changed
+        changed = copy.deepcopy(vector)
+        changed["rows"][0]["row_count"] += 1
+        variants["logical-row-material"] = changed
+        for label, changed_vector in variants.items():
+            with self.subTest(label=label):
+                with mock.patch.object(
+                    run_initial_seed,
+                    "_file_identity",
+                    side_effect=exact_identity,
+                ), mock.patch.object(
+                    run_initial_seed,
+                    "load_json_object",
+                    side_effect=(bundle, changed_vector),
+                ):
+                    with self.assertRaisesRegex(
+                        run_publication.ContractError,
+                        "vector digest mismatch",
+                    ):
+                        run_initial_seed.load_and_verify_controls(
+                            BOOTSTRAP_V2_KEY
+                        )
+
+    def test_bootstrap_source_has_no_fallback_update_or_retry_path(self) -> None:
+        source = (ROOT / "run_initial_seed.py").read_text(encoding="utf-8")
+        self.assertIn("no fallback is allowed", source)
+        self.assertIn("required=True", source)
+        self.assertNotIn("for attempt", source)
+        self.assertNotIn("while True", source)
+        self.assertNotIn("time.sleep", source)
+
+    def test_bootstrap_only_provenance_is_exact_and_normal_build_is_unchanged(self) -> None:
+        packet = valid_publication_packet(run_publication.BUILD)
+        packet["execution_run_id"] = "fixture-refresh"
+        expected_vector = [
+            {
+                "max_rank": 1,
+                "min_rank": 1,
+                "previous_date": "2026-08-30",
+                "row_count": 1,
+                "snapshot_date": "2026-08-31",
+                "universe_code": "KOREA_ALL",
+            }
+        ]
+        run_publication.validate_generation_inputs(packet)
+        run_publication.validate_generation_inputs(
+            packet,
+            expected_initial_seed_vector_rows=expected_vector,
+        )
+
+        mutations = (
+            (
+                "previous-date",
+                lambda value: value["service_rows"][0].__setitem__(
+                    "source_previous_snapshot_date", "2026-08-29"
+                ),
+            ),
+            (
+                "generated_at",
+                lambda value: value["service_rows"][0].__setitem__(
+                    "generated_at", "2026-08-31T00:00:01Z"
+                ),
+            ),
+            (
+                "refresh_run_id",
+                lambda value: value["service_rows"][0].__setitem__(
+                    "refresh_run_id", "wrong-run"
+                ),
+            ),
+        )
+        for label, mutate in mutations:
+            changed = copy.deepcopy(packet)
+            mutate(changed)
+            with self.subTest(label=label):
+                with self.assertRaises(run_publication.ContractError):
+                    run_publication.validate_generation_inputs(
+                        changed,
+                        expected_initial_seed_vector_rows=expected_vector,
+                    )
+
+    def test_v2_source_freshness_single_field_drift_never_falls_back(self) -> None:
+        mutations = (
+            ("snapshot_date", "2026-08-27"),
+            ("previous_snapshot_date", "2026-08-24"),
+            ("row_count", 13496),
+            ("full_row_digest_sha256", "0" * 64),
+            ("component_manifest_sha256", "1" * 64),
+        )
+        for field, value in mutations:
+            changed = valid_initial_seed_result(BOOTSTRAP_V2_KEY)
+            changed["surface_components"][0][field] = value
+            with self.subTest(field=field):
+                with self.assertRaises(validate_publication_result.SemanticError):
+                    validate_publication_result.validate_document(
+                        "INITIAL_SEED_RESULT", changed
+                    )
+                self.assertEqual(changed["source_authority_key"], BOOTSTRAP_V2_KEY)
 
     def test_initial_result_requires_schema_and_semantic_equality(self) -> None:
         result = valid_initial_seed_result()
         validate_publication_result.validate_document("INITIAL_SEED_RESULT", result)
         changed = copy.deepcopy(result)
         changed["surface_components"][0]["row_count"] = 13496
-        with self.assertRaisesRegex(
-            validate_publication_result.SemanticError, "component manifest"
-        ):
+        with self.assertRaises(validate_publication_result.SemanticError):
             validate_publication_result.validate_document("INITIAL_SEED_RESULT", changed)
 
     def test_initial_result_binds_event_pointer_and_generation(self) -> None:
@@ -784,10 +1466,14 @@ class BootstrapAndResultContractTests(unittest.TestCase):
                     )
 
     def test_operational_action_schema_binds_role_to_one_query(self) -> None:
-        schema = json.loads(
-            (ROOT / "operational_role_action_packet_schema.json").read_text(
-                encoding="utf-8"
+        schema_path = ROOT / "operational_role_action_packet_schema.json"
+        if not schema_path.exists():
+            schema_path = run_initial_seed._fixed_tooling_dependency(
+                "operational_role_action_packet_schema.json",
+                "operational action packet schema",
             )
+        schema = json.loads(
+            schema_path.read_text(encoding="utf-8")
         )
         packet = {
             "schema_version": 1,
@@ -815,68 +1501,49 @@ class BootstrapAndResultContractTests(unittest.TestCase):
         with self.assertRaises(validate_publication_result.SemanticError):
             validate_publication_result.validate_schema(packet, schema)
 
+        packet.update(
+            {
+                "action_role": "koaptix_rank_bootstrap_seeder",
+                "entrypoint": "public.koaptix_seed_latest_board_compatibility_generation(jsonb)",
+                "query_path": "tooling/koaptix/rank_publication/queries/bootstrap_legacy_vector_generation.sql",
+            }
+        )
+        validate_publication_result.validate_schema(packet, schema)
+        for field, value in (
+            (
+                "query_path",
+                "tooling/koaptix/rank_publication/queries/verify_and_publish_generation.sql",
+            ),
+            (
+                "entrypoint",
+                "public.koaptix_build_rank_publication_generation(jsonb)",
+            ),
+        ):
+            changed = copy.deepcopy(packet)
+            changed[field] = value
+            with self.subTest(field=field):
+                with self.assertRaises(validate_publication_result.SemanticError):
+                    validate_publication_result.validate_schema(changed, schema)
+
     def test_bootstrap_rollback_semantics_use_schema_authority_names(self) -> None:
-        before_event_id = "44444444-4444-4444-8444-444444444444"
-        rollback_event_id = "33333333-3333-4333-8333-333333333333"
-        before = {
-            "generation_id": UUID_B,
-            "previous_generation_id": UUID_A,
-            "event_id": before_event_id,
-            "publication_version": 2,
-            "published_at": "2026-08-31T00:00:00Z",
+        schema = json.loads(
+            (ROOT / "publication_result_schema.json").read_text(encoding="utf-8")
+        )
+        target_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$defs": schema["$defs"],
+            "$ref": "#/$defs/bootstrap_rollback_target_authority",
         }
-        after = {
-            "generation_id": UUID_A,
-            "previous_generation_id": UUID_B,
-            "event_id": rollback_event_id,
-            "publication_version": 3,
-            "published_at": "2026-08-31T00:01:00Z",
-        }
-        event = {
-            "event_id": rollback_event_id,
-            "event_type": "ROLLBACK",
-            "from_generation_id": UUID_B,
-            "to_generation_id": UUID_A,
-            "plan_run_id": "P-ROLLBACK.0",
-            "execution_run_id": "E-ROLLBACK.0",
-            "expected_previous_version": 2,
-            "publication_version": 3,
-            "recorded_at": "2026-08-31T00:01:00Z",
-        }
-        components = [
-            {"surface_code": code, **expected}
-            for code, expected in validate_publication_result.EXPECTED_BOOTSTRAP.items()
-        ]
-        document = {
-            "identity": {"plan_run_id": "P-ROLLBACK.0"},
-            "rollback": {
-                "rollback_execution_run_id": "E-ROLLBACK.0",
-                "original_publication_execution_run_id": "E-PUBLISH.0",
-                "original_publish_event_id": before_event_id,
-                "pointer_before": before,
-                "pointer_after": after,
-                "rollback_event": event,
-                "target_authority": {
-                    "authority_kind": "BOOTSTRAP_COMPATIBILITY_BUNDLE",
-                    "target_generation_id": UUID_A,
-                    "source_authority_key": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1",
-                    "required_surface_codes": [
-                        "GLOBAL_LATEST",
-                        "UNIVERSE_SERVICE",
-                    ],
-                    "surface_components": components,
-                    "total_component_rows": 53981,
-                    "combined_surface_manifest_sha256": validate_publication_result.EXPECTED_BOOTSTRAP_COMBINED,
-                    "target_bundle_matches_pointer_after_generation": True,
-                },
-            },
-        }
-        validate_publication_result.validate_rollback(document)
-        changed = copy.deepcopy(document)
-        changed["rollback"]["target_authority"]["surface_components"][0][
-            "row_count"
-        ] -= 1
+        for authority_key in (BOOTSTRAP_V1_KEY, BOOTSTRAP_V2_KEY):
+            document = valid_bootstrap_rollback_document(authority_key)
+            target = document["rollback"]["target_authority"]
+            with self.subTest(authority_key=authority_key):
+                validate_publication_result.validate_schema(target, target_schema)
+                validate_publication_result.validate_rollback(document)
+
+        changed = valid_bootstrap_rollback_document(BOOTSTRAP_V1_KEY)
         changed_target = changed["rollback"]["target_authority"]
+        changed_target["surface_components"][0]["row_count"] -= 1
         changed_target["surface_components"][0][
             "component_manifest_sha256"
         ] = validate_publication_result.component_manifest(
@@ -892,6 +1559,108 @@ class BootstrapAndResultContractTests(unittest.TestCase):
             "component rows do not equal the aggregate",
         ):
             validate_publication_result.validate_rollback(changed)
+
+    def test_rollback_schema_rejects_duplicate_or_swapped_surface_pairs(self) -> None:
+        schema = json.loads(
+            (ROOT / "publication_result_schema.json").read_text(encoding="utf-8")
+        )
+        target_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$defs": schema["$defs"],
+            "$ref": "#/$defs/bootstrap_rollback_target_authority",
+        }
+        for authority_key in (BOOTSTRAP_V1_KEY, BOOTSTRAP_V2_KEY):
+            target = valid_bootstrap_rollback_document(authority_key)["rollback"][
+                "target_authority"
+            ]
+            validate_publication_result.validate_schema(target, target_schema)
+            variants = {
+                "swapped": list(reversed(target["surface_components"])),
+                "duplicate-global": [
+                    copy.deepcopy(target["surface_components"][0]),
+                    copy.deepcopy(target["surface_components"][0]),
+                ],
+                "duplicate-service": [
+                    copy.deepcopy(target["surface_components"][1]),
+                    copy.deepcopy(target["surface_components"][1]),
+                ],
+            }
+            for label, components in variants.items():
+                changed = copy.deepcopy(target)
+                changed["surface_components"] = components
+                with self.subTest(authority_key=authority_key, label=label):
+                    with self.assertRaises(
+                        validate_publication_result.SemanticError
+                    ):
+                        validate_publication_result.validate_schema(
+                            changed, target_schema
+                        )
+
+    def test_bootstrap_rollback_rejects_bidirectional_branch_mixing(self) -> None:
+        schema = json.loads(
+            (ROOT / "publication_result_schema.json").read_text(encoding="utf-8")
+        )
+        target_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$defs": schema["$defs"],
+            "$ref": "#/$defs/bootstrap_rollback_target_authority",
+        }
+        v1 = validate_publication_result.EXPECTED_BOOTSTRAP_BY_AUTHORITY[
+            BOOTSTRAP_V1_KEY
+        ]
+        v2 = validate_publication_result.EXPECTED_BOOTSTRAP_BY_AUTHORITY[
+            BOOTSTRAP_V2_KEY
+        ]
+        cases: list[tuple[str, dict[str, object]]] = []
+
+        changed = valid_bootstrap_rollback_document(BOOTSTRAP_V1_KEY)
+        changed["rollback"]["target_authority"][
+            "source_authority_key"
+        ] = BOOTSTRAP_V2_KEY
+        cases.append(("V1 rollback presented as V2", changed))
+
+        changed = valid_bootstrap_rollback_document(BOOTSTRAP_V2_KEY)
+        changed["rollback"]["target_authority"][
+            "source_authority_key"
+        ] = BOOTSTRAP_V1_KEY
+        cases.append(("V2 rollback presented as V1", changed))
+
+        changed = valid_bootstrap_rollback_document(BOOTSTRAP_V1_KEY)
+        changed["rollback"]["target_authority"][
+            "combined_surface_manifest_sha256"
+        ] = v2["combined_surface_manifest_sha256"]
+        cases.append(("V1 rollback with V2 combined", changed))
+
+        changed = valid_bootstrap_rollback_document(BOOTSTRAP_V2_KEY)
+        changed["rollback"]["target_authority"][
+            "combined_surface_manifest_sha256"
+        ] = v1["combined_surface_manifest_sha256"]
+        cases.append(("V2 rollback with V1 combined", changed))
+
+        changed = valid_bootstrap_rollback_document(BOOTSTRAP_V1_KEY)
+        changed["rollback"]["target_authority"]["surface_components"][0] = {
+            "surface_code": "GLOBAL_LATEST",
+            **v2["components"]["GLOBAL_LATEST"],
+        }
+        cases.append(("V1 rollback with V2 GLOBAL and shared SERVICE", changed))
+
+        changed = valid_bootstrap_rollback_document(BOOTSTRAP_V2_KEY)
+        changed["rollback"]["target_authority"]["surface_components"][0] = {
+            "surface_code": "GLOBAL_LATEST",
+            **v1["components"]["GLOBAL_LATEST"],
+        }
+        cases.append(("V2 rollback with V1 GLOBAL and shared SERVICE", changed))
+
+        for label, document in cases:
+            target = document["rollback"]["target_authority"]
+            with self.subTest(label=label, validator="schema"):
+                with self.assertRaises(validate_publication_result.SemanticError):
+                    validate_publication_result.validate_schema(
+                        target, target_schema
+                    )
+            with self.subTest(label=label, validator="semantic"):
+                with self.assertRaises(validate_publication_result.SemanticError):
+                    validate_publication_result.validate_rollback(document)
 
 
 class Migration900DefinitionFingerprintTests(unittest.TestCase):
@@ -1741,9 +2510,9 @@ class SqlDefinitionContractTests(unittest.TestCase):
 
     def test_immutable_migrations_901_902_903_905_bytes_remain_locked(self) -> None:
         expected = {
-            "202607310901_rank_canonical_input_contract.sql": "816973FB9DC18939F57A2BB5FBE3F7F40FEA234EB6F4B4FBAF1D13E71BDBB22E",
-            "202607310902_jeonbuk_45_52_membership.sql": "0248E90C5FA7BC6E3877966954D75D9700BD2DE1550201DB58E842D0BCFB38AF",
-            "202607310903_latest_board_atomic_generation.sql": "793BE244C0517F7A5AB951F1C30953C78D36E24973C45939C0BDF64C1D32D84E",
+            "202607310901_rank_canonical_input_contract.sql": "1A0F9A77DB1486E88F5F0CA11BF6E51310ADBCD382DDB913EF1710578421E93A",
+            "202607310902_jeonbuk_45_52_membership.sql": "5272ABAA4487CE9B26A2242425C0C46A4551ED5EB4C5AAB8D0AD90F2F61C4157",
+            "202607310903_latest_board_atomic_generation.sql": "E361687F958588BFDC21845C857EE1FA04061247CAB90288EC1EBBB04E32C682",
             "202607310905_home_payload_publication_identity.sql": "D1AB7080E4F8167A89A783BC2236C0F92EE25A1A2AA0DD2E692EA10730BA17DE",
         }
         for name, digest in expected.items():

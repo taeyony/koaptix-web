@@ -1,0 +1,52 @@
+{
+  "affected_rank_date": null,
+  "affected_universe_codes": [],
+  "bootstrap_only_cross_surface_date_divergence": true,
+  "combined_surface_manifest_sha256": "D59ED800AD9E99F409E21AA57BFFDFE2D66F2971C2C4C622186A1844A6C3C1BD",
+  "components": [
+    {
+      "component_manifest_sha256": "B7B2305831883D5018EECD5B557738C1741B0D6BD2392E18D319466507C5FF82",
+      "date_vector_sha256": null,
+      "full_row_digest_sha256": "E62394980D8A76FBEEAC8CDE7EED176934CE7280B7732ED4A4007B29E82B5FCB",
+      "previous_snapshot_date": "2026-08-25",
+      "row_count": 13497,
+      "snapshot_date": "2026-08-26",
+      "surface_code": "GLOBAL_LATEST",
+      "universe_count": 1
+    },
+    {
+      "component_manifest_sha256": "A1CCACBCE1AF6EE106840E482A97A303813F096EA616F7D3837D865CFA8707E2",
+      "date_vector_sha256": "6E7BA473DDCC0C25F3F46FFEE443BA41CC9D2435F448531189F843AB28FA82F7",
+      "full_row_digest_sha256": "FB31BF64DF0000EABDD3827581D6B40FEC2D22EE64582C4B1AB28FE6A26D8008",
+      "previous_snapshot_date": null,
+      "row_count": 40484,
+      "snapshot_date": null,
+      "surface_code": "UNIVERSE_SERVICE",
+      "universe_count": 225
+    }
+  ],
+  "future_sealed_generation_may_reuse_divergence": false,
+  "official_history_rows_written": 0,
+  "official_snapshot_rows_written": 0,
+  "required_surface_codes": [
+    "GLOBAL_LATEST",
+    "UNIVERSE_SERVICE"
+  ],
+  "schema_version": 2,
+  "service_vector_subauthority": {
+    "authority_key": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1",
+    "file_bytes": 42751,
+    "file_sha256": "5838DF7C3ED197498E23B4330D3CC8D985F9009F79A652EA19B92C0B9AE97E85",
+    "logical_vector_sha256": "6E7BA473DDCC0C25F3F46FFEE443BA41CC9D2435F448531189F843AB28FA82F7",
+    "path": "bootstrap_legacy_source_date_vector.json",
+    "relationship": "EXACT_IMMUTABLE_V1_SERVICE_VECTOR_REUSED_AS_EXPLICIT_V2_SUBAUTHORITY",
+    "relabelled_as_v2": false,
+    "row_count": 225
+  },
+  "source_authority_key": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V2",
+  "source_authority_kind": "BOOTSTRAP_COMPATIBILITY_BUNDLE",
+  "status": "UNAPPLIED_CANDIDATE_NOT_ACCEPTED_CONTROL",
+  "surface_count": 2,
+  "total_component_rows": 53981,
+  "vector_control": "bootstrap_legacy_source_date_vector.json"
+}

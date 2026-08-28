@@ -45,6 +45,17 @@
         "full_row_digest_sha256": {
           "$ref": "#/$defs/sha256"
         },
+        "previous_snapshot_date": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "format": "date",
+              "type": "string"
+            }
+          ]
+        },
         "row_count": {
           "minimum": 1,
           "type": "integer"
@@ -74,6 +85,7 @@
       "required": [
         "surface_code",
         "snapshot_date",
+        "previous_snapshot_date",
         "date_vector_sha256",
         "universe_count",
         "row_count",
@@ -82,14 +94,197 @@
       ],
       "type": "object"
     },
+    "bootstrap_rollback_service_component": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/bootstrap_rollback_surface_component"
+        },
+        {
+          "properties": {
+            "component_manifest_sha256": {
+              "const": "A1CCACBCE1AF6EE106840E482A97A303813F096EA616F7D3837D865CFA8707E2"
+            },
+            "date_vector_sha256": {
+              "const": "6E7BA473DDCC0C25F3F46FFEE443BA41CC9D2435F448531189F843AB28FA82F7"
+            },
+            "full_row_digest_sha256": {
+              "const": "FB31BF64DF0000EABDD3827581D6B40FEC2D22EE64582C4B1AB28FE6A26D8008"
+            },
+            "previous_snapshot_date": {
+              "type": "null"
+            },
+            "row_count": {
+              "const": 40484
+            },
+            "snapshot_date": {
+              "type": "null"
+            },
+            "surface_code": {
+              "const": "UNIVERSE_SERVICE"
+            },
+            "universe_count": {
+              "const": 225
+            }
+          }
+        }
+      ]
+    },
+    "bootstrap_rollback_v1_global_component": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/bootstrap_rollback_surface_component"
+        },
+        {
+          "properties": {
+            "component_manifest_sha256": {
+              "const": "DED5CE75CCD8B4A36F064AD59D3BF43F7DD1D8CEADD33AD43E9150ED7826DB6C"
+            },
+            "date_vector_sha256": {
+              "type": "null"
+            },
+            "full_row_digest_sha256": {
+              "const": "C560F484EA049B56A6251A34FB4C4E39047E24CB2610A0824DADFE114EC92908"
+            },
+            "previous_snapshot_date": {
+              "const": "2026-07-30"
+            },
+            "row_count": {
+              "const": 13497
+            },
+            "snapshot_date": {
+              "const": "2026-07-31"
+            },
+            "surface_code": {
+              "const": "GLOBAL_LATEST"
+            },
+            "universe_count": {
+              "const": 1
+            }
+          }
+        }
+      ]
+    },
+    "bootstrap_rollback_v2_global_component": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/bootstrap_rollback_surface_component"
+        },
+        {
+          "properties": {
+            "component_manifest_sha256": {
+              "const": "B7B2305831883D5018EECD5B557738C1741B0D6BD2392E18D319466507C5FF82"
+            },
+            "date_vector_sha256": {
+              "type": "null"
+            },
+            "full_row_digest_sha256": {
+              "const": "E62394980D8A76FBEEAC8CDE7EED176934CE7280B7732ED4A4007B29E82B5FCB"
+            },
+            "previous_snapshot_date": {
+              "const": "2026-08-25"
+            },
+            "row_count": {
+              "const": 13497
+            },
+            "snapshot_date": {
+              "const": "2026-08-26"
+            },
+            "surface_code": {
+              "const": "GLOBAL_LATEST"
+            },
+            "universe_count": {
+              "const": 1
+            }
+          }
+        }
+      ]
+    },
     "bootstrap_rollback_target_authority": {
       "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "authority_kind": {
+              "const": "BOOTSTRAP_COMPATIBILITY_BUNDLE"
+            },
+            "combined_surface_manifest_sha256": {
+              "const": "F2C78A29E43EAAD77AF815AB2723B3ED5202D70384E7145DDF01BCFC2041DE63"
+            },
+            "source_authority_key": {
+              "const": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1"
+            },
+            "surface_components": {
+              "items": false,
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "$ref": "#/$defs/bootstrap_rollback_v1_global_component"
+                },
+                {
+                  "$ref": "#/$defs/bootstrap_rollback_service_component"
+                }
+              ],
+              "type": "array"
+            },
+            "total_component_rows": {
+              "const": 53981
+            }
+          },
+          "required": [
+            "authority_kind",
+            "source_authority_key",
+            "surface_components",
+            "total_component_rows",
+            "combined_surface_manifest_sha256"
+          ],
+          "title": "EXACT_BOOTSTRAP_COMPATIBILITY_BUNDLE_V1_ROLLBACK_TARGET"
+        },
+        {
+          "properties": {
+            "authority_kind": {
+              "const": "BOOTSTRAP_COMPATIBILITY_BUNDLE"
+            },
+            "combined_surface_manifest_sha256": {
+              "const": "D59ED800AD9E99F409E21AA57BFFDFE2D66F2971C2C4C622186A1844A6C3C1BD"
+            },
+            "source_authority_key": {
+              "const": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V2"
+            },
+            "surface_components": {
+              "items": false,
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "$ref": "#/$defs/bootstrap_rollback_v2_global_component"
+                },
+                {
+                  "$ref": "#/$defs/bootstrap_rollback_service_component"
+                }
+              ],
+              "type": "array"
+            },
+            "total_component_rows": {
+              "const": 53981
+            }
+          },
+          "required": [
+            "authority_kind",
+            "source_authority_key",
+            "surface_components",
+            "total_component_rows",
+            "combined_surface_manifest_sha256"
+          ],
+          "title": "EXACT_BOOTSTRAP_COMPATIBILITY_BUNDLE_V2_ROLLBACK_TARGET"
+        }
+      ],
       "properties": {
         "authority_kind": {
           "const": "BOOTSTRAP_COMPATIBILITY_BUNDLE"
         },
         "combined_surface_manifest_sha256": {
-          "const": "F2C78A29E43EAAD77AF815AB2723B3ED5202D70384E7145DDF01BCFC2041DE63"
+          "$ref": "#/$defs/sha256"
         },
         "required_surface_codes": {
           "const": [
@@ -98,7 +293,8 @@
           ]
         },
         "source_authority_key": {
-          "const": "BOOTSTRAP_COMPATIBILITY_BUNDLE_V1"
+          "minLength": 1,
+          "type": "string"
         },
         "surface_components": {
           "items": {
@@ -1268,6 +1464,6 @@
     "for PUBLICATION_ROLLED_BACK original_publication_execution_run_id equals identity.execution_run_id, original_publish_event_id equals pointer_before.event_id, rollback_event.plan_run_id equals identity.plan_run_id, and rollback_event.execution_run_id equals rollback_execution_run_id",
     "for PUBLICATION_ROLLED_BACK rollback_event.from_generation_id equals pointer_before.generation_id, rollback_event.to_generation_id equals pointer_after.generation_id, pointer_after.generation_id equals pointer_before.previous_generation_id, and pointer_after.previous_generation_id equals pointer_before.generation_id",
     "canonical rollback target_generation_id equals pointer_after.generation_id; its generation references the named nonrevoked SEALED rank-input-v1 manifest and the serialized required_surface_codes/surface_components/total_component_rows/combined_surface_manifest_sha256 equal the immutable database parent and exactly two GLOBAL_LATEST plus UNIVERSE_SERVICE component rows, including dates or date vector, counts, full-row and component digests, affected-date alignment and common-field equality",
-    "bootstrap rollback target_generation_id equals pointer_after.generation_id and its serialized/database generation carries exact BOOTSTRAP_COMPATIBILITY_BUNDLE_V1 components GLOBAL_LATEST 2026-07-31/1/13497/C560F4...92908/DED5CE...DB6C with null date vector and UNIVERSE_SERVICE null-date/225/40484/6E7BA4...82F7/FB31BF...D8008/A1CCAC...07E2 plus total 53981 and combined manifest F2C78A...1DE63"
+    "bootstrap rollback target_generation_id equals pointer_after.generation_id and source_authority_key selects one whole exact branch: V1 carries GLOBAL_LATEST 2026-07-31/2026-07-30/C560F4...92908/DED5CE...DB6C with combined F2C78A...1DE63; V2 carries GLOBAL_LATEST 2026-08-26/2026-08-25/E62394...B5FCB/B7B230...5FF82 with combined D59ED8...3C1BD; both require the exact shared UNIVERSE_SERVICE null-date/225/40484/6E7BA4...82F7/FB31BF...D8008/A1CCAC...07E2 and total 53981, with no cross-branch mixing"
   ]
 }
