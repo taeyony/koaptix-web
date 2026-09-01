@@ -19,19 +19,23 @@ Authority status: CTO 검토와 별도 승인된 commit 전까지는 `PROPOSED_C
 | D | 현재 `.handoff` | 단 하나의 현재 실행 lane과 그 결과 |
 | E | chat·memory | 탐색을 돕는 secondary aid. authority가 아님 |
 
+Project Memory v2에서 이 Context Index는 canonical authority-routing·startup·conflict-navigation entrypoint이고, [KOAPTIX State Registry](KOAPTIX_STATE_REGISTRY.yaml)는 canonical current capability-state authority이며, [KOAPTIX Project Memory Operating Rules](KOAPTIX_PROJECT_MEMORY_OPERATING_RULES.md)는 canonical Project Memory maintenance·anti-overvalidation operating authority다. [Confirmed Decisions](KOAPTIX_CONFIRMED_DECISIONS.md)는 accepted decision·supersession ledger이고, [Continuity and Handoff Protocol](KOAPTIX_CONTINUITY_AND_HANDOFF_PROTOCOL.md)은 continuity·evidence·approval·handoff authority다. 기존 living documents의 역할은 바뀌지 않으며, 이 책임 구분과 아래 읽기 순서는 기존 Tier나 precedence를 변경하지 않는다.
+
 Tier가 높다고 해서 오래된 일반 문구가 더 구체적인 최신 승인 결정을 덮지는 않는다. 충돌은 아래 규칙으로 해소한다.
 
 ## 3. Mandatory Reading Order
 
 1. 이 Context Index
-2. [Master Living Source of Truth](../00_MASTER_LIVING_SOURCE_OF_TRUTH.md)
-3. [Project Charter](../01_PROJECT_CHARTER.md)
-4. [Current Confirmed Structure](../02_CURRENT_CONFIRMED_STRUCTURE.md)
-5. [Operations and Prohibitions](../03_OPERATIONS_AND_PROHIBITIONS.md)
-6. [Confirmed Decisions](KOAPTIX_CONFIRMED_DECISIONS.md)
-7. [Continuity and Handoff Protocol](KOAPTIX_CONTINUITY_AND_HANDOFF_PROTOCOL.md)
-8. 관련 workstream checkpoint. 현재 WP-02/O-01은 [이 checkpoint](../workstreams/wp02_o01/CHECKPOINT.md)를 읽는다.
-9. 현재 `.handoff/review-prompt.md`. 이는 local execution artifact이므로 tracked canonical 문서와 혼동하지 않는다.
+2. [KOAPTIX State Registry](KOAPTIX_STATE_REGISTRY.yaml)
+3. [KOAPTIX Project Memory Operating Rules](KOAPTIX_PROJECT_MEMORY_OPERATING_RULES.md)
+4. [Master Living Source of Truth](../00_MASTER_LIVING_SOURCE_OF_TRUTH.md)
+5. [Project Charter](../01_PROJECT_CHARTER.md)
+6. [Current Confirmed Structure](../02_CURRENT_CONFIRMED_STRUCTURE.md)
+7. [Operations and Prohibitions](../03_OPERATIONS_AND_PROHIBITIONS.md)
+8. [Confirmed Decisions](KOAPTIX_CONFIRMED_DECISIONS.md)
+9. [Continuity and Handoff Protocol](KOAPTIX_CONTINUITY_AND_HANDOFF_PROTOCOL.md)
+10. 관련 workstream checkpoint. 현재 WP-02/O-01은 [이 checkpoint](../workstreams/wp02_o01/CHECKPOINT.md)를 읽는다.
+11. 현재 `.handoff/review-prompt.md`. 이는 local execution artifact이므로 tracked canonical 문서와 혼동하지 않는다.
 
 추가 authority 확인:
 
@@ -49,6 +53,7 @@ Tier가 높다고 해서 오래된 일반 문구가 더 구체적인 최신 승�
 6. hash는 bytes를 검증할 뿐 source body를 복원하지 않는다.
 7. 여러 authority candidate가 충돌하면 Codex는 read-only 분류까지만 하고 canonical 선택은 사용자/CTO 승인으로 넘긴다.
 8. superseded 결정은 삭제하지 않고 status와 대체 결정을 명시한다.
+9. `COMPLETE_SEALED` registry record는 older narrative document에 later accepted evidence가 없다는 이유만으로 reopen하지 않는다. 실제 contradictory accepted evidence는 registry의 documented reopen protocol을 따르고, document role/scope 충돌은 기존 Context Index precedence rules를 계속 적용한다.
 
 ## 5. Current Major Workstreams
 
@@ -96,11 +101,14 @@ Codex는 lane 시작 시 다음을 정확히 수행한다.
 - major workstream이 추가·종료·pause될 때
 - canonical checkpoint 경로가 바뀔 때
 - 새 tracked source가 기존 `REFERENCE_NOT_VERIFIED_IN_REPOSITORY`를 대체할 때
+- Project Memory bootstrap/update로 active registry 또는 operating-rules path가 바뀌면 이 index의 authority routing과 mandatory reading references를 함께 정렬할 때
 
 세부 결정은 이 문서에 복제하지 않고 [Confirmed Decisions](KOAPTIX_CONFIRMED_DECISIONS.md)에 기록한다. 작업별 실행 증거는 checkpoint와 `.handoff`에 남긴다.
 
 ## Related Documents
 
+- [KOAPTIX State Registry](KOAPTIX_STATE_REGISTRY.yaml)
+- [KOAPTIX Project Memory Operating Rules](KOAPTIX_PROJECT_MEMORY_OPERATING_RULES.md)
 - [KOAPTIX Confirmed Decisions](KOAPTIX_CONFIRMED_DECISIONS.md)
 - [KOAPTIX Continuity and Handoff Protocol](KOAPTIX_CONTINUITY_AND_HANDOFF_PROTOCOL.md)
 - [WP-02/O-01 Checkpoint](../workstreams/wp02_o01/CHECKPOINT.md)

@@ -1,0 +1,491 @@
+schema_version: "2.0"
+project: "KOAPTIX"
+registry_title: "KOAPTIX Project Memory v2 Capability State Registry"
+candidate_generation_provenance:
+  source_run_id: "P-KOAPTIX-PROJECT-MEMORY-V2-BOOTSTRAP-INVENTORY-AND-CANDIDATE-DESIGN.0"
+  generated_at: "2026-09-01T19:32:09+09:00"
+  canonical_authority_before_source_write: false
+proposed_registry_status_at_authorized_source_write: "PARTIAL"
+candidate_only_until_source_write: true
+candidate_activation_condition: "Exact separately authorized Project Memory v2 source-write execution"
+
+status_vocabulary:
+  - COMPLETE_SEALED
+  - COMPLETE_MONITORED
+  - PARTIAL
+  - BLOCKED
+  - NEEDS_VERIFICATION
+  - SUPERSEDED
+
+status_definitions:
+  COMPLETE_SEALED: "A completed capability that must not be reopened without a documented reopen condition."
+  COMPLETE_MONITORED: "A completed capability whose normal operational state may evolve and should be monitored without redesign."
+  PARTIAL: "Valid work exists, but the capability is not complete."
+  BLOCKED: "Work cannot safely proceed until a specific condition is resolved."
+  NEEDS_VERIFICATION: "Implementation may exist, but accepted evidence is insufficient."
+  SUPERSEDED: "Historical authority is preserved but is no longer active or current."
+
+accepted_repository_baseline_candidate_generation_context_non_authoritative:
+  repository: "C:/Users/taeyo/Desktop/business/koaptix-web"
+  branch: "main"
+  head: "6bebef679729edf0d8f5a1f3693ca2f0e5db4c3f"
+  staged_file_count: 0
+  accepted_preexisting_dirty_files:
+    - path: "next-env.d.ts"
+      sha256: "7AD303E40D4FDDF44F156129E397511953A71481C5CFD86B1862649AAAF240CC"
+    - path: "src/app/api/search/route.ts"
+      sha256: "E605E489B4A9D16B2F384BB5459BB7CEC4CC093339FB9C273CF0F15DA91DBDA7"
+    - path: "tooling/koaptix/wp02_o01_validation/result_schema.json"
+      sha256: "C5C0CC32562E3FE598650FEC0BD00EA9C4598B7809E4B75EB56766F2657271B2"
+    - path: "tooling/koaptix/wp02_o01_validation/run_validation.py"
+      sha256: "03187FA184472D0B5EA852AD09DE68160431F1F6FC4D0CCCB66E769983FAE759"
+  context_note: "This baseline records candidate-source context only. The four dirty files are not permanent product capability facts and are not proposed for modification."
+
+authority_notes:
+  - "All sealed M906 and M900-M905 facts below are inherited accepted CTO authority from the current bounded lane; they were not reproduced against production."
+  - "A null historical run, source commit, or evidence path means the exact value was not supplied by the current accepted handoff or found as an authoritative repository-relative path."
+  - "The accepted repository baseline HEAD is current context, not an inferred original introduction commit for historical capabilities."
+  - "This file is a run-local candidate and has no canonical authority until the exact separate source-write lane is authorized and completed."
+
+source_documents:
+  - path: "docs/koaptix/00_MASTER_LIVING_SOURCE_OF_TRUTH.md"
+    sha256: "AE94D9815A6FDF0DC8B5635D0E2F7D028F84F01A8A5B7684462333D52D52B530"
+    role: "accepted long-lived product and source-of-truth principles"
+  - path: "docs/koaptix/01_PROJECT_CHARTER.md"
+    sha256: "EF2F4B605B7FF21EFF386ACDD6DB5E0E2C213A9BF16167E6A3FB9522E2D1E819"
+    role: "accepted product charter and delivery policy"
+  - path: "docs/koaptix/02_CURRENT_CONFIRMED_STRUCTURE.md"
+    sha256: "FABEA84B3B3D5144867FE26EC635564E8F1CD48A56F1E5960835BE039B6E5443"
+    role: "accepted current implementation-boundary snapshot"
+  - path: "docs/koaptix/03_OPERATIONS_AND_PROHIBITIONS.md"
+    sha256: "03517F084CDE4D54600BBF19AF30862242CECD3940AE6A05751C02A829C9BFDC"
+    role: "accepted operating discipline and prohibitions"
+  - path: "docs/koaptix/governance/KOAPTIX_CONTEXT_INDEX.md"
+    sha256: "1C7718EFA9D80E26804C6D73C5226C9D83C7BC152FF459AAF9EADD2EFEFF3D76"
+    role: "canonical context topology and conflict-resolution entrypoint"
+  - path: "docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"
+    sha256: "CEBC6C6CB162E8B3BA205AA14C054134F2C5C0292C812F14C488CDF88711C4F5"
+    role: "stable-ID accepted decision and supersession ledger"
+  - path: "docs/koaptix/governance/KOAPTIX_CONTINUITY_AND_HANDOFF_PROTOCOL.md"
+    sha256: "3A77BC2105840CE09AC2BC2798722CC50844F8861084D5431E4A09322C838E24"
+    role: "canonical continuity, promotion, handoff, approval, and fail-close protocol"
+  - path: "docs/koaptix/product_strategy/koaptix_product_strategy_canonical_notes_20260706.md"
+    sha256: "80AD21AFD9D25366F96912884D3D7216BA4B427E3F90CC3A76409F65E0BD06EE"
+    role: "ranking-first and data-quality strategy reference, subject to later accepted naming decisions"
+
+accepted_project_decision_summaries_authority: "DERIVED_NON_AUTHORITATIVE_REFERENCE_ONLY; canonical decision authority remains KOAPTIX_CONFIRMED_DECISIONS.md and the accepted living documents."
+accepted_project_decisions:
+  - topic: "PRODUCT_IDENTITY"
+    decision: "KOAPTIX is a nationwide apartment capital-flow ranking terminal."
+    source_decision_ids: ["KD-001"]
+    source_documents: ["docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "FLAGSHIP_BOARD"
+    decision: "KOAPTIX 500 is the flagship main board; TOP1000 is the current canonical name of the broader public ranking board."
+    source_decision_ids: ["KD-001"]
+    source_documents: ["docs/koaptix/01_PROJECT_CHARTER.md", "docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "NATIONAL_ENGINE_PRESERVATION"
+    decision: "KOREA_ALL is a successful asset and must not be unnecessarily redesigned or reopened."
+    source_decision_ids: ["KD-002"]
+    source_documents: ["docs/koaptix/00_MASTER_LIVING_SOURCE_OF_TRUTH.md", "docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "ADDITIVE_MULTI_UNIVERSE"
+    decision: "Multi-universe expansion is additive only."
+    source_decision_ids: ["KD-003"]
+    source_documents: ["docs/koaptix/00_MASTER_LIVING_SOURCE_OF_TRUTH.md", "docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "UNIVERSE_INTERNAL_RERANKING"
+    decision: "Rank is recalculated within each universe and is not a simple filter of global rank."
+    source_decision_ids: ["KD-004"]
+    source_documents: ["docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "GLOBAL_HISTORY_ROLE"
+    decision: "complex_rank_history remains a universe_code-free global history engine."
+    source_decision_ids: ["KD-004"]
+    source_documents: ["docs/koaptix/00_MASTER_LIVING_SOURCE_OF_TRUTH.md", "docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "CANONICAL_SNAPSHOT_LAYER"
+    decision: "koaptix_rank_snapshot is the canonical multi-universe deployed snapshot layer."
+    source_decision_ids: ["KD-005"]
+    source_documents: ["docs/koaptix/00_MASTER_LIVING_SOURCE_OF_TRUTH.md", "docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "UNIVERSE_BOARD_CHAIN"
+    decision: "The source-of-truth chain is koaptix_rank_snapshot -> v_koaptix_universe_rank_history_dynamic -> v_koaptix_latest_universe_rank_board_u."
+    source_decision_ids: ["KD-005"]
+    source_documents: ["docs/koaptix/00_MASTER_LIVING_SOURCE_OF_TRUTH.md", "docs/koaptix/02_CURRENT_CONFIRMED_STRUCTURE.md", "docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "READINESS"
+    decision: "Membership alone does not prove board readiness."
+    source_decision_ids: ["KD-005"]
+    source_documents: ["docs/koaptix/00_MASTER_LIVING_SOURCE_OF_TRUTH.md", "docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "SEALED_WRAPPERS"
+    decision: "Sealed monolithic wrappers remain sealed."
+    source_decision_ids: ["KD-009"]
+    source_documents: ["docs/koaptix/00_MASTER_LIVING_SOURCE_OF_TRUTH.md", "docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "SAFE_HELPER_CHAIN"
+    decision: "The individual helper chain remains the safe operating pattern unless a later capability explicitly supersedes it."
+    source_decision_ids: ["KD-009"]
+    source_documents: ["docs/koaptix/00_MASTER_LIVING_SOURCE_OF_TRUTH.md", "docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "QUALITY_PRIORITY"
+    decision: "Source-of-truth correctness and data quality outrank UI convenience."
+    source_decision_ids: ["KD-007"]
+    source_documents: ["docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+  - topic: "STABILIZED_CAPABILITY_PRESERVATION"
+    decision: "New product work must preserve existing stabilized capabilities."
+    source_decision_ids: []
+    source_documents: ["docs/koaptix/01_PROJECT_CHARTER.md"]
+  - topic: "LIVING_DOCUMENT_PRESERVATION"
+    decision: "The Charter, Current Confirmed Structure, Operations and Prohibitions, and Master Living Source of Truth remain accepted and must not be silently rewritten by bootstrap."
+    source_decision_ids: ["KD-014"]
+    source_documents: ["docs/koaptix/00_MASTER_LIVING_SOURCE_OF_TRUTH.md", "docs/koaptix/01_PROJECT_CHARTER.md", "docs/koaptix/02_CURRENT_CONFIRMED_STRUCTURE.md", "docs/koaptix/03_OPERATIONS_AND_PROHIBITIONS.md", "docs/koaptix/governance/KOAPTIX_CONFIRMED_DECISIONS.md"]
+
+global_m906_reopen_policy:
+  sealed_capability_presumption: "A sealed capability is presumed correct; the burden of proof is on reopening it."
+  does_not_reopen_for:
+    - "a new chat"
+    - "a new CTO who does not remember details"
+    - "a request for extra reassurance"
+    - "an inconvenient old proof artifact"
+    - "normal future service-row count evolution"
+    - "unrelated future product work"
+  allowed_conditions:
+    - condition_id: "M906-REOPEN-01"
+      condition: "Contradictory current production evidence shows that the accepted durable seed identity is missing or corrupt."
+    - condition_id: "M906-REOPEN-02"
+      condition: "A duplicate immutable generation or event unexpectedly appears."
+    - condition_id: "M906-REOPEN-03"
+      condition: "The publication pointer contradicts accepted durable publication semantics in a way attributable to M906."
+    - condition_id: "M906-REOPEN-04"
+      condition: "M906 sealed source or definition is intentionally modified."
+    - condition_id: "M906-REOPEN-05"
+      condition: "Protected role topology attributable to M906 is no longer restorable or exact."
+    - condition_id: "M906-REOPEN-06"
+      condition: "An accepted M906 security or semantic invariant is directly contradicted by new evidence."
+    - condition_id: "M906-REOPEN-07"
+      condition: "The user explicitly authorizes a redesign that intentionally supersedes M906."
+  required_reopen_record_fields:
+    - exact_reopen_condition
+    - new_contradictory_evidence
+    - affected_capability
+    - scope_of_reopening
+  narrow_scope_rule: "A narrow future issue must not automatically reopen the entire M906 chain."
+
+global_m906_do_not_repeat:
+  - "Do not retry V3."
+  - "Do not retry V4."
+  - "Do not retry V5."
+  - "Do not replay V6."
+  - "Do not create an M906 initial-seed second attempt."
+  - "Do not regenerate the successful immutable initial-seed packet."
+  - "Do not rerun the M906 seed merely for verification."
+  - "Do not rerun the SQLSTATE 42501 forensic."
+  - "Do not rerun the completed two-view ACL correction."
+  - "Do not rerun the six-predicate diagnostic."
+  - "Do not rerun the two-view definition diagnostic."
+  - "Do not rerun the pretty-flag forensic."
+  - "Do not rerun 12/12 runtime qualification for reassurance."
+  - "Do not rerun 16/16 runtime qualification for reassurance."
+  - "Do not rerun historical 166/166."
+  - "Do not rerun historical 58/58."
+  - "Do not reapply M906."
+  - "Do not modify the frozen V6 runtime."
+  - "Do not interpret pg_get_viewdef(..., true) versus false presentation differences as production semantic drift."
+  - "Do not bootstrap Project Memory by connecting to production."
+  - "Do not use M906 completion as authority for unrelated deploy or source modifications."
+
+historical_service_projection_interpretation:
+  surface_count: 2
+  service_universe_count: 225
+  service_row_count: 40484
+  global_row_count: 13497
+  classification: "HISTORICAL_SEED_SUCCESS_EVIDENCE"
+  permanent_target: false
+  normal_future_count_evolution_reopens_m906: false
+
+capabilities:
+  - capability_id: "M900_M905_PRODUCTION_DEFINITION"
+    title: "M900-M905 production definition"
+    status: "COMPLETE_SEALED"
+    scope: "Accepted production definition lineage preceding M906."
+    latest_accepted_run: null
+    latest_accepted_status: "COMPLETE_SEALED"
+    latest_accepted_evidence: null
+    source_commit: null
+    relevant_hashes:
+      durable_identity_sha256: "EFBBA873115AC0100E8B246FBD22AAA706F3F23FC779901CD647E55CC8558AE4"
+    accepted_current_facts:
+      inherited_accepted_authority: true
+      reapply_required: false
+    reopen_conditions:
+      - "An intentional modification to the sealed definition occurs."
+      - "New evidence directly contradicts an accepted semantic or security invariant."
+      - "The user explicitly authorizes a superseding redesign."
+    do_not_repeat:
+      - "Do not reapply or reopen M900-M905 for reassurance."
+    superseded_authority: []
+    next_allowed_actions:
+      - "Inherit the sealed state in dependent work."
+      - "Open only a narrowly scoped lane after a documented reopen condition."
+    notes:
+      - "Exact historical run, source commit, and repository-relative evidence path were not supplied by the current accepted handoff."
+
+  - capability_id: "M906_FORWARD_DB_DEFINITION"
+    title: "M906 forward database definition"
+    status: "COMPLETE_SEALED"
+    scope: "Accepted forward M906 database definition and semantic identity."
+    latest_accepted_run: null
+    latest_accepted_status: "COMPLETE_SEALED"
+    latest_accepted_evidence: null
+    source_commit: null
+    relevant_hashes:
+      durable_identity_sha256: "E68BF18BD4048C1FC5BBE298755BD4EE783843BB457215F9F5246A4FF3908DB0"
+    accepted_current_facts:
+      inherited_accepted_authority: true
+      redesign_required: false
+    reopen_conditions:
+      - "The sealed definition is intentionally modified."
+      - "New evidence directly contradicts its semantic or security contract."
+      - "The user explicitly authorizes a superseding redesign."
+    do_not_repeat:
+      - "Do not reapply or redesign M906 for reassurance."
+    superseded_authority: []
+    next_allowed_actions:
+      - "Inherit the sealed definition in dependent work."
+      - "Open only the affected definition surface after a documented trigger."
+    notes:
+      - "Exact historical run, source commit, and repository-relative evidence path were not supplied by the current accepted handoff."
+
+  - capability_id: "M906_TWO_LEGACY_VIEW_ACL"
+    title: "M906 two-legacy-view ACL closure"
+    status: "COMPLETE_SEALED"
+    scope: "Closed SQLSTATE 42501 root cause and accepted direct SELECT authority for two legacy views."
+    latest_accepted_run: null
+    latest_accepted_status: "CLOSED"
+    latest_accepted_evidence: null
+    source_commit: null
+    relevant_hashes: {}
+    accepted_current_facts:
+      selected_historical_root_cause: "DIRECT_VIEW_SELECT_MISSING"
+      historical_sqlstate: "42501"
+      historical_affected_effective_role: "koaptix_rank_publication_owner"
+      direct_select_authority:
+        public.v_koaptix_latest_universe_rank_board_u: true
+        public.v_koaptix_latest_rank_board: true
+      v5_state:
+        - CLOSED
+        - CONSUMED
+        - DENIED_FOR_RETRY
+        - DENIED_FOR_REPLAY
+    reopen_conditions:
+      - "New evidence directly contradicts either accepted direct SELECT authority or the closed root cause."
+      - "An intentional ACL, ownership, or relevant security-mode change affects the two-view path."
+    do_not_repeat:
+      - "Do not rerun SQLSTATE 42501 forensic or the completed ACL correction without direct contradictory evidence."
+    superseded_authority: []
+    next_allowed_actions:
+      - "Treat the privilege root cause and correction as closed."
+      - "Investigate only a newly evidenced, narrowly affected privilege surface."
+    notes:
+      - "Exact historical run, source commit, and repository-relative evidence path were not supplied by the current accepted handoff."
+
+  - capability_id: "M906_V6_PREFLIGHT_CONTRACT"
+    title: "M906 V6 preflight view-definition contract"
+    status: "COMPLETE_SEALED"
+    scope: "Closed pretty-flag contract defect for exact view-definition identity evaluation."
+    latest_accepted_run: null
+    latest_accepted_status: "COMPLETE_SEALED"
+    latest_accepted_evidence: null
+    source_commit: null
+    relevant_hashes:
+      public_v_koaptix_latest_universe_rank_board_u_sha256: "890A1669F4B049576D8C9274C7D70DB45AAD4DEE246AD8306604A5656DC778E1"
+      public_v_koaptix_latest_rank_board_sha256: "0674271BC860667F038C43DF31B7FB7BC8F2A5A284497446BEB1686B25EB0745"
+    accepted_current_facts:
+      selected_historical_defect: "V6_PG_GET_VIEWDEF_PRETTY_FLAG_CONTRACT_MISMATCH_BOTH_VIEWS"
+      accepted_deparse_identity_mode: "PG_GET_VIEWDEF_PRETTY_TRUE"
+      production_semantic_drift: false
+      production_correction_required: false
+      view_definitions:
+        public.v_koaptix_latest_universe_rank_board_u:
+          bytes: 812
+        public.v_koaptix_latest_rank_board:
+          bytes: 6224
+      local_evaluator_arguments_changed: 2
+      predicate_semantics_changed: false
+    reopen_conditions:
+      - "The accepted deparse identity mode or either relevant definition is intentionally changed."
+      - "New evidence contradicts the accepted no-semantic-drift conclusion."
+    do_not_repeat:
+      - "Do not rerun pretty-flag forensic, definition diagnostics, or runtime qualification for reassurance."
+      - "Do not create a generalized deparser canonicalizer for this closed two-flag defect."
+    superseded_authority: []
+    next_allowed_actions:
+      - "Use the accepted pretty-true representation contract."
+      - "Treat presentation-only pretty-mode differences as non-semantic unless the contract itself changes."
+    notes:
+      - "The accepted correction changed exactly two local evaluator arguments from false to true."
+
+  - capability_id: "M906_INITIAL_SEED"
+    title: "M906 one-shot initial seed"
+    status: "COMPLETE_SEALED"
+    scope: "Successfully consumed one-shot durable initial seed, immutable generation/event publication, and durable projection."
+    latest_accepted_run: "P-KOAPTIX-PRODUCTION-M906-FINAL-BOUNDED-OBSERVABILITY-V6-INITIAL-SEED-EXECUTION.0"
+    latest_accepted_status: "PASS_M906_V6_ONE_SHOT_INITIAL_SEED_DURABLE_VERIFIED_AND_EXACT_ROLE_AT_REST_RESTORED"
+    latest_accepted_evidence: null
+    source_commit: null
+    relevant_hashes:
+      durable_projection_sha256: "6CE9B30629FADD496656188F0038FEB8E657F5658DF79879ACFCDDBDB97FB7B3"
+      seed_packet_sha256: "AAA5388CF696869EA4B0EB8E0F26AD0B1CB5688904B3AF799F25C0551D4AED22"
+      expected_completion_sha256: "722878ED7EE8BE9C7E151B824ADD06584EAB87E85C2582307884FD9D9F85A17E"
+      child_sha256: "C63CAC8C41122FF05C77707B6284F7E33C4A09DF39B67DEAAFE95E580265F8B3"
+      parent_sha256: "D7119949DF4CA568FFD612822CA84EA0DD40E785C7EE5215CE36F0C5947C29D8"
+      outer_sha256: "B0B014ED67C3D0726E119D127E7A08156B2DB6DD310F98D3DDE31E7ED6A586D5"
+      exact_two_sha256: "3635D3AC2393B97C8797DE5BC6F9ADB6145537CA257B78E2B8FB2BC9B75EC5E4"
+      exact_three_sha256: "098887EAFF39CA8CDAF6E49FC7CBFDF248D1A4C3FCB7BA8764ED2FF7E6227F9C"
+    accepted_current_facts:
+      accepted_attempt: "P-KOAPTIX-PRODUCTION-M906-FINAL-BOUNDED-OBSERVABILITY-V6-INITIAL-SEED-EXECUTION.0-ATTEMPT-1"
+      attempt_state:
+        - SUCCESSFULLY_CONSUMED
+        - DENIED_FOR_RETRY
+        - DENIED_FOR_REPLAY
+      generation_count: 1
+      generation_id: "e2d32e3c-799c-459d-9057-ba85bc185be0"
+      event_count: 1
+      event_id: "2a2b8f1c-f9e4-4a19-810c-49e56f701687"
+      publication_pointer_count: 1
+      active_generation_id: "e2d32e3c-799c-459d-9057-ba85bc185be0"
+      active_event_id: "2a2b8f1c-f9e4-4a19-810c-49e56f701687"
+      previous_generation_id: null
+      publication_version: 1
+      duplicate_generation_count: 0
+      duplicate_event_count: 0
+      durable_classification: "DURABLE_PASS"
+      seed_packet_bytes: 43693127
+      expected_completion_bytes: 2970
+      historical_projection:
+        surface_count: 2
+        service_universe_count: 225
+        service_row_count: 40484
+        global_row_count: 13497
+        permanent_target: false
+    reopen_conditions:
+      - "Contradictory current evidence shows the durable identity is missing or corrupt."
+      - "A duplicate immutable generation or event appears."
+      - "The publication pointer contradicts accepted semantics in a way attributable to this seed."
+      - "The sealed seed source or definition is intentionally modified."
+      - "A directly contradictory accepted security or semantic invariant is evidenced."
+    do_not_repeat:
+      - "Do not retry, replay, create a second attempt, regenerate the packet, or rerun the seed for verification."
+    superseded_authority: []
+    next_allowed_actions:
+      - "Inherit the accepted durable seed identity and historical projection evidence."
+      - "Permit normal future service-count evolution without reopening this capability."
+      - "Reopen only the exact affected surface after a documented trigger."
+    notes:
+      - "The successful packet and frozen runtime hashes are historical evidence only and must not be reused for another initial seed."
+      - "No repository-relative accepted evidence path or original source commit was supplied by the current handoff."
+
+  - capability_id: "M906_OPERATIONAL_ROLE_LIFECYCLE"
+    title: "M906 operational role lifecycle"
+    status: "COMPLETE_SEALED"
+    scope: "Transient operational role lifecycle and exact protected role topology restoration at rest."
+    latest_accepted_run: "P-KOAPTIX-PRODUCTION-M906-FINAL-BOUNDED-OBSERVABILITY-V6-INITIAL-SEED-EXECUTION.0"
+    latest_accepted_status: "A_EXACT_AT_REST_ORIGINAL_STATE"
+    latest_accepted_evidence: null
+    source_commit: null
+    relevant_hashes:
+      protected_membership_sha256: "D8C07F4A23D9FA95F3C13BF330D1D8EBEB173C9A703521B499F4123D0B5A0949"
+    accepted_current_facts:
+      transient_role_residue_count: 0
+      transient_membership_residue_count: 0
+      transient_backend_residue_count: 0
+      temporary_relation_residue_count: 0
+      protected_edge_count: 9
+      protected_role_topology_exact: true
+      historical_lifecycle:
+        - "CREATE transient role"
+        - "GRANT required membership"
+        - "SET LOCAL ROLE"
+        - "execute bounded seed path"
+        - "REVOKE same membership"
+        - "DROP transient role"
+    reopen_conditions:
+      - "Protected topology attributable to M906 is no longer restorable or exact."
+      - "New evidence shows transient role, membership, backend, or temporary-relation residue attributable to the lifecycle."
+      - "The lifecycle or protected-role contract is intentionally modified."
+    do_not_repeat:
+      - "Do not recreate the historical role lifecycle merely to verify it."
+    superseded_authority: []
+    next_allowed_actions:
+      - "Treat exact at-rest restoration as accepted."
+      - "Open a narrow lifecycle lane only for directly contradictory residue or topology evidence."
+    notes:
+      - "The accepted run jointly proves seed success and at-rest role restoration."
+
+  - capability_id: "M906_POSTSUCCESS_INDEPENDENT_CONFIRMATION"
+    title: "M906 independent post-success durable-state confirmation"
+    status: "COMPLETE_SEALED"
+    scope: "Independent later production snapshot confirming accepted durable state without seed or mutation."
+    latest_accepted_run: "P-KOAPTIX-PRODUCTION-M906-V6-POSTSUCCESS-INDEPENDENT-DURABLE-STATE-ONE-CONNECTION-ONE-SELECT-CONFIRMATION.0"
+    latest_accepted_status: "PASS_M906_V6_INDEPENDENT_SUBSEQUENT_PRODUCTION_CONFIRMATION_DURABLE_STATE_STABLE"
+    latest_accepted_evidence: null
+    source_commit: null
+    relevant_hashes:
+      durable_projection_sha256: "6CE9B30629FADD496656188F0038FEB8E657F5658DF79879ACFCDDBDB97FB7B3"
+      protected_membership_sha256: "D8C07F4A23D9FA95F3C13BF330D1D8EBEB173C9A703521B499F4123D0B5A0949"
+    accepted_current_facts:
+      observation_scope: "NEW_INDEPENDENT_CURRENT_PRODUCTION_SNAPSHOT_AFTER_ACCEPTED_V6_SUCCESS"
+      production_connection_count: 1
+      application_select_count: 1
+      logical_row_count: 1
+      transaction_isolation: "REPEATABLE READ"
+      transaction_read_only: true
+      rollback: "SUCCESS"
+      reconnect_count: 0
+      automatic_retry_count: 0
+      prohibited_operation_counts:
+        reservation: 0
+        v6_activation: 0
+        outer: 0
+        parent: 0
+        child: 0
+        target: 0
+        helper: 0
+        verifier_function_invocation: 0
+        packet_binding: 0
+        seed: 0
+        role_mutation: 0
+        acl_mutation: 0
+        production_write: 0
+        commit: 0
+    reopen_conditions:
+      - "New current evidence directly contradicts the accepted durable-state identity or an M906 security invariant."
+      - "A relevant sealed dependency is intentionally changed."
+    do_not_repeat:
+      - "Do not reconnect to production to repeat this independent confirmation for reassurance."
+    superseded_authority: []
+    next_allowed_actions:
+      - "Inherit this independent confirmation in future current-state reasoning."
+      - "Use a new observation only when mutable live facts are relevant to a separately authorized future action."
+    notes:
+      - "This candidate lane performed no production reconfirmation."
+
+  - capability_id: "PROJECT_MEMORY_V2"
+    title: "Project Memory v2 canonical capability memory"
+    status: "PARTIAL"
+    scope: "Future repository-native capability-state registry and bounded operating rules."
+    latest_accepted_run: null
+    latest_accepted_status: null
+    latest_accepted_evidence: null
+    source_commit: null
+    relevant_hashes: {}
+    accepted_current_facts:
+      bootstrap_eligibility_before_source_write: "ELIGIBLE"
+      triggered_before_source_write: false
+      bootstrap_started_before_source_write: false
+      candidate_only_until_source_write: true
+      latest_accepted_bootstrap_source_write_run: null
+      activation_condition: "Exact separately authorized Project Memory v2 source-write execution"
+    reopen_conditions: []
+    do_not_repeat:
+      - "Do not claim this candidate is active, complete, triggered, or bootstrapped."
+      - "Do not connect to production merely to create or maintain repository memory."
+    superseded_authority: []
+    next_allowed_actions:
+      - "CTO review of the run-local candidate artifacts."
+      - "First synthesize and review one complete Context Index replacement candidate, then refresh an exact three-file manifest; only after scope resolution may a separate source-write authorization be considered."
+    notes:
+      - "This proposed PARTIAL status begins only at the authorized source-write moment; before that moment this record is candidate-only."
+      - "No accepted bootstrap source-write run, source commit, or evidence path exists yet."
