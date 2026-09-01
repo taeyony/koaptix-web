@@ -45,7 +45,8 @@ authority_notes:
   - "All sealed M906 and M900-M905 facts below are inherited accepted CTO authority from the current bounded lane; they were not reproduced against production."
   - "A null historical run, source commit, or evidence path means the exact value was not supplied by the current accepted handoff or found as an authoritative repository-relative path."
   - "The accepted repository baseline HEAD is current context, not an inferred original introduction commit for historical capabilities."
-  - "This file is a run-local candidate and has no canonical authority until the exact separate source-write lane is authorized and completed."
+  - "The candidate-generation provenance, pre-write status, activation condition, repository baseline, and source-document hashes are preserved as non-current historical inputs."
+  - "Exact source write and accepted local commit dfe0584f8a9a16dabfad3e129c465d08b59d5f3e activated this tracked registry as canonical authority; current Project Memory status is recorded by PROJECT_MEMORY_V2."
 
 source_documents:
   - path: "docs/koaptix/00_MASTER_LIVING_SOURCE_OF_TRUTH.md"
@@ -464,28 +465,101 @@ capabilities:
 
   - capability_id: "PROJECT_MEMORY_V2"
     title: "Project Memory v2 canonical capability memory"
-    status: "PARTIAL"
-    scope: "Future repository-native capability-state registry and bounded operating rules."
-    latest_accepted_run: null
-    latest_accepted_status: null
-    latest_accepted_evidence: null
-    source_commit: null
-    relevant_hashes: {}
+    status: "COMPLETE_MONITORED"
+    scope: "Repository-native canonical capability-state registry, bounded operating rules, and Context Index authority routing."
+    latest_accepted_run: "P-KOAPTIX-PROJECT-MEMORY-V2-BOOTSTRAP-EXACT-THREE-FILE-STAGE-AND-COMMIT.0"
+    latest_accepted_status: "PASS_KOAPTIX_PROJECT_MEMORY_V2_BOOTSTRAP_EXACT_THREE_FILE_STAGE_AND_COMMIT_LOCAL_VERIFIED_NO_PUSH"
+    latest_accepted_evidence: ".handoff/runs/P-KOAPTIX-PROJECT-MEMORY-V2-BOOTSTRAP-EXACT-THREE-FILE-STAGE-AND-COMMIT.0/verification.json"
+    source_commit: "dfe0584f8a9a16dabfad3e129c465d08b59d5f3e"
+    relevant_hashes:
+      bootstrap_state_registry_sha256: "2AF83D9B924E0D8152DE8EF292CA7747A9F60E9B0109F8D45136CA3618136DE4"
+      bootstrap_operating_rules_sha256: "D499B09FB51174623846DD368F81257687370DCE40C6324105FCB7F029641B9A"
+      bootstrap_context_index_sha256: "3364ACC26FEFDF126E7821722F85A11F416D3BDB5F2D13A98C2FB557CBE91D66"
+      complete_monitored_operating_rules_sha256: "2708DCB82E1FFA73F828D364F8AB413E6CAD8699A5B6BC34D4682CD15B892F21"
+      bootstrap_source_write_verification_sha256: "B05568B7F7D7397FDF5057ECA5C8F216D2EEF057A049344255AFFF6EB7653813"
+      bootstrap_commit_verification_sha256: "EA04222714B478860CE4D0134F126856A2A12B53BF099D42DA9313243771D70B"
+      postcommit_next_state_verification_sha256: "B4028A20472F06FB771735F7D707B0BCC934535585E35186CFA754E766879EAD"
     accepted_current_facts:
       bootstrap_eligibility_before_source_write: "ELIGIBLE"
       triggered_before_source_write: false
       bootstrap_started_before_source_write: false
       candidate_only_until_source_write: true
-      latest_accepted_bootstrap_source_write_run: null
+      latest_accepted_bootstrap_source_write_run: "P-KOAPTIX-PROJECT-MEMORY-V2-BOOTSTRAP-EXACT-THREE-FILE-SOURCE-WRITE.0"
       activation_condition: "Exact separately authorized Project Memory v2 source-write execution"
-    reopen_conditions: []
+      activation_condition_satisfied: true
+      canonical_authority_active: true
+      current_authority_state: "CANONICAL_ACTIVE_COMPLETE_MONITORED"
+      bootstrap_commit: "dfe0584f8a9a16dabfad3e129c465d08b59d5f3e"
+      bootstrap_commit_sole_parent: "6bebef679729edf0d8f5a1f3693ca2f0e5db4c3f"
+      bootstrap_commit_subject: "docs(koaptix): bootstrap Project Memory v2"
+      bootstrap_commit_accepted_by_token: "ACCEPT_PROJECT_MEMORY_V2_BOOTSTRAP_COMMIT_AND_PREPARE_NEXT_STATE_DECISION"
+      evidence_bindings:
+        source_write_verification:
+          path: ".handoff/runs/P-KOAPTIX-PROJECT-MEMORY-V2-BOOTSTRAP-EXACT-THREE-FILE-SOURCE-WRITE.0/verification.json"
+          bytes: 14104
+          sha256: "B05568B7F7D7397FDF5057ECA5C8F216D2EEF057A049344255AFFF6EB7653813"
+          status: "PASS_KOAPTIX_PROJECT_MEMORY_V2_BOOTSTRAP_EXACT_THREE_FILE_SOURCE_WRITE_LOCAL_VERIFIED"
+          pass_criteria: "40/40"
+        commit_verification:
+          path: ".handoff/runs/P-KOAPTIX-PROJECT-MEMORY-V2-BOOTSTRAP-EXACT-THREE-FILE-STAGE-AND-COMMIT.0/verification.json"
+          bytes: 19098
+          sha256: "EA04222714B478860CE4D0134F126856A2A12B53BF099D42DA9313243771D70B"
+          status: "PASS_KOAPTIX_PROJECT_MEMORY_V2_BOOTSTRAP_EXACT_THREE_FILE_STAGE_AND_COMMIT_LOCAL_VERIFIED_NO_PUSH"
+          pass_criteria: "44/44"
+        postcommit_transition_basis:
+          path: ".handoff/runs/P-KOAPTIX-PROJECT-MEMORY-V2-POST-COMMIT-NEXT-STATE-DECISION-PREPARATION.0/verification.json"
+          bytes: 6236
+          sha256: "B4028A20472F06FB771735F7D707B0BCC934535585E35186CFA754E766879EAD"
+          status: "PASS_PROJECT_MEMORY_V2_POSTCOMMIT_NEXT_STATE_DECISION_PREPARED_ACTIVE_PARTIAL_NO_SOURCE_CHANGE"
+      bootstrap_commit_tree:
+        "docs/koaptix/governance/KOAPTIX_STATE_REGISTRY.yaml":
+          status: "A"
+          mode: "100644"
+          blob: "b2f659da71e49fc30302f09e7320d8be5d7b8b85"
+        "docs/koaptix/governance/KOAPTIX_PROJECT_MEMORY_OPERATING_RULES.md":
+          status: "A"
+          mode: "100644"
+          blob: "09e1768400264fd5597b3e703336566953c4fe53"
+        "docs/koaptix/governance/KOAPTIX_CONTEXT_INDEX.md":
+          status: "M"
+          mode: "100644"
+          blob: "f0753044c783c3dc92bab229e9be4212d90adb29"
+      status_transition_basis:
+        from_state: "CANONICAL_ACTIVE_PARTIAL"
+        target_state: "COMPLETE_MONITORED"
+        candidate_synthesis_authorization_token: "AUTHORIZE_PROJECT_MEMORY_V2_PARTIAL_TO_COMPLETE_MONITORED_PROMOTION_CANDIDATE_SYNTHESIS_LOCAL_ONLY_NO_SOURCE_CHANGE"
+        candidate_authority_before_separate_source_write: false
+        target_activation_condition: "Exact separately authorized promotion source-write execution"
+        active_partial_evidence_is_transition_from_state_only: true
+      complete_monitored_entry_criteria:
+        exact_bootstrap_source_write_locally_verified: true
+        exact_bootstrap_commit_locally_verified: true
+        bootstrap_commit_user_accepted: true
+        canonical_three_file_authority_active: true
+        unresolved_authority_routing_conflict: false
+        remaining_bootstrap_component_count_after_reconciliation: 0
+        ongoing_monitored_maintenance_required: true
+        complete_sealed_selected: false
+    reopen_conditions:
+      - "Accepted evidence directly contradicts canonical activation, the exact bootstrap commit identity, or the authority-routing contract."
+      - "A required tracked Project Memory authority file is removed, unreadable, or no longer routed by the Context Index."
+      - "A competing canonical capability registry or Project Memory operating authority appears and existing precedence cannot resolve it."
+      - "The registry schema, status vocabulary, authority topology, or maintenance contract is intentionally changed beyond normal bounded record maintenance."
+      - "The user explicitly authorizes a superseding redesign."
     do_not_repeat:
-      - "Do not claim this candidate is active, complete, triggered, or bootstrapped."
-      - "Do not connect to production merely to create or maintain repository memory."
+      - "Do not rerun, rewrite, or recommit the accepted three-file bootstrap for reassurance."
+      - "Do not downgrade this capability to candidate-only or PARTIAL merely because a new chat or CTO begins."
+      - "Do not claim COMPLETE_SEALED; Project Memory is a maintained living capability."
+      - "Do not connect to production or access databases, secrets, or networks merely to maintain repository memory."
+      - "Do not source-write, stage, commit, push, or deploy a future memory update without its separately scoped authorization."
     superseded_authority: []
     next_allowed_actions:
-      - "CTO review of the run-local candidate artifacts."
-      - "First synthesize and review one complete Context Index replacement candidate, then refresh an exact three-file manifest; only after scope resolution may a separate source-write authorization be considered."
+      - "Consume this registry and its authority-routing documents as canonical startup context."
+      - "Monitor accepted capability-state evolution and update only the exactly affected records under a bounded maintenance lane."
+      - "Preserve historical evidence, supersession, reopen conditions, and prohibited-repeat boundaries."
+      - "Prepare an exact candidate and closed source-write manifest before any future tracked Project Memory update."
+      - "Reopen or redesign the capability only after a documented reopen condition."
     notes:
-      - "This proposed PARTIAL status begins only at the authorized source-write moment; before that moment this record is candidate-only."
-      - "No accepted bootstrap source-write run, source commit, or evidence path exists yet."
+      - "Historical pre-write eligibility, trigger, bootstrap-start, and candidate-only facts are preserved as immutable provenance; they do not describe current authority."
+      - "COMPLETE_MONITORED is selected because bootstrap and canonical activation are complete while normal accepted capability-state evolution continues under bounded maintenance."
+      - "The run-local promotion candidate has no canonical authority; this target state begins only after a later separately authorized source write."

@@ -1,8 +1,13 @@
 # KOAPTIX Project Memory v2 Operating Rules
 
-- Document status: `PROJECT_MEMORY_V2_BOOTSTRAP_PARTIAL`
-- Candidate provenance: `P-KOAPTIX-PROJECT-MEMORY-V2-BOOTSTRAP-INVENTORY-AND-CANDIDATE-DESIGN.0`
-- Activation boundary: this body has no canonical authority while it remains under `.handoff`; it applies only after the exact separately authorized source-write lane creates the tracked target.
+- Document status: `PROJECT_MEMORY_V2_COMPLETE_MONITORED`
+- Bootstrap candidate provenance: `P-KOAPTIX-PROJECT-MEMORY-V2-BOOTSTRAP-INVENTORY-AND-CANDIDATE-DESIGN.0`
+- Accepted bootstrap source-write run: `P-KOAPTIX-PROJECT-MEMORY-V2-BOOTSTRAP-EXACT-THREE-FILE-SOURCE-WRITE.0`
+- Accepted bootstrap commit run: `P-KOAPTIX-PROJECT-MEMORY-V2-BOOTSTRAP-EXACT-THREE-FILE-STAGE-AND-COMMIT.0`
+- Accepted bootstrap source commit: `dfe0584f8a9a16dabfad3e129c465d08b59d5f3e`
+- Accepted pre-promotion state: `CANONICAL_ACTIVE_PARTIAL`, classified by `P-KOAPTIX-PROJECT-MEMORY-V2-POST-COMMIT-NEXT-STATE-DECISION-PREPARATION.0`
+- Promotion candidate provenance: `P-KOAPTIX-PROJECT-MEMORY-V2-PARTIAL-TO-COMPLETE-MONITORED-PROMOTION-CANDIDATE-SYNTHESIS.0`
+- Promotion boundary: this `COMPLETE_MONITORED` candidate has no canonical authority while it remains under `.handoff`; it applies only after an exact separately authorized promotion source-write lane replaces the tracked target and local postwrite verification passes.
 - Relationship to existing governance: this document complements, and does not supersede, `KOAPTIX_CONTEXT_INDEX.md`, `KOAPTIX_CONFIRMED_DECISIONS.md`, or `KOAPTIX_CONTINUITY_AND_HANDOFF_PROTOCOL.md`.
 
 ## 1. Purpose
