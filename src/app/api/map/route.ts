@@ -31,6 +31,9 @@ const MAP_MAX_LIMIT = 120;
 
 const MAP_CACHE_CONTROL = "private, no-store, max-age=0";
 
+const MAP_AGGREGATION_BASIS = "BOUNDED_PUBLISHED_RANK_SAMPLE" as const;
+const MAP_AGGREGATION_GRAIN = "DISTRICT_GROUP" as const;
+
 const LATEST_MAP_TIMEOUT_MS_KOREA = 1_800;
 const LATEST_MAP_TIMEOUT_MS_REGIONAL = 1_100;
 
@@ -122,7 +125,16 @@ type MapDistrictItem = {
   peakComplexName: string | null;
 };
 
-type MapPayload = KoaptixPublicationSelectionIdentity & {
+type MapAggregationMetadata = {
+  aggregationBasis: typeof MAP_AGGREGATION_BASIS;
+  isCompleteDistrictTotal: false;
+  aggregationGrain: typeof MAP_AGGREGATION_GRAIN;
+  sourceRowLimit: number;
+  sourceRowsUsed: number;
+};
+
+type MapPayload = KoaptixPublicationSelectionIdentity &
+  MapAggregationMetadata & {
   ok: true;
   universeCode: string;
   requestedUniverseCode: string;
@@ -141,6 +153,19 @@ type MapPayload = KoaptixPublicationSelectionIdentity & {
   count: number;
   items: MapDistrictItem[];
 };
+
+function buildMapAggregationMetadata(
+  sourceRowLimit: number,
+  sourceRowsUsed: number,
+): MapAggregationMetadata {
+  return {
+    aggregationBasis: MAP_AGGREGATION_BASIS,
+    isCompleteDistrictTotal: false,
+    aggregationGrain: MAP_AGGREGATION_GRAIN,
+    sourceRowLimit,
+    sourceRowsUsed,
+  };
+}
 
 type ComplexRegionMapRow = {
   complex_id: number | string | null;
@@ -438,6 +463,7 @@ function buildEmptyMapPayload(
     renderedUniverseCode: universeCode,
     requestedLimit,
     renderedLimit: 0,
+    ...buildMapAggregationMetadata(requestedLimit, 0),
     resultCount: 0,
     mapScopeLabel: getUniverseLabel(universeCode),
     isFallback: false,
@@ -462,6 +488,7 @@ function buildUnavailableMapPayload(
     ...buildUniverseResolutionMetadata(resolution),
     requestedLimit,
     renderedLimit: 0,
+    ...buildMapAggregationMetadata(requestedLimit, 0),
     resultCount: 0,
     mapScopeLabel: resolution.requestedUniverseCode,
     isFallback: false,
@@ -709,6 +736,7 @@ async function rowsToMapPayload(
     renderedUniverseCode: universeCode,
     requestedLimit: options.requestedLimit,
     renderedLimit: options.renderedLimit,
+    ...buildMapAggregationMetadata(options.renderedLimit, rows.length),
     resultCount: items.length,
     mapScopeLabel: getUniverseLabel(universeCode),
     isFallback: Boolean(fallbackIdentity),

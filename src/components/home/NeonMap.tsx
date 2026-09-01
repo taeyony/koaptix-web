@@ -17,6 +17,9 @@ import {
 
 type Coord = { lat: number; lng: number };
 
+const MAP_AGGREGATION_BASIS = "BOUNDED_PUBLISHED_RANK_SAMPLE" as const;
+const MAP_AGGREGATION_GRAIN = "DISTRICT_GROUP" as const;
+
 type DistrictAggregate = {
   name: string;
   query: string;
@@ -56,6 +59,11 @@ type MapApiResponse = {
   fallbackMode?: string;
   source?: string;
   cacheState?: string;
+  aggregationBasis?: typeof MAP_AGGREGATION_BASIS;
+  isCompleteDistrictTotal?: false;
+  aggregationGrain?: typeof MAP_AGGREGATION_GRAIN;
+  sourceRowLimit?: number | null;
+  sourceRowsUsed?: number | null;
   count?: number;
   items?: DistrictAggregate[];
   message?: string;
@@ -85,6 +93,11 @@ type MapDeliveryState = {
   cacheState: string;
   source: string;
   itemCount: number;
+  aggregationBasis: typeof MAP_AGGREGATION_BASIS;
+  isCompleteDistrictTotal: false;
+  aggregationGrain: typeof MAP_AGGREGATION_GRAIN;
+  sourceRowLimit: number | null;
+  sourceRowsUsed: number | null;
 };
 
 type MapLocalSearchSuggestion =
@@ -571,6 +584,18 @@ function buildFallbackAggregate(items: RankingItem[]): DistrictAggregate[] {
   }));
 }
 
+function countMapAggregateSourceRows(items: DistrictAggregate[]) {
+  return items.reduce((total, group) => total + group.count, 0);
+}
+
+function toNonNegativeSafeIntegerOrNull(value: unknown): number | null {
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0
+    ? value
+    : null;
+}
+
 async function readMapItems(input: string, signal: AbortSignal) {
   const response = await fetch(input, {
     method: "GET",
@@ -590,6 +615,12 @@ async function readMapItems(input: string, signal: AbortSignal) {
   const items = json.items ?? [];
   const renderedUniverseCode = json.renderedUniverseCode ?? json.universeCode ?? "";
   const requestedUniverseCode = json.requestedUniverseCode ?? json.universeCode ?? "";
+  const parsedSourceRowLimit = toNonNegativeSafeIntegerOrNull(json.sourceRowLimit);
+  const parsedSourceRowsUsed = toNonNegativeSafeIntegerOrNull(json.sourceRowsUsed);
+  const hasConsistentSourceRows =
+    parsedSourceRowLimit === null ||
+    parsedSourceRowsUsed === null ||
+    parsedSourceRowsUsed <= parsedSourceRowLimit;
 
   if (requestedUniverseCode && renderedUniverseCode !== requestedUniverseCode) {
     throw new Error("Map response universe identity mismatch");
@@ -605,6 +636,17 @@ async function readMapItems(input: string, signal: AbortSignal) {
       cacheState: json.cacheState ?? cacheState,
       source: json.source ?? "api",
       itemCount: Number(json.count ?? items.length),
+      aggregationBasis:
+        json.aggregationBasis === MAP_AGGREGATION_BASIS
+          ? json.aggregationBasis
+          : MAP_AGGREGATION_BASIS,
+      isCompleteDistrictTotal: false,
+      aggregationGrain:
+        json.aggregationGrain === MAP_AGGREGATION_GRAIN
+          ? json.aggregationGrain
+          : MAP_AGGREGATION_GRAIN,
+      sourceRowLimit: hasConsistentSourceRows ? parsedSourceRowLimit : null,
+      sourceRowsUsed: hasConsistentSourceRows ? parsedSourceRowsUsed : null,
     } satisfies MapDeliveryState,
   };
 }
@@ -649,6 +691,11 @@ function buildMapDeliveryState(
     cacheState: overrides.cacheState ?? "client",
     source: overrides.source ?? "home-board-seed",
     itemCount: overrides.itemCount ?? 0,
+    aggregationBasis: MAP_AGGREGATION_BASIS,
+    isCompleteDistrictTotal: false,
+    aggregationGrain: MAP_AGGREGATION_GRAIN,
+    sourceRowLimit: overrides.sourceRowLimit ?? null,
+    sourceRowsUsed: overrides.sourceRowsUsed ?? null,
   };
 }
 
@@ -707,6 +754,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
   const fallbackMapItemsRef = useRef<DistrictAggregate[]>(fallbackMapItems);
   fallbackMapItemsRef.current = fallbackMapItems;
+  const fallbackSourceRowsUsed = countMapAggregateSourceRows(fallbackMapItems);
 
   const [mapItems, setMapItems] = useState<DistrictAggregate[]>(
     fallbackMapItems,
@@ -715,6 +763,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   const [mapDelivery, setMapDelivery] = useState<MapDeliveryState>(() =>
     buildMapDeliveryState(currentUniverseCode, {
       itemCount: fallbackMapItems.length,
+      sourceRowsUsed: fallbackSourceRowsUsed,
     }),
   );
 
@@ -917,6 +966,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     setMapDelivery(
       buildMapDeliveryState(currentUniverseCode, {
         itemCount: fallbackMapItemsRef.current.length,
+        sourceRowsUsed: countMapAggregateSourceRows(fallbackMapItemsRef.current),
       }),
     );
   }, [currentUniverseCode]);
@@ -970,6 +1020,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
             cacheState: "client",
             source: "home-board-seed",
             itemCount: fallbackMapItemsRef.current.length,
+            sourceRowsUsed: countMapAggregateSourceRows(fallbackMapItemsRef.current),
           }),
         );
 
@@ -1340,7 +1391,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         kind: "district",
         key: `district-${district.name}`,
         label: district.name,
-        meta: `지도 관측 ${district.boardCount ?? district.count}개 · ${formatCompactCap(
+        meta: `집계 표본 ${district.count}행 · 표시 시총 ${formatCompactCap(
           district.totalMarketCap,
         )}`,
         district,
@@ -1577,6 +1628,14 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   );
   const renderedUniverseLabel =
     mapScopeLabel || mapDelivery.renderedUniverseCode || currentUniverseCode;
+  const sampledAggregationLabel =
+    mapDelivery.sourceRowsUsed !== null && mapDelivery.sourceRowLimit !== null
+      ? `공개 랭킹 표본 ${mapDelivery.sourceRowsUsed}행(조회 상한 ${mapDelivery.sourceRowLimit}행)`
+      : mapDelivery.sourceRowsUsed !== null
+        ? `공개 랭킹 표본 ${mapDelivery.sourceRowsUsed}행`
+        : mapDelivery.sourceRowLimit !== null
+          ? `조회 상한 ${mapDelivery.sourceRowLimit}행의 공개 랭킹 표본`
+          : "제한된 공개 랭킹 표본";
 
   if (error) {
     return (
@@ -1591,6 +1650,13 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         data-map-cache-state="client"
         data-map-source={mapDelivery.source}
         data-map-item-count={mapDelivery.itemCount}
+        data-map-aggregation-basis={mapDelivery.aggregationBasis}
+        data-map-is-complete-district-total={String(
+          mapDelivery.isCompleteDistrictTotal,
+        )}
+        data-map-aggregation-grain={mapDelivery.aggregationGrain}
+        data-map-source-row-limit={mapDelivery.sourceRowLimit ?? "unknown"}
+        data-map-source-rows-used={mapDelivery.sourceRowsUsed ?? "unknown"}
       >
         <div className="shrink-0 flex flex-col gap-4 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
           <div>
@@ -1799,6 +1865,13 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         data-map-scope={getUniverseLabel(currentUniverseCode)}
         data-map-fallback-mode="loading"
         data-map-cache-state="client"
+        data-map-aggregation-basis={mapDelivery.aggregationBasis}
+        data-map-is-complete-district-total={String(
+          mapDelivery.isCompleteDistrictTotal,
+        )}
+        data-map-aggregation-grain={mapDelivery.aggregationGrain}
+        data-map-source-row-limit={mapDelivery.sourceRowLimit ?? "unknown"}
+        data-map-source-rows-used={mapDelivery.sourceRowsUsed ?? "unknown"}
       />
     );
   }
@@ -1815,6 +1888,13 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       data-map-cache-state={mapDelivery.cacheState}
       data-map-source={mapDelivery.source}
       data-map-item-count={mapDelivery.itemCount}
+      data-map-aggregation-basis={mapDelivery.aggregationBasis}
+      data-map-is-complete-district-total={String(
+        mapDelivery.isCompleteDistrictTotal,
+      )}
+      data-map-aggregation-grain={mapDelivery.aggregationGrain}
+      data-map-source-row-limit={mapDelivery.sourceRowLimit ?? "unknown"}
+      data-map-source-rows-used={mapDelivery.sourceRowsUsed ?? "unknown"}
     >
       <div className="shrink-0 flex flex-col gap-4 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
         <div className="flex flex-col justify-between gap-4">
@@ -1826,7 +1906,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               전국 자본 흐름 맵
             </h2>
             <p className="mt-2 text-[11px] text-slate-500">
-              원 안 큰 숫자는 해당 구의 총 시가총액이다. 레인지와 TOP N을 바꿔도 지도 위치는 유지된다.
+              원 안 큰 숫자는 {sampledAggregationLabel}을 지역별로 묶은 표시 시총이다. 지역 전체 총액이 아니다.
             </p>
 
             <div
@@ -2035,10 +2115,10 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
           <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-cyan-300">
-            표시 단지 {actionableCount}개
+            표시 지역 {actionableCount}개
           </span>
           <span className="rounded-full border border-slate-700 bg-slate-800/30 px-2.5 py-1 text-slate-400">
-            참고 레이어 {Math.max(visualizedMapData.length - actionableCount, 0)}개
+            참고 지역 {Math.max(visualizedMapData.length - actionableCount, 0)}개
           </span>
           {mapItemsError && (
             <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-rose-300">
@@ -2241,15 +2321,15 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
                 const titleParts = [
                   data.name,
-                  formatMarketCapKrw(data.totalMarketCap),
-                  `${data.count}개 단지`,
+                  `표시 시총 ${formatMarketCapKrw(data.totalMarketCap)}`,
+                  `집계 표본 ${data.count}행`,
                   isRising
-                    ? `주간 흐름 ▲${Math.abs(data.averageDelta).toFixed(1)}`
-                    : `주간 흐름 ▼${Math.abs(data.averageDelta).toFixed(1)}`,
+                    ? `표본 평균 주간 흐름 ▲${Math.abs(data.averageDelta).toFixed(1)}`
+                    : `표본 평균 주간 흐름 ▼${Math.abs(data.averageDelta).toFixed(1)}`,
                   data.primaryComplexName ? `대표 ${data.primaryComplexName}` : "",
                   isActionable
-                    ? `표시 단지 ${data.boardCount ?? 0}개`
-                    : "참고 레이어",
+                    ? `클릭 가능 보드 표본 ${data.boardCount ?? 0}행`
+                    : "참고 지역",
                 ].filter(Boolean);
 
                 return (
