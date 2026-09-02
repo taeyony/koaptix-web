@@ -216,6 +216,105 @@ function scoreRegionSearchResult(
   return null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isRegionClarificationChoice(
+  value: unknown,
+): value is RegionClarificationChoice {
+  if (!isRecord(value)) return false;
+
+  return (
+    isNonEmptyString(value.canonicalRegionCode) &&
+    isNonEmptyString(value.qualifiedNameKo) &&
+    (value.regionLevel === "country" ||
+      value.regionLevel === "sido" ||
+      value.regionLevel === "sigungu") &&
+    (value.compatibility === "COMPATIBLE" ||
+      value.compatibility === "INCOMPATIBLE" ||
+      value.compatibility === "UNKNOWN") &&
+    isNonEmptyString(value.replacementQuery)
+  );
+}
+
+function hasMatchingClarificationChoices(
+  left: RegionClarificationChoice[],
+  right: RegionClarificationChoice[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((choice, index) => {
+      const other = right[index];
+      return (
+        choice.canonicalRegionCode === other.canonicalRegionCode &&
+        choice.qualifiedNameKo === other.qualifiedNameKo &&
+        choice.regionLevel === other.regionLevel &&
+        choice.compatibility === other.compatibility &&
+        choice.replacementQuery === other.replacementQuery
+      );
+    })
+  );
+}
+
+function readCurrentSearchClarificationResult(
+  response: Response,
+  json: SearchApiResponse,
+): SearchResultPayload | null {
+  const resolution = json.regionResolution;
+  const choices = json.clarificationChoices;
+  const warnings = json.warnings;
+
+  if (
+    response.status !== 409 ||
+    json.ok !== false ||
+    !resolution ||
+    !Array.isArray(choices) ||
+    choices.length === 0 ||
+    !choices.every(isRegionClarificationChoice) ||
+    !Array.isArray(resolution.candidateChoices) ||
+    !resolution.candidateChoices.every(isRegionClarificationChoice) ||
+    !hasMatchingClarificationChoices(choices, resolution.candidateChoices) ||
+    !Array.isArray(json.localItems) ||
+    json.localItems.length !== 0 ||
+    !Array.isArray(json.globalItems) ||
+    json.globalItems.length !== 0 ||
+    !Array.isArray(json.discoveryCandidates) ||
+    json.discoveryCandidates.length !== 0 ||
+    !Array.isArray(warnings) ||
+    !warnings.every((warning) => typeof warning === "string") ||
+    resolution.rankedSearchAllowed !== false ||
+    resolution.discoverySearchAllowed !== false ||
+    resolution.globalFallbackAllowed !== false
+  ) {
+    return null;
+  }
+
+  const isCurrentClarificationState =
+    (resolution.state === "UNIVERSE_CONFLICT" &&
+      resolution.reasonCode ===
+        "SELECTED_UNIVERSE_OUTSIDE_RESOLVED_REGION") ||
+    (resolution.state === "AMBIGUOUS" &&
+      (resolution.reasonCode === "TERMINAL_NAME_COLLISION" ||
+        resolution.reasonCode === "COMPACT_KEY_COLLISION" ||
+        resolution.reasonCode === "MULTIPLE_EXPLICIT_REGION_TOKENS"));
+
+  if (!isCurrentClarificationState) return null;
+
+  return {
+    localItems: [],
+    globalItems: [],
+    discoveryCandidates: [],
+    regionResolution: resolution,
+    clarificationChoices: choices,
+    warnings,
+  };
+}
+
 async function readSearchResult(
   input: string,
   signal: AbortSignal,
@@ -227,6 +326,12 @@ async function readSearchResult(
   });
 
   const json = (await response.json()) as SearchApiResponse;
+  const clarificationResult = readCurrentSearchClarificationResult(
+    response,
+    json,
+  );
+
+  if (clarificationResult) return clarificationResult;
 
   if (!response.ok || json.ok === false) {
     throw new Error(
@@ -423,6 +528,10 @@ export function CommandPalette({
       setIsSearching(false);
       return;
     }
+
+    setRegionResolution(null);
+    setClarificationChoices([]);
+    setRegionWarnings([]);
 
   const controller = new AbortController();
   let cancelled = false;
@@ -945,7 +1054,7 @@ export function CommandPalette({
                     </div>
                   )}
                 </div>
-              ) : regionSearchResults.length > 0 ? (
+              ) : hasRegionResolutionBlock || regionSearchResults.length > 0 ? (
                 null
               ) : (
                 <div className="space-y-2 rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
