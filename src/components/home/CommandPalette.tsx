@@ -16,7 +16,7 @@ import { BetaDisclosure } from "./BetaDisclosure";
 import {
   DEFAULT_UNIVERSE_CODE,
   getSearchUniverseRegistry,
-  resolveServiceUniverseCode,
+  resolveUniverseRequest,
   type KnownUniverseCode,
 } from "../../lib/koaptix/universes";
 
@@ -357,9 +357,23 @@ export function CommandPalette({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const urlUniverseCode = resolveServiceUniverseCode(
-    searchParams?.get("universe") ?? initialUniverseCode,
-  );
+  const rawUniverseCode = searchParams
+    ? searchParams.get("universe")
+    : initialUniverseCode;
+  const universeResolution = resolveUniverseRequest(rawUniverseCode, {
+    capability: "search",
+  });
+  const requestedUniverseCode = universeResolution.requestedUniverseCode;
+  const effectiveUniverseCode = universeResolution.universeUnavailable
+    ? null
+    : universeResolution.renderedUniverseCode;
+  const universeBoundaryMessage = universeResolution.universeUnavailable
+    ? universeResolution.reason === "invalid_or_unknown_universe"
+      ? `Invalid universe request: ${requestedUniverseCode}`
+      : `Universe is not available for search: ${
+          universeResolution.registryItem?.label ?? requestedUniverseCode
+        }`
+    : null;
 
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -378,6 +392,12 @@ export function CommandPalette({
   const [regionWarnings, setRegionWarnings] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchResultUniverseCode, setSearchResultUniverseCode] = useState<
+    string | null
+  >(null);
+  const [searchActivityUniverseCode, setSearchActivityUniverseCode] = useState<
+    string | null
+  >(null);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const cacheRef = useRef<Record<string, SearchResultPayload>>({});
@@ -407,11 +427,29 @@ export function CommandPalette({
   );
 
   const localFallbackItems = useMemo(() => {
+    if (universeResolution.universeUnavailable) return [];
+
     const q = query.trim().toLowerCase();
     if (!q) return [];
 
     return items
       .filter((item) => {
+        const itemUniverseCode = item.universeCode ?? item.universe_code;
+        if (itemUniverseCode && effectiveUniverseCode) {
+          const itemUniverseResolution = resolveUniverseRequest(
+            itemUniverseCode,
+            { capability: "search" },
+          );
+
+          if (
+            itemUniverseResolution.universeUnavailable ||
+            itemUniverseResolution.renderedUniverseCode !==
+              effectiveUniverseCode
+          ) {
+            return false;
+          }
+        }
+
         return (
           item.name.toLowerCase().includes(q) ||
           item.sigunguName?.toLowerCase().includes(q) ||
@@ -420,9 +458,16 @@ export function CommandPalette({
         );
       })
       .slice(0, 8);
-  }, [items, query]);
+  }, [
+    effectiveUniverseCode,
+    items,
+    query,
+    universeResolution.universeUnavailable,
+  ]);
 
   const regionSearchResults = useMemo<RegionSearchResult[]>(() => {
+    if (universeResolution.universeUnavailable) return [];
+
     const normalizedQuery = normalizeRegionSearchText(query);
     if (normalizedQuery.length < 2) return [];
 
@@ -461,7 +506,7 @@ export function CommandPalette({
         label,
         displayLabel,
       }));
-  }, [query]);
+  }, [query, universeResolution.universeUnavailable]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -498,6 +543,26 @@ export function CommandPalette({
   }, []);
 
   useEffect(() => {
+    if (universeResolution.universeUnavailable || !effectiveUniverseCode) {
+      const clearId = window.setTimeout(() => {
+        setLocalItems([]);
+        setGlobalItems([]);
+        setDiscoveryCandidates([]);
+        setSelectedDiscoveryCandidate(null);
+        setRegionResolution(null);
+        setClarificationChoices([]);
+        setRegionWarnings([]);
+        setSearchError(null);
+        setSearchResultUniverseCode(null);
+        setSearchActivityUniverseCode(null);
+        setIsSearching(false);
+      }, 0);
+
+      return () => {
+        window.clearTimeout(clearId);
+      };
+    }
+
     if (!isOpen) return;
 
     const q = query.trim();
@@ -510,11 +575,13 @@ export function CommandPalette({
       setClarificationChoices([]);
       setRegionWarnings([]);
       setSearchError(null);
+      setSearchResultUniverseCode(null);
+      setSearchActivityUniverseCode(null);
       setIsSearching(false);
       return;
     }
 
-    const cacheKey = `${urlUniverseCode}::${q.toLowerCase()}`;
+    const cacheKey = `${effectiveUniverseCode}::${q.toLowerCase()}`;
     const cached = cacheRef.current[cacheKey];
     if (cached) {
       setLocalItems(cached.localItems);
@@ -525,6 +592,8 @@ export function CommandPalette({
       setRegionWarnings(cached.warnings);
       setSelectedDiscoveryCandidate(null);
       setSearchError(null);
+      setSearchResultUniverseCode(effectiveUniverseCode);
+      setSearchActivityUniverseCode(null);
       setIsSearching(false);
       return;
     }
@@ -533,108 +602,154 @@ export function CommandPalette({
     setClarificationChoices([]);
     setRegionWarnings([]);
 
-  const controller = new AbortController();
-  let cancelled = false;
-  let timedOut = false;
+    const controller = new AbortController();
+    let cancelled = false;
+    let timedOut = false;
 
-  const searchFetchTimeoutMs = 7000;
-  let fetchTimeoutId: number | undefined;
+    const searchFetchTimeoutMs = 7000;
+    let fetchTimeoutId: number | undefined;
 
-  const timer = window.setTimeout(async () => {
-    setIsSearching(true);
-    setSearchError(null);
+    const timer = window.setTimeout(async () => {
+      setSearchActivityUniverseCode(effectiveUniverseCode);
+      setIsSearching(true);
+      setSearchError(null);
 
-    fetchTimeoutId = window.setTimeout(() => {
-      timedOut = true;
+      fetchTimeoutId = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, searchFetchTimeoutMs);
+
+      try {
+        const next = await readSearchResult(
+          SEARCH_API(q, effectiveUniverseCode, 12),
+          controller.signal,
+        );
+
+        if (cancelled) return;
+
+        cacheRef.current[cacheKey] = next;
+        setLocalItems(next.localItems);
+        setGlobalItems(next.globalItems);
+        setDiscoveryCandidates(next.discoveryCandidates);
+        setRegionResolution(next.regionResolution);
+        setClarificationChoices(next.clarificationChoices);
+        setRegionWarnings(next.warnings);
+        setSelectedDiscoveryCandidate(null);
+        setSearchResultUniverseCode(effectiveUniverseCode);
+      } catch (error) {
+        if (cancelled || (!timedOut && controller.signal.aborted)) return;
+
+        const message = timedOut
+          ? "검색 시간 초과"
+          : error instanceof Error
+            ? error.message
+            : "검색 실패";
+
+        if (timedOut) {
+          console.warn("[CommandPalette] search fetch timed out", {
+            urlUniverseCode: effectiveUniverseCode,
+            q,
+          });
+        } else {
+          console.error("[CommandPalette] search failed", {
+            urlUniverseCode: effectiveUniverseCode,
+            q,
+            message,
+          });
+        }
+
+        setSearchError(message);
+        setLocalItems([]);
+        setGlobalItems([]);
+        setDiscoveryCandidates([]);
+        setSelectedDiscoveryCandidate(null);
+        setRegionResolution(null);
+        setClarificationChoices([]);
+        setRegionWarnings([]);
+        setSearchResultUniverseCode(effectiveUniverseCode);
+      } finally {
+        if (fetchTimeoutId !== undefined) window.clearTimeout(fetchTimeoutId);
+        if (!cancelled) {
+          setIsSearching(false);
+          setSearchActivityUniverseCode(null);
+        }
+      }
+    }, 180);
+
+    return () => {
+      cancelled = true;
       controller.abort();
-    }, searchFetchTimeoutMs);
-
-    try {
-      const next = await readSearchResult(
-        SEARCH_API(q, urlUniverseCode, 12),
-        controller.signal,
-      );
-
-      if (cancelled) return;
-
-      cacheRef.current[cacheKey] = next;
-      setLocalItems(next.localItems);
-      setGlobalItems(next.globalItems);
-      setDiscoveryCandidates(next.discoveryCandidates);
-      setRegionResolution(next.regionResolution);
-      setClarificationChoices(next.clarificationChoices);
-      setRegionWarnings(next.warnings);
-      setSelectedDiscoveryCandidate(null);
-    } catch (error) {
-      if (!timedOut && (controller.signal.aborted || cancelled)) return;
-
-      const message = timedOut
-        ? "검색 시간 초과"
-        : error instanceof Error
-          ? error.message
-          : "검색 실패";
-
-      if (timedOut) {
-        console.warn("[CommandPalette] search fetch timed out", {
-          urlUniverseCode,
-          q,
-        });
-      } else {
-        console.error("[CommandPalette] search failed", {
-          urlUniverseCode,
-          q,
-          message,
-        });
-      }
-
-      setSearchError(message);
-      setLocalItems([]);
-      setGlobalItems([]);
-      setDiscoveryCandidates([]);
-      setSelectedDiscoveryCandidate(null);
-      setRegionResolution(null);
-      setClarificationChoices([]);
-      setRegionWarnings([]);
-    } finally {
+      window.clearTimeout(timer);
       if (fetchTimeoutId !== undefined) window.clearTimeout(fetchTimeoutId);
-      if (!cancelled) {
-        setIsSearching(false);
-      }
-    }
-  }, 180);
+    };
+  }, [
+    effectiveUniverseCode,
+    isOpen,
+    query,
+    universeResolution.universeUnavailable,
+  ]);
 
-  return () => {
-    cancelled = true;
-    controller.abort();
-    window.clearTimeout(timer);
-    if (fetchTimeoutId !== undefined) window.clearTimeout(fetchTimeoutId);
-  };
-  }, [isOpen, query, urlUniverseCode]);
+  const hasCurrentSearchResultScope =
+    effectiveUniverseCode !== null &&
+    searchResultUniverseCode === effectiveUniverseCode;
+  const currentIsSearching =
+    isSearching && searchActivityUniverseCode === effectiveUniverseCode;
+  const currentSearchError = hasCurrentSearchResultScope ? searchError : null;
+  const currentRegionResolution = hasCurrentSearchResultScope
+    ? regionResolution
+    : null;
+  const currentClarificationChoices = hasCurrentSearchResultScope
+    ? clarificationChoices
+    : [];
+  const currentRegionWarnings = hasCurrentSearchResultScope
+    ? regionWarnings
+    : [];
 
   const visibleLocalItems = useMemo(() => {
+    if (universeResolution.universeUnavailable) return [];
     if (query.trim().length < 2) {
       return localFallbackItems;
     }
-    return localItems;
-  }, [localFallbackItems, localItems, query]);
+    return hasCurrentSearchResultScope ? localItems : [];
+  }, [
+    hasCurrentSearchResultScope,
+    localFallbackItems,
+    localItems,
+    query,
+    universeResolution.universeUnavailable,
+  ]);
 
   const visibleGlobalItems = useMemo(() => {
+    if (universeResolution.universeUnavailable) return [];
     if (query.trim().length < 2) return [];
-    return globalItems;
-  }, [globalItems, query]);
+    return hasCurrentSearchResultScope ? globalItems : [];
+  }, [
+    globalItems,
+    hasCurrentSearchResultScope,
+    query,
+    universeResolution.universeUnavailable,
+  ]);
 
   const visibleDiscoveryCandidates = useMemo(() => {
+    if (universeResolution.universeUnavailable) return [];
     if (query.trim().length < 2) return [];
-    return discoveryCandidates;
-  }, [discoveryCandidates, query]);
+    return hasCurrentSearchResultScope ? discoveryCandidates : [];
+  }, [
+    discoveryCandidates,
+    hasCurrentSearchResultScope,
+    query,
+    universeResolution.universeUnavailable,
+  ]);
 
   const hasRankedSearchResults =
     visibleLocalItems.length > 0 || visibleGlobalItems.length > 0;
   const hasDiscoveryCandidates = visibleDiscoveryCandidates.length > 0;
 
   const rankingSearchHref = useMemo(() => {
+    if (!effectiveUniverseCode) return null;
+
     const params = new URLSearchParams();
-    params.set("universe", urlUniverseCode);
+    params.set("universe", effectiveUniverseCode);
 
     const q = query.trim();
     if (q) {
@@ -642,7 +757,7 @@ export function CommandPalette({
     }
 
     return `/ranking?${params.toString()}`;
-  }, [query, urlUniverseCode]);
+  }, [effectiveUniverseCode, query]);
 
   const handleSelectItem = useCallback(
     (item: RankingItem) => {
@@ -662,6 +777,7 @@ export function CommandPalette({
   );
 
   const handleOpenRankingSearch = useCallback(() => {
+    if (!rankingSearchHref) return;
     router.push(rankingSearchHref);
     setIsOpen(false);
   }, [rankingSearchHref, router]);
@@ -699,8 +815,9 @@ export function CommandPalette({
   );
 
   const hasRegionResolutionBlock =
-    regionResolution?.state === "AMBIGUOUS" ||
-    regionResolution?.state === "UNIVERSE_CONFLICT";
+    !universeResolution.universeUnavailable &&
+    (currentRegionResolution?.state === "AMBIGUOUS" ||
+      currentRegionResolution?.state === "UNIVERSE_CONFLICT");
 
   const getDiscoveryWarningLabel = (warning: DiscoveryWarning) => {
     if (warning === "SOURCE_IDENTITY_AMBIGUOUS") return "원천 연결 추가 확인";
@@ -873,7 +990,16 @@ export function CommandPalette({
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-[999] bg-black/60 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-[999] bg-black/60 backdrop-blur-sm"
+          data-requested-universe-code={requestedUniverseCode}
+          data-universe-resolution-status={
+            universeResolution.universeResolutionStatus
+          }
+          data-universe-unavailable={
+            universeResolution.universeUnavailable ? "true" : "false"
+          }
+        >
           <div className="mx-auto mt-24 w-[92%] max-w-[820px] rounded-[28px] border border-cyan-500/20 bg-[#0b1118]/95 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_24px_80px_rgba(0,0,0,0.55)]">
             <div className="border-b border-slate-800/80 px-6 py-5">
               <p className="text-[12px] uppercase tracking-[0.24em] text-cyan-300/80">
@@ -898,7 +1024,8 @@ export function CommandPalette({
                   type="button"
                   onClick={handleOpenRankingSearch}
                   data-testid="command-open-ranking-search"
-                  className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-300 transition hover:border-cyan-400/50 hover:bg-cyan-500/20"
+                  disabled={!rankingSearchHref}
+                  className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-300 transition hover:border-cyan-400/50 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-900/60 disabled:text-slate-500"
                 >
                   TOP1000
                 </button>
@@ -922,7 +1049,7 @@ export function CommandPalette({
 
               {query.trim().length >= 2 &&
                 regionSearchResults.length > 0 &&
-                !isSearching &&
+                !currentIsSearching &&
                 !hasRegionResolutionBlock && (
                 <div className="mb-4">
                   <div className="mb-3 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-emerald-300/80">
@@ -936,21 +1063,22 @@ export function CommandPalette({
               )}
 
               {query.trim().length >= 2 &&
-                (hasRegionResolutionBlock || regionWarnings.length > 0) && (
+                !universeResolution.universeUnavailable &&
+                (hasRegionResolutionBlock || currentRegionWarnings.length > 0) && (
                   <div
                     data-testid="command-palette-region-resolution"
                     className="mb-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
                   >
                     <p className="font-semibold">
-                      {regionResolution?.state === "UNIVERSE_CONFLICT"
+                      {currentRegionResolution?.state === "UNIVERSE_CONFLICT"
                         ? "입력한 지역이 현재 선택한 검색 범위와 다릅니다."
-                        : regionResolution?.state === "AMBIGUOUS"
+                        : currentRegionResolution?.state === "AMBIGUOUS"
                           ? "어느 지역인지 한 번 더 선택해 주세요."
                           : "지역 해석 없이 기존 검색 결과를 표시합니다."}
                     </p>
-                    {clarificationChoices.length > 0 && (
+                    {currentClarificationChoices.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {clarificationChoices.map((choice) => (
+                        {currentClarificationChoices.map((choice) => (
                           <button
                             key={choice.canonicalRegionCode}
                             type="button"
@@ -967,13 +1095,20 @@ export function CommandPalette({
                   </div>
                 )}
 
-              {isSearching ? (
+              {universeBoundaryMessage ? (
+                <div
+                  data-testid="command-palette-universe-unavailable"
+                  className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-5 py-8 text-center text-amber-100"
+                >
+                  {universeBoundaryMessage}
+                </div>
+              ) : currentIsSearching ? (
                 <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
                   검색 중...
                 </div>
-              ) : searchError ? (
+              ) : currentSearchError ? (
                 <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-5 py-8 text-center text-rose-300">
-                  {searchError}
+                  {currentSearchError}
                 </div>
               ) : query.trim().length < 2 ? (
                 <div className="space-y-3">

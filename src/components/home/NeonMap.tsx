@@ -13,6 +13,7 @@ import {
   DEFAULT_UNIVERSE_CODE,
   getUniverseLabel,
   resolveServiceUniverseCode,
+  resolveUniverseRequest,
 } from "../../lib/koaptix/universes";
 
 type Coord = { lat: number; lng: number };
@@ -699,15 +700,37 @@ function buildMapDeliveryState(
   };
 }
 
+function buildUnavailableMapDeliveryState(
+  requestedUniverseCode: string,
+): MapDeliveryState {
+  return buildMapDeliveryState(requestedUniverseCode, {
+    renderedUniverseCode: "",
+    mapScopeLabel: "Unavailable",
+    fallbackMode: "universe-unavailable",
+    cacheState: "unavailable",
+    source: "none",
+    itemCount: 0,
+    sourceRowLimit: null,
+    sourceRowsUsed: 0,
+  });
+}
+
 /**
  * Home tactical radar.
  */
 export function NeonMap({ items }: { items: RankingItem[] }) {
   const searchParams = useSearchParams();
   const currentDistrict = searchParams?.get("district");
-  const currentUniverseCode = resolveServiceUniverseCode(
-    searchParams?.get("universe") ?? DEFAULT_UNIVERSE_CODE,
+  const universeResolution = resolveUniverseRequest(
+    searchParams?.get("universe") ?? null,
+    { capability: "map" },
   );
+  const currentUniverseCode = universeResolution.requestedUniverseCode;
+  const effectiveUniverseCode = universeResolution.universeUnavailable
+    ? null
+    : universeResolution.renderedUniverseCode;
+  const universeBoundaryUnavailable =
+    universeResolution.universeUnavailable || !effectiveUniverseCode;
 
   const [showBubbles, setShowBubbles] = useState(true);
   const [topN, setTopN] = useState<number>(() =>
@@ -744,12 +767,33 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   const [mapSearchRegionWarnings, setMapSearchRegionWarnings] = useState<
     string[]
   >([]);
+  const [mapSearchResultUniverseCode, setMapSearchResultUniverseCode] = useState<
+    string | null
+  >(null);
   const [isMapSearchRemotePending, setIsMapSearchRemotePending] = useState(false);
   const mapSearchRemoteCacheRef = useRef<Record<string, MapSearchResultPayload>>({});
 
+  const scopedHomeItems = useMemo(() => {
+    if (universeBoundaryUnavailable || !effectiveUniverseCode) return [];
+
+    return items.filter((item) => {
+      const itemUniverseCode = item.universeCode ?? item.universe_code;
+      if (!itemUniverseCode) return true;
+
+      const itemUniverseResolution = resolveUniverseRequest(itemUniverseCode, {
+        capability: "map",
+      });
+
+      return (
+        !itemUniverseResolution.universeUnavailable &&
+        itemUniverseResolution.renderedUniverseCode === effectiveUniverseCode
+      );
+    });
+  }, [effectiveUniverseCode, items, universeBoundaryUnavailable]);
+
   const fallbackMapItems = useMemo(
-    () => buildFallbackAggregate(items),
-    [items],
+    () => buildFallbackAggregate(scopedHomeItems),
+    [scopedHomeItems],
   );
 
   const fallbackMapItemsRef = useRef<DistrictAggregate[]>(fallbackMapItems);
@@ -761,17 +805,25 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   );
   const [mapItemsError, setMapItemsError] = useState<string | null>(null);
   const [mapDelivery, setMapDelivery] = useState<MapDeliveryState>(() =>
-    buildMapDeliveryState(currentUniverseCode, {
-      itemCount: fallbackMapItems.length,
-      sourceRowsUsed: fallbackSourceRowsUsed,
-    }),
+    universeBoundaryUnavailable
+      ? buildUnavailableMapDeliveryState(currentUniverseCode)
+      : buildMapDeliveryState(currentUniverseCode, {
+          itemCount: fallbackMapItems.length,
+          sourceRowsUsed: fallbackSourceRowsUsed,
+        }),
   );
+  const mapStateMatchesCurrentUniverse =
+    !universeBoundaryUnavailable &&
+    mapDelivery.requestedUniverseCode === currentUniverseCode &&
+    mapDelivery.renderedUniverseCode === currentUniverseCode;
 
   useEffect(() => {
     const rawQuery = mapSearchQuery.trim();
     const normalizedQuery = normalizeMapSearchText(rawQuery);
 
     if (
+      universeBoundaryUnavailable ||
+      !effectiveUniverseCode ||
       !isMapSearchOpen ||
       normalizedQuery.length < MAP_LOCAL_SEARCH_REMOTE_MIN_QUERY_LENGTH
     ) {
@@ -782,6 +834,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         setMapSearchRegionResolution(null);
         setMapSearchClarificationChoices([]);
         setMapSearchRegionWarnings([]);
+        setMapSearchResultUniverseCode(null);
         setIsMapSearchRemotePending(false);
       }, 0);
 
@@ -790,7 +843,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       };
     }
 
-    const cacheKey = `${currentUniverseCode}::${normalizedQuery}`;
+    const cacheKey = `${effectiveUniverseCode}::${normalizedQuery}`;
     const cached = mapSearchRemoteCacheRef.current[cacheKey];
 
     if (cached) {
@@ -800,6 +853,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         setMapSearchRegionResolution(cached.regionResolution);
         setMapSearchClarificationChoices(cached.clarificationChoices);
         setMapSearchRegionWarnings(cached.warnings);
+        setMapSearchResultUniverseCode(effectiveUniverseCode);
         setSelectedMapDiscoveryCandidate(null);
         setIsMapSearchRemotePending(false);
       }, 0);
@@ -824,7 +878,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
       try {
         const remotePayload = await readMapSearchItems(
-          MAP_SEARCH_API(rawQuery, currentUniverseCode),
+          MAP_SEARCH_API(rawQuery, effectiveUniverseCode),
           controller.signal,
         );
 
@@ -836,12 +890,13 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         setMapSearchRegionResolution(remotePayload.regionResolution);
         setMapSearchClarificationChoices(remotePayload.clarificationChoices);
         setMapSearchRegionWarnings(remotePayload.warnings);
+        setMapSearchResultUniverseCode(effectiveUniverseCode);
         setSelectedMapDiscoveryCandidate(null);
       } catch (searchError) {
-        if (!timedOut && (cancelled || controller.signal.aborted)) return;
+        if (cancelled || (!timedOut && controller.signal.aborted)) return;
 
         console.warn("[NeonMap] map search bridge skipped", {
-          currentUniverseCode,
+          currentUniverseCode: effectiveUniverseCode,
           queryLength: rawQuery.length,
           timedOut,
           message:
@@ -855,6 +910,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         setMapSearchRegionResolution(null);
         setMapSearchClarificationChoices([]);
         setMapSearchRegionWarnings([]);
+        setMapSearchResultUniverseCode(null);
       } finally {
         if (timeoutId !== undefined) window.clearTimeout(timeoutId);
         if (!cancelled) {
@@ -869,7 +925,12 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       window.clearTimeout(debounceId);
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
-  }, [currentUniverseCode, isMapSearchOpen, mapSearchQuery]);
+  }, [
+    effectiveUniverseCode,
+    isMapSearchOpen,
+    mapSearchQuery,
+    universeBoundaryUnavailable,
+  ]);
 
   const [loading, error] = useKakaoLoader({
     appkey: process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY as string,
@@ -961,23 +1022,40 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   }, [resolvedCoords, resolvedCoordStorageKey]);
 
   useEffect(() => {
-    setMapItems(fallbackMapItemsRef.current);
-    setMapItemsError(null);
-    setMapDelivery(
-      buildMapDeliveryState(currentUniverseCode, {
-        itemCount: fallbackMapItemsRef.current.length,
-        sourceRowsUsed: countMapAggregateSourceRows(fallbackMapItemsRef.current),
-      }),
-    );
-  }, [currentUniverseCode]);
+    const resetId = window.setTimeout(() => {
+      if (universeBoundaryUnavailable) {
+        setMapItems([]);
+        setMapItemsError(null);
+        setMapDelivery(buildUnavailableMapDeliveryState(currentUniverseCode));
+        return;
+      }
+
+      setMapItems(fallbackMapItemsRef.current);
+      setMapItemsError(null);
+      setMapDelivery(
+        buildMapDeliveryState(currentUniverseCode, {
+          itemCount: fallbackMapItemsRef.current.length,
+          sourceRowsUsed: countMapAggregateSourceRows(
+            fallbackMapItemsRef.current,
+          ),
+        }),
+      );
+    }, 0);
+
+    return () => {
+      window.clearTimeout(resetId);
+    };
+  }, [currentUniverseCode, universeBoundaryUnavailable]);
 
   useEffect(() => {
+    if (universeBoundaryUnavailable || !effectiveUniverseCode) return;
+
     const controller = new AbortController();
     let cancelled = false;
     let timedOut = false;
 
     const mapFetchTimeoutMs =
-      currentUniverseCode === DEFAULT_UNIVERSE_CODE
+      effectiveUniverseCode === DEFAULT_UNIVERSE_CODE
         ? KOREA_ALL_MAP_FETCH_TIMEOUT_MS
         : REGIONAL_MAP_FETCH_TIMEOUT_MS;
     const timeoutId = setTimeout(() => {
@@ -990,7 +1068,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
       try {
         const result = await readMapItems(
-          MAP_API(currentUniverseCode, mapSourceLimit),
+          MAP_API(effectiveUniverseCode, mapSourceLimit),
           controller.signal,
         );
 
@@ -999,7 +1077,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         setMapDelivery(result.delivery);
       } catch (error) {
         // Unmount abort: return silently, board-seed fallback already rendered.
-        if (!timedOut && (controller.signal.aborted || cancelled)) return;
+        if (cancelled || (!timedOut && controller.signal.aborted)) return;
 
         const message = timedOut
           ? "Map request timed out"
@@ -1008,7 +1086,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
             : "맵 데이터 로딩 실패";
 
         console.warn("[NeonMap] map fetch warn", {
-          currentUniverseCode,
+          currentUniverseCode: effectiveUniverseCode,
           mapSourceLimit,
           message,
         });
@@ -1039,10 +1117,21 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [currentUniverseCode, mapSourceLimit]);
+  }, [
+    currentUniverseCode,
+    effectiveUniverseCode,
+    mapSourceLimit,
+    universeBoundaryUnavailable,
+  ]);
 
   useEffect(() => {
-    if (loading || error) return;
+    if (
+      loading ||
+      error ||
+      !mapStateMatchesCurrentUniverse
+    ) {
+      return;
+    }
 
     const kakao = (window as any).kakao;
     if (!kakao?.maps?.services) return;
@@ -1110,11 +1199,21 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     return () => {
       cancelled = true;
     };
-  }, [mapItems, loading, error, currentUniverseCode]);
+  }, [
+    currentUniverseCode,
+    error,
+    loading,
+    mapItems,
+    mapStateMatchesCurrentUniverse,
+  ]);
 
   // 🚨 지차장 지시 E: baseMapData에서 좌표를 읽을 때 고유 coordKey 사용
   // Read coordinates through the same universe-scoped key when rendering.
   const baseMapData = useMemo(() => {
+    if (!mapStateMatchesCurrentUniverse) {
+      return [];
+    }
+
     return mapItems
       .map((group) => {
         const coordKey = getCoordCacheKey(currentUniverseCode, group);
@@ -1136,7 +1235,12 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         (value): value is Omit<ResolvedMapItem, "visualRank" | "bubbleSize"> =>
           value !== null,
       );
-  }, [mapItems, resolvedCoords, currentUniverseCode]);
+  }, [
+    currentUniverseCode,
+    mapItems,
+    mapStateMatchesCurrentUniverse,
+    resolvedCoords,
+  ]);
 
   const universeAnchorCenter = useMemo(() => {
     if (baseMapData.length === 0) return DEFAULT_KOREA_CENTER;
@@ -1251,11 +1355,26 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     ).length;
   }, [visualizedMapData]);
 
+  const hasCurrentMapSearchResultScope =
+    effectiveUniverseCode !== null &&
+    mapSearchResultUniverseCode === effectiveUniverseCode;
+  const currentMapSearchRegionResolution = hasCurrentMapSearchResultScope
+    ? mapSearchRegionResolution
+    : null;
+  const currentMapSearchClarificationChoices = hasCurrentMapSearchResultScope
+    ? mapSearchClarificationChoices
+    : [];
+  const currentMapSearchRegionWarnings = hasCurrentMapSearchResultScope
+    ? mapSearchRegionWarnings
+    : [];
   const hasMapSearchRegionBlock =
-    mapSearchRegionResolution?.state === "AMBIGUOUS" ||
-    mapSearchRegionResolution?.state === "UNIVERSE_CONFLICT";
+    currentMapSearchRegionResolution?.state === "AMBIGUOUS" ||
+    currentMapSearchRegionResolution?.state === "UNIVERSE_CONFLICT";
   const shouldSuppressMapSearchSuggestions =
-    hasMapSearchRegionBlock || isMapSearchRemotePending;
+    universeBoundaryUnavailable ||
+    !mapStateMatchesCurrentUniverse ||
+    hasMapSearchRegionBlock ||
+    isMapSearchRemotePending;
 
   const mapSearchSuggestions = useMemo(() => {
     const normalizedQuery = normalizeMapSearchText(mapSearchQuery);
@@ -1268,8 +1387,14 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       };
     }
 
+    const currentMapSearchRemoteItems = hasCurrentMapSearchResultScope
+      ? mapSearchRemoteItems
+      : [];
+    const currentMapSearchDiscoveryCandidates = hasCurrentMapSearchResultScope
+      ? mapSearchDiscoveryCandidates
+      : [];
     const seenComplexIds = new Set<string>();
-    const itemComplexes = items
+    const itemComplexes = scopedHomeItems
       .filter((item) => {
         if (!item.complexId || seenComplexIds.has(item.complexId)) return false;
 
@@ -1343,7 +1468,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       .filter((suggestion): suggestion is MapLocalSearchSuggestion => suggestion !== null);
 
     const localComplexes = [...itemComplexes, ...mapRepresentativeComplexes];
-    const remoteComplexes = mapSearchRemoteItems
+    const remoteComplexes = currentMapSearchRemoteItems
       .filter((item) => {
         const complexId = String(item.complexId ?? "").trim();
         if (!complexId || seenComplexIds.has(complexId)) return false;
@@ -1397,7 +1522,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         district,
       }));
 
-    const discoveryCandidates = mapSearchDiscoveryCandidates
+    const discoveryCandidates = currentMapSearchDiscoveryCandidates
       .filter((candidate) => {
         if (candidate.discoveryStatus !== "OBSERVATION_READY") return false;
 
@@ -1414,7 +1539,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       discoveryCandidates,
     };
   }, [
-    items,
+    scopedHomeItems,
+    hasCurrentMapSearchResultScope,
     mapItems,
     mapSearchQuery,
     mapSearchRemoteItems,
@@ -1510,7 +1636,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   );
 
   const renderMapRegionResolutionNotice = () => {
-    if (!hasMapSearchRegionBlock && mapSearchRegionWarnings.length === 0) {
+    if (!hasMapSearchRegionBlock && currentMapSearchRegionWarnings.length === 0) {
       return null;
     }
 
@@ -1520,15 +1646,15 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         className="mb-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-3 text-[12px] text-amber-100"
       >
         <p className="font-semibold">
-          {mapSearchRegionResolution?.state === "UNIVERSE_CONFLICT"
+          {currentMapSearchRegionResolution?.state === "UNIVERSE_CONFLICT"
             ? "입력한 지역이 현재 지도 범위와 다릅니다."
-            : mapSearchRegionResolution?.state === "AMBIGUOUS"
+            : currentMapSearchRegionResolution?.state === "AMBIGUOUS"
               ? "표시할 지역을 구체적으로 선택해 주세요."
               : "지역 해석 없이 기존 검색을 사용합니다."}
         </p>
-        {mapSearchClarificationChoices.length > 0 && (
+        {currentMapSearchClarificationChoices.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {mapSearchClarificationChoices.map((choice) => (
+            {currentMapSearchClarificationChoices.map((choice) => (
               <button
                 key={choice.canonicalRegionCode}
                 type="button"
@@ -1621,21 +1747,110 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     [firstMapSearchSuggestion, handleMapSearchSelect],
   );
 
+  const displayMapDelivery = mapStateMatchesCurrentUniverse
+    ? mapDelivery
+    : universeBoundaryUnavailable
+      ? buildUnavailableMapDeliveryState(currentUniverseCode)
+      : buildMapDeliveryState(currentUniverseCode, {
+          fallbackMode: "client-scope-transition",
+          cacheState: "client",
+          source: "none",
+          itemCount: 0,
+          sourceRowsUsed: 0,
+        });
   const mapScopeLabel =
-    mapDelivery.mapScopeLabel || getUniverseLabel(mapDelivery.renderedUniverseCode);
-  const requestedUniverseLabel = getUniverseLabel(
-    mapDelivery.requestedUniverseCode || currentUniverseCode,
-  );
+    displayMapDelivery.mapScopeLabel ||
+    getUniverseLabel(displayMapDelivery.renderedUniverseCode);
+  const requestedUniverseLabel =
+    universeResolution.registryItem?.label ?? currentUniverseCode;
   const renderedUniverseLabel =
-    mapScopeLabel || mapDelivery.renderedUniverseCode || currentUniverseCode;
+    mapScopeLabel || displayMapDelivery.renderedUniverseCode || currentUniverseCode;
   const sampledAggregationLabel =
-    mapDelivery.sourceRowsUsed !== null && mapDelivery.sourceRowLimit !== null
-      ? `공개 랭킹 표본 ${mapDelivery.sourceRowsUsed}행(조회 상한 ${mapDelivery.sourceRowLimit}행)`
-      : mapDelivery.sourceRowsUsed !== null
-        ? `공개 랭킹 표본 ${mapDelivery.sourceRowsUsed}행`
-        : mapDelivery.sourceRowLimit !== null
-          ? `조회 상한 ${mapDelivery.sourceRowLimit}행의 공개 랭킹 표본`
+    displayMapDelivery.sourceRowsUsed !== null &&
+    displayMapDelivery.sourceRowLimit !== null
+      ? `공개 랭킹 표본 ${displayMapDelivery.sourceRowsUsed}행(조회 상한 ${displayMapDelivery.sourceRowLimit}행)`
+      : displayMapDelivery.sourceRowsUsed !== null
+        ? `공개 랭킹 표본 ${displayMapDelivery.sourceRowsUsed}행`
+        : displayMapDelivery.sourceRowLimit !== null
+          ? `조회 상한 ${displayMapDelivery.sourceRowLimit}행의 공개 랭킹 표본`
           : "제한된 공개 랭킹 표본";
+
+  if (universeBoundaryUnavailable) {
+    const boundaryMessage =
+      universeResolution.reason === "invalid_or_unknown_universe"
+        ? `요청한 universe 식별자가 유효하지 않습니다: ${currentUniverseCode}`
+        : `요청한 universe는 현재 지도에서 사용할 수 없습니다: ${requestedUniverseLabel}`;
+
+    return (
+      <section
+        className="flex h-full min-h-[360px] flex-col overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)]"
+        data-testid="neon-map"
+        data-universe-code={currentUniverseCode}
+        data-requested-universe-code={currentUniverseCode}
+        data-rendered-universe-code=""
+        data-universe-resolution-status={
+          universeResolution.universeResolutionStatus
+        }
+        data-universe-unavailable="true"
+        data-map-scope="Unavailable"
+        data-map-fallback-mode="universe-unavailable"
+        data-map-cache-state="unavailable"
+        data-map-source="none"
+        data-map-item-count="0"
+        data-map-aggregation-basis={MAP_AGGREGATION_BASIS}
+        data-map-is-complete-district-total="false"
+        data-map-aggregation-grain={MAP_AGGREGATION_GRAIN}
+        data-map-source-row-limit="unknown"
+        data-map-source-rows-used="0"
+      >
+        <div className="shrink-0 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
+            TACTICAL RADAR
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-100">
+            전국 자본 흐름 맵
+          </h2>
+          <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 lg:max-w-xl">
+            <div
+              className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
+              data-testid="neon-map-requested-universe"
+              data-universe-code={currentUniverseCode}
+            >
+              <span className="block uppercase tracking-[0.16em] text-slate-500">
+                Requested
+              </span>
+              <span className="mt-1 block truncate font-semibold text-slate-300">
+                {requestedUniverseLabel}
+              </span>
+            </div>
+            <div
+              className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
+              data-testid="neon-map-rendered-universe"
+              data-universe-code=""
+            >
+              <span className="block uppercase tracking-[0.16em] text-slate-500">
+                Map scope
+              </span>
+              <span className="mt-1 block truncate font-semibold text-slate-300">
+                Unavailable
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex min-h-[220px] flex-1 items-center justify-center bg-[#0b1118] px-5 py-8 text-center">
+          <div
+            data-testid="neon-map-universe-unavailable"
+            className="max-w-md rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-4 text-sm leading-relaxed text-amber-100"
+          >
+            <p>{boundaryMessage}</p>
+            <p className="mt-2 text-amber-100/70">
+              다른 universe의 지도·검색·홈 표본으로 대체하지 않았습니다.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   if (error) {
     return (
@@ -1643,20 +1858,20 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         className="flex h-full min-h-[360px] flex-col overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)]"
         data-testid="neon-map"
         data-universe-code={currentUniverseCode}
-        data-requested-universe-code={mapDelivery.requestedUniverseCode}
-        data-rendered-universe-code={mapDelivery.renderedUniverseCode}
+        data-requested-universe-code={displayMapDelivery.requestedUniverseCode}
+        data-rendered-universe-code={displayMapDelivery.renderedUniverseCode}
         data-map-scope={mapScopeLabel}
         data-map-fallback-mode="loader-error"
         data-map-cache-state="client"
-        data-map-source={mapDelivery.source}
-        data-map-item-count={mapDelivery.itemCount}
-        data-map-aggregation-basis={mapDelivery.aggregationBasis}
+        data-map-source={displayMapDelivery.source}
+        data-map-item-count={displayMapDelivery.itemCount}
+        data-map-aggregation-basis={displayMapDelivery.aggregationBasis}
         data-map-is-complete-district-total={String(
-          mapDelivery.isCompleteDistrictTotal,
+          displayMapDelivery.isCompleteDistrictTotal,
         )}
-        data-map-aggregation-grain={mapDelivery.aggregationGrain}
-        data-map-source-row-limit={mapDelivery.sourceRowLimit ?? "unknown"}
-        data-map-source-rows-used={mapDelivery.sourceRowsUsed ?? "unknown"}
+        data-map-aggregation-grain={displayMapDelivery.aggregationGrain}
+        data-map-source-row-limit={displayMapDelivery.sourceRowLimit ?? "unknown"}
+        data-map-source-rows-used={displayMapDelivery.sourceRowsUsed ?? "unknown"}
       >
         <div className="shrink-0 flex flex-col gap-4 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
           <div>
@@ -1819,7 +2034,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               <div
                 className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
                 data-testid="neon-map-requested-universe"
-                data-universe-code={mapDelivery.requestedUniverseCode}
+                data-universe-code={displayMapDelivery.requestedUniverseCode}
               >
                 <span className="block uppercase tracking-[0.16em] text-slate-500">
                   Requested
@@ -1832,7 +2047,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               <div
                 className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
                 data-testid="neon-map-rendered-universe"
-                data-universe-code={mapDelivery.renderedUniverseCode}
+                data-universe-code={displayMapDelivery.renderedUniverseCode}
               >
                 <span className="block uppercase tracking-[0.16em] text-slate-500">
                   Map scope
@@ -1865,13 +2080,13 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         data-map-scope={getUniverseLabel(currentUniverseCode)}
         data-map-fallback-mode="loading"
         data-map-cache-state="client"
-        data-map-aggregation-basis={mapDelivery.aggregationBasis}
+        data-map-aggregation-basis={displayMapDelivery.aggregationBasis}
         data-map-is-complete-district-total={String(
-          mapDelivery.isCompleteDistrictTotal,
+          displayMapDelivery.isCompleteDistrictTotal,
         )}
-        data-map-aggregation-grain={mapDelivery.aggregationGrain}
-        data-map-source-row-limit={mapDelivery.sourceRowLimit ?? "unknown"}
-        data-map-source-rows-used={mapDelivery.sourceRowsUsed ?? "unknown"}
+        data-map-aggregation-grain={displayMapDelivery.aggregationGrain}
+        data-map-source-row-limit={displayMapDelivery.sourceRowLimit ?? "unknown"}
+        data-map-source-rows-used={displayMapDelivery.sourceRowsUsed ?? "unknown"}
       />
     );
   }
@@ -1881,20 +2096,20 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)]"
       data-testid="neon-map"
       data-universe-code={currentUniverseCode}
-      data-requested-universe-code={mapDelivery.requestedUniverseCode}
-      data-rendered-universe-code={mapDelivery.renderedUniverseCode}
+      data-requested-universe-code={displayMapDelivery.requestedUniverseCode}
+      data-rendered-universe-code={displayMapDelivery.renderedUniverseCode}
       data-map-scope={mapScopeLabel}
-      data-map-fallback-mode={mapDelivery.fallbackMode}
-      data-map-cache-state={mapDelivery.cacheState}
-      data-map-source={mapDelivery.source}
-      data-map-item-count={mapDelivery.itemCount}
-      data-map-aggregation-basis={mapDelivery.aggregationBasis}
+      data-map-fallback-mode={displayMapDelivery.fallbackMode}
+      data-map-cache-state={displayMapDelivery.cacheState}
+      data-map-source={displayMapDelivery.source}
+      data-map-item-count={displayMapDelivery.itemCount}
+      data-map-aggregation-basis={displayMapDelivery.aggregationBasis}
       data-map-is-complete-district-total={String(
-        mapDelivery.isCompleteDistrictTotal,
+        displayMapDelivery.isCompleteDistrictTotal,
       )}
-      data-map-aggregation-grain={mapDelivery.aggregationGrain}
-      data-map-source-row-limit={mapDelivery.sourceRowLimit ?? "unknown"}
-      data-map-source-rows-used={mapDelivery.sourceRowsUsed ?? "unknown"}
+      data-map-aggregation-grain={displayMapDelivery.aggregationGrain}
+      data-map-source-row-limit={displayMapDelivery.sourceRowLimit ?? "unknown"}
+      data-map-source-rows-used={displayMapDelivery.sourceRowsUsed ?? "unknown"}
     >
       <div className="shrink-0 flex flex-col gap-4 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
         <div className="flex flex-col justify-between gap-4">
@@ -2058,7 +2273,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               <div
                 className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
                 data-testid="neon-map-requested-universe"
-                data-universe-code={mapDelivery.requestedUniverseCode}
+                data-universe-code={displayMapDelivery.requestedUniverseCode}
               >
                 <span className="block uppercase tracking-[0.16em] text-slate-500">
                   Requested
@@ -2071,7 +2286,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               <div
                 className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
                 data-testid="neon-map-rendered-universe"
-                data-universe-code={mapDelivery.renderedUniverseCode}
+                data-universe-code={displayMapDelivery.renderedUniverseCode}
               >
                 <span className="block uppercase tracking-[0.16em] text-slate-500">
                   Map scope
