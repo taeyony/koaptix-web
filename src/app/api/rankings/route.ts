@@ -36,6 +36,43 @@ const BOARD_CACHE_CONTROL = "private, no-store, max-age=0";
 
 const LATEST_BOARD_TIMEOUT_MS_KOREA = 1_800;
 const LATEST_BOARD_TIMEOUT_MS_REGIONAL = 1_100;
+const SIDO_IDENTITY_HYDRATION_TIMEOUT_MS = 700;
+const SIDO_IDENTITY_ROWS_PER_COMPLEX_CAP = 4;
+
+const SIDO_NAME_BY_ADMIN_PREFIX: Readonly<Record<string, string>> = {
+  "11": "서울특별시",
+  "26": "부산광역시",
+  "27": "대구광역시",
+  "28": "인천광역시",
+  "29": "광주광역시",
+  "30": "대전광역시",
+  "31": "울산광역시",
+  "36": "세종특별자치시",
+  "41": "경기도",
+  "42": "강원특별자치도",
+  "43": "충청북도",
+  "44": "충청남도",
+  "45": "전북특별자치도",
+  "46": "전라남도",
+  "47": "경상북도",
+  "48": "경상남도",
+  "50": "제주특별자치도",
+  "51": "강원특별자치도",
+  "52": "전북특별자치도",
+};
+
+type ComplexRegionIdentityRow = {
+  complex_id: number | string | null;
+  lawd_cd: number | string | null;
+  sgg_cd: number | string | null;
+};
+
+type SidoIdentityAccumulator = {
+  cityName: string | null;
+  evidenceCount: number;
+  invalidOrConflicting: boolean;
+};
+
 type BoardPayload = KoaptixPublicationSelectionIdentity & {
   ok: true;
   universeCode: string;
@@ -125,6 +162,10 @@ function toNullableNumber(value: unknown): number | null {
 
 function toRankingItem(row: any, universeCode: string): PublishedRankingItem {
   const buildYear = toNullableNumber(row.build_year ?? row.approval_year);
+  const cityName =
+    typeof row.city_name === "string" && row.city_name.trim()
+      ? row.city_name.trim()
+      : undefined;
 
   return {
     generation_id: row.generation_id,
@@ -141,6 +182,7 @@ function toRankingItem(row: any, universeCode: string): PublishedRankingItem {
     sigungu_name: row.sigungu_name ?? "",
     legalDongName: row.legal_dong_name ?? "",
     legal_dong_name: row.legal_dong_name ?? "",
+    cityName,
     marketCapKrw: row.market_cap_krw ?? 0,
     market_cap_krw: row.market_cap_krw ?? 0,
     marketCapTrillionKrw: row.market_cap_trillion_krw ?? 0,
@@ -262,6 +304,124 @@ function getErrorMessage(error: unknown) {
   return "Unknown rankings error";
 }
 
+function normalizeComplexId(value: unknown): string | null {
+  const normalized = String(value ?? "").trim();
+  return /^\d+$/.test(normalized) ? normalized : null;
+}
+
+function resolveAuthoritativeSggCode(
+  row: ComplexRegionIdentityRow,
+): string | null {
+  const rawSggCode = String(row.sgg_cd ?? "").trim();
+  const rawLawdCode = String(row.lawd_cd ?? "").trim();
+  const sggCode = /^\d{5}$/.test(rawSggCode) ? rawSggCode : null;
+  const lawdSggCode = /^\d{5,10}$/.test(rawLawdCode)
+    ? rawLawdCode.slice(0, 5)
+    : null;
+
+  if (rawSggCode && !sggCode) return null;
+  if (rawLawdCode && !lawdSggCode) return null;
+  if (sggCode && lawdSggCode && sggCode !== lawdSggCode) return null;
+
+  return sggCode ?? lawdSggCode;
+}
+
+async function fetchAuthoritativeSidoByComplexId(
+  supabase: ReturnType<typeof createServerSupabase>,
+  rows: any[],
+): Promise<Map<string, string>> {
+  const complexIds = Array.from(
+    new Set(
+      rows
+        .map((row) => normalizeComplexId(row.complex_id))
+        .filter((value): value is string => value !== null),
+    ),
+  );
+
+  if (complexIds.length === 0) return new Map();
+
+  try {
+    const hydrationQuery = supabase
+      .from("koaptix_complex_region_map")
+      .select("complex_id, lawd_cd, sgg_cd")
+      .in("complex_id", complexIds)
+      .limit(
+        complexIds.length * SIDO_IDENTITY_ROWS_PER_COMPLEX_CAP + 1,
+      );
+
+    const { data, error } = await withTimeout<{
+      data: ComplexRegionIdentityRow[] | null;
+      error: { message: string } | null;
+    }>(hydrationQuery, SIDO_IDENTITY_HYDRATION_TIMEOUT_MS);
+
+    if (error) throw error;
+    if (
+      (data?.length ?? 0) >
+      complexIds.length * SIDO_IDENTITY_ROWS_PER_COMPLEX_CAP
+    ) {
+      throw new Error("RANKINGS_SIDO_IDENTITY_HYDRATION_ROW_CAP_EXCEEDED");
+    }
+
+    const requestedIds = new Set(complexIds);
+    const accumulated = new Map<string, SidoIdentityAccumulator>();
+
+    for (const row of data ?? []) {
+      const complexId = normalizeComplexId(row.complex_id);
+      if (!complexId || !requestedIds.has(complexId)) continue;
+
+      const sggCode = resolveAuthoritativeSggCode(row);
+      const cityName = sggCode
+        ? SIDO_NAME_BY_ADMIN_PREFIX[sggCode.slice(0, 2)] ?? null
+        : null;
+      const previous = accumulated.get(complexId);
+
+      if (!previous) {
+        accumulated.set(complexId, {
+          cityName,
+          evidenceCount: 1,
+          invalidOrConflicting: cityName === null,
+        });
+        continue;
+      }
+
+      previous.evidenceCount += 1;
+      if (previous.evidenceCount > SIDO_IDENTITY_ROWS_PER_COMPLEX_CAP) {
+        previous.invalidOrConflicting = true;
+        previous.cityName = null;
+        continue;
+      }
+
+      if (
+        cityName === null ||
+        previous.cityName === null ||
+        previous.cityName !== cityName
+      ) {
+        previous.invalidOrConflicting = true;
+        previous.cityName = null;
+      }
+    }
+
+    const result = new Map<string, string>();
+    for (const [complexId, identity] of accumulated) {
+      if (!identity.invalidOrConflicting && identity.cityName) {
+        result.set(complexId, identity.cityName);
+      }
+    }
+
+    return result;
+  } catch (error) {
+    logQuietRankingsFallback(
+      "rankings:sido-identity-hydration",
+      "[API /api/rankings] SIDO identity hydration unavailable",
+      {
+        complexCount: complexIds.length,
+        message: getErrorMessage(error),
+      },
+    );
+    return new Map();
+  }
+}
+
 async function fetchBoardPayloadFromLatestBoard(
   supabase: ReturnType<typeof createServerSupabase>,
   universeCode: string,
@@ -322,9 +482,22 @@ async function fetchBoardPayloadFromLatestBoard(
         rows,
         universeCode,
       );
-      const items = rows.map((row: any) =>
-        toRankingItem({ ...row, ...identity }, universeCode),
-      );
+      const authoritativeSidoByComplexId =
+        await fetchAuthoritativeSidoByComplexId(supabase, rows);
+      const items = rows.map((row: any) => {
+        const complexId = normalizeComplexId(row.complex_id);
+
+        return toRankingItem(
+          {
+            ...row,
+            ...identity,
+            city_name: complexId
+              ? authoritativeSidoByComplexId.get(complexId)
+              : undefined,
+          },
+          universeCode,
+        );
+      });
 
       return {
         ...identity,

@@ -13,7 +13,6 @@ import {
 } from "../lib/koaptix/universes";
 
 import { CommandPalette } from "../components/home/CommandPalette";
-import { TopMovers } from "../components/home/TopMovers";
 import { NeonMap } from "../components/home/NeonMap";
 import MarketChartCard from "../components/home/MarketChartCard";
 import { RankingBoardClient } from "../components/home/RankingBoardClient";
@@ -255,6 +254,15 @@ export default async function Home({
 
   const rawItems = boardSeed.items;
   const boardError = boardSeed.boardError;
+  const boardSeedSnapshotDate =
+    rawItems.length > 0 &&
+    rawItems.every(
+      (row: any) =>
+        typeof row.snapshot_date === "string" &&
+        row.snapshot_date === rawItems[0]?.snapshot_date,
+    )
+      ? String(rawItems[0].snapshot_date)
+      : null;
 
   const currentYear = new Date().getFullYear();
 
@@ -312,14 +320,14 @@ export default async function Home({
     items: refinedItems,
     kpis: [
       {
-        label: "MARKET CAP",
-        value: rawKpi?.total_market_cap_krw_string || "468.8조원",
-        subValue: "KOAPTIX 500 합계",
+        label: "KOAPTIX 500 SUM",
+        value: rawKpi?.total_market_cap_krw_string || null,
+        subValue: "공개 보드 추정 시가총액 합계",
       },
       {
-        label: "LISTED UNITS",
-        value: rawKpi?.total_household_count_string || "501개",
-        subValue: "2026년 기준",
+        label: "OBSERVED UNITS",
+        value: rawKpi?.total_household_count_string || null,
+        subValue: "KOAPTIX 공개 관측 범위",
       },
     ],
   };
@@ -342,136 +350,109 @@ export default async function Home({
         data-universe-unavailable-reason={universeResolution.reason ?? ""}
       >
         <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-4 overflow-x-hidden">
-          <section className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_rgba(0,0,0,0.4)]">
-            <div className="min-w-0 max-w-full border-b border-slate-800/80 px-4 py-3 lg:px-5 lg:py-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="w-full min-w-0 max-w-full">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">
-                      KOAPTIX LIVE BOARD
-                    </p>
-                    <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200">
-                      {LAUNCH_COPY.softPublicBetaEn}
-                    </span>
-                  </div>
-                  <h1 className="mt-1 max-w-3xl break-words text-base font-semibold leading-6 tracking-tight text-white [overflow-wrap:anywhere] sm:text-xl sm:leading-7 lg:text-2xl lg:leading-8">
-                    {LAUNCH_COPY.heroHeadline}
-                  </h1>
-                  <div className="mt-2 max-w-3xl space-y-1 overflow-hidden">
-                    <p className="break-words text-xs leading-5 text-slate-300 [overflow-wrap:anywhere] sm:text-sm">
-                      {LAUNCH_COPY.heroSubheadline}
-                    </p>
-                    <p className="break-words text-[11px] leading-5 text-slate-500 [overflow-wrap:anywhere] sm:text-xs">
-                      {LAUNCH_COPY.homeExplainer}
-                    </p>
-                  </div>
+          <section className="w-full min-w-0 border-y border-slate-800/80 py-3 sm:py-4">
+            <div className="grid min-w-0 gap-4 lg:grid-cols-12 lg:items-start">
+              <div className="min-w-0 lg:col-span-8">
+                <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
+                  KOAPTIX / APARTMENT CAPITAL TERMINAL
+                </p>
 
-                  <BetaDisclosure variant="hero" className="mt-3 max-w-3xl" />
+                <h1 className="mt-1 max-w-4xl break-words text-xl font-semibold leading-tight tracking-tight text-white [overflow-wrap:anywhere] sm:text-2xl">
+                  {LAUNCH_COPY.heroSubheadline}
+                </h1>
+                <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-400 sm:text-sm">
+                  KOAPTIX 500은 단지별 자본 순위를, KOAPTIX Index는 선택 범위의
+                  집계 흐름을 보여줍니다.
+                </p>
 
-                  <div className="mt-3 grid gap-2 text-[11px] text-slate-300 sm:grid-cols-3">
-                    <div className="min-w-0 break-words rounded-xl border border-slate-700/60 bg-slate-900/45 px-3 py-2 [overflow-wrap:anywhere]">
-                      <span className="block font-semibold text-cyan-300">
-                        KOAPTIX 500
-                      </span>
-                      {LAUNCH_COPY.koaptix500Card}
-                    </div>
-                    <div className="min-w-0 break-words rounded-xl border border-slate-700/60 bg-slate-900/45 px-3 py-2 [overflow-wrap:anywhere]">
-                      <span className="block font-semibold text-emerald-300">
-                        KOAPTIX Index
-                      </span>
-                      {LAUNCH_COPY.koaptixIndexCard}
-                    </div>
-                    <div className="min-w-0 break-words rounded-xl border border-slate-700/60 bg-slate-900/45 px-3 py-2 [overflow-wrap:anywhere]">
-                      <span className="block font-semibold text-slate-100">
-                        TOP1000 / 검색
-                      </span>
-                      {LAUNCH_COPY.top1000SearchCard}
-                    </div>
-                  </div>
+                <BetaDisclosure
+                  variant="compact"
+                  className="mt-3 max-w-3xl"
+                />
 
-                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                    <FormulaExplainer triggerLabel="산출 기준 보기" />
-
-                    <Link
-                      href={rankingHref}
-                      className="max-w-full break-words rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300 transition-all [overflow-wrap:anywhere] hover:border-cyan-400/50 hover:bg-cyan-500/20 hover:text-cyan-200"
-                    >
-                      {LAUNCH_COPY.top1000Cta}
-                    </Link>
-
-                    <span className="max-w-full break-words rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.18em] text-slate-300 transition-all [overflow-wrap:anywhere] hover:bg-slate-700 hover:text-white">
-                      {LAUNCH_COPY.representativeMetric}
-                    </span>
-                  </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <FormulaExplainer triggerLabel="산출 기준 보기" />
+                  <span className="max-w-full break-words text-[10px] uppercase tracking-[0.14em] text-slate-500 [overflow-wrap:anywhere]">
+                    {LAUNCH_COPY.representativeMetric}
+                  </span>
                 </div>
+              </div>
 
-                <div className="flex w-full flex-col gap-2 lg:max-w-[320px] lg:items-end">
-                  <ThemeToggle />
+              <div className="flex min-w-0 flex-col gap-3 lg:col-span-4 lg:items-end">
+                <ThemeToggle />
 
-                  <div className="grid w-full grid-cols-2 gap-2 sm:gap-3">
-                    {home.kpis.map((kpi) => (
-                      <div
-                        key={kpi.label}
-                        className="rounded-lg border border-slate-700/50 bg-slate-800/20 px-3 py-2"
-                      >
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
-                          {kpi.label}
-                        </p>
-                        <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-100">
-                          {kpi.value}
-                        </p>
-                        <p className="mt-0.5 text-[10px] text-slate-500">
-                          {kpi.subValue}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <dl className="grid w-full grid-cols-2 divide-x divide-slate-800/80 border-y border-slate-800/80">
+                  {home.kpis.map((kpi) => (
+                    <div key={kpi.label} className="min-w-0 px-3 py-3">
+                      <dt className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                        {kpi.label}
+                      </dt>
+                      <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-slate-100 sm:text-xl">
+                        {kpi.value ?? "—"}
+                      </dd>
+                      <dd className="mt-1 text-[10px] text-slate-500">
+                        {kpi.value ? kpi.subValue : "현재 공개 데이터 없음"}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
             </div>
           </section>
 
           <section className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 lg:gap-6">
-            <div className="col-span-1 flex flex-col gap-4 lg:col-span-8 lg:gap-6">
-              <div className="h-[400px] min-h-0 lg:h-[650px]">
-                <Suspense
-                  fallback={
-                    <div className="h-full w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />
-                  }
-                >
-                  <NeonMap key={`map-${universeCode}`} items={home.items} />
-                </Suspense>
-              </div>
-
-              <div className="static h-[320px] min-h-0 min-w-0 overflow-hidden lg:sticky lg:top-4 lg:h-[400px]">
-                {/* Force chart remount when selected/rendered universe scope changes. */}
-                <MarketChartCard
-                  key={`chart-${indexChartPayload.requestedUniverseCode}-${indexChartPayload.renderedUniverseCode}`}
-                  payload={indexChartPayload}
+            <div className="h-[620px] min-h-0 lg:order-2 lg:col-span-8 lg:h-[650px]">
+              <Suspense
+                fallback={
+                  <div className="h-full w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />
+                }
+              >
+                <RankingBoardClient
+                  key={`board-${universeCode}`}
+                  items={home.items}
+                  initialUniverseCode={universeCode}
+                  boardError={boardError}
+                  initialLatestBoardDate={boardSeedSnapshotDate}
+                  presentation="home-flagship"
                 />
-              </div>
+              </Suspense>
             </div>
 
-            <div className="col-span-1 min-h-0 lg:col-span-4 lg:sticky lg:top-4 lg:flex lg:h-[calc(100dvh-2rem)] lg:max-h-[calc(100dvh-2rem)] lg:flex-col lg:gap-6">
-              <div className="mb-4 hidden shrink-0 lg:mb-0 lg:block">
-                <TopMovers key={`movers-${universeCode}`} items={home.items} />
-              </div>
-
-              <div className="h-[600px] min-h-0 lg:h-auto lg:min-h-0 lg:flex-1 lg:overflow-hidden">
-                <Suspense
-                  fallback={
-                    <div className="h-full w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />
-                  }
-                >
-                  <RankingBoardClient
-                    key={`board-${universeCode}`}
-                    items={home.items}
-                    initialUniverseCode={universeCode}
-                    boardError={boardError}
-                  />
-                </Suspense>
-              </div>
+            <div className="h-[620px] min-h-0 min-w-0 overflow-hidden lg:order-1 lg:col-span-4 lg:h-[650px]">
+              {/* Force chart remount when selected/rendered universe scope changes. */}
+              <MarketChartCard
+                key={`chart-${indexChartPayload.requestedUniverseCode}-${indexChartPayload.renderedUniverseCode}`}
+                payload={indexChartPayload}
+              />
             </div>
+          </section>
+
+          <section className="flex flex-col gap-3 border-y border-slate-800/80 px-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-2">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                {universeLabel}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                더 넓은 공개 순위와 단지 탐색은 TOP1000 보드에서 계속됩니다.
+              </p>
+            </div>
+
+            <Link
+              href={rankingHref}
+              className="w-fit max-w-full break-words rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300 transition-all [overflow-wrap:anywhere] hover:border-cyan-400/50 hover:bg-cyan-500/20 hover:text-cyan-200"
+            >
+              {universeLabel} · {LAUNCH_COPY.top1000Cta}
+            </Link>
+          </section>
+
+          <section className="h-[600px] min-h-0 sm:h-[650px]">
+            <Suspense
+              fallback={
+                <div className="h-full w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />
+              }
+            >
+              <NeonMap key={`map-${universeCode}`} items={home.items} />
+            </Suspense>
           </section>
         </div>
       </main>

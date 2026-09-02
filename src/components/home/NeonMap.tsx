@@ -2111,8 +2111,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       data-map-source-row-limit={displayMapDelivery.sourceRowLimit ?? "unknown"}
       data-map-source-rows-used={displayMapDelivery.sourceRowsUsed ?? "unknown"}
     >
-      <div className="shrink-0 flex flex-col gap-4 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
-        <div className="flex flex-col justify-between gap-4">
+      <div className="shrink-0 flex flex-col gap-2 border-b border-slate-800/80 px-3 pb-3 pt-2 sm:gap-4 sm:px-5 sm:pb-5 sm:pt-3">
+        <div className="flex flex-col justify-between gap-2 sm:gap-4">
           <div>
             <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
               TACTICAL RADAR
@@ -2125,7 +2125,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
             </p>
 
             <div
-              className="relative z-40 mt-4 w-full"
+              className="relative z-40 mt-2 w-full sm:mt-4"
               data-testid="neon-map-local-search"
             >
               <label
@@ -2134,7 +2134,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               >
                 지도 검색
               </label>
-              <div className="flex min-h-16 w-full min-w-0 items-center gap-3 rounded-2xl border border-cyan-400/35 bg-slate-950/90 px-4 py-3 text-sm shadow-[0_16px_42px_rgba(0,0,0,0.34)] ring-1 ring-cyan-400/10">
+              <div className="flex min-h-11 w-full min-w-0 items-center gap-2 rounded-2xl border border-cyan-400/35 bg-slate-950/90 px-3 py-2 text-sm shadow-[0_16px_42px_rgba(0,0,0,0.34)] ring-1 ring-cyan-400/10 sm:min-h-16 sm:gap-3 sm:px-4 sm:py-3">
                 <span className="shrink-0 rounded-full border border-cyan-400/35 bg-cyan-400/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-100">
                   Map
                 </span>
@@ -2269,7 +2269,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               )}
             </div>
 
-            <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 lg:max-w-xl">
+            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] sm:mt-3 sm:grid-cols-2 lg:max-w-xl">
               <div
                 className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
                 data-testid="neon-map-requested-universe"
@@ -2342,7 +2342,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
           )}
         </div>
 
-        <div className="flex w-full flex-col gap-3 self-end lg:max-w-2xl">
+        <div className="flex w-full flex-col gap-1.5 self-end sm:gap-3 lg:max-w-2xl">
           <div className="flex items-center justify-between text-[10px] font-medium text-slate-400">
             <span className="flex flex-col">
               <span className="text-[9px] text-slate-500">MIN</span>

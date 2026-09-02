@@ -762,8 +762,11 @@ export function CommandPalette({
   const handleSelectItem = useCallback(
     (item: RankingItem) => {
       replaceUrlParams((params) => {
-        if (item.universeCode && item.universeCode !== DEFAULT_UNIVERSE_CODE) {
-          params.set("universe", item.universeCode);
+        if (
+          effectiveUniverseCode &&
+          effectiveUniverseCode !== DEFAULT_UNIVERSE_CODE
+        ) {
+          params.set("universe", effectiveUniverseCode);
         } else {
           params.delete("universe");
         }
@@ -773,7 +776,7 @@ export function CommandPalette({
 
       setIsOpen(false);
     },
-    [replaceUrlParams],
+    [effectiveUniverseCode, replaceUrlParams],
   );
 
   const handleOpenRankingSearch = useCallback(() => {
@@ -787,15 +790,10 @@ export function CommandPalette({
       const params = new URLSearchParams();
       params.set("universe", result.code);
 
-      const q = query.trim();
-      if (q) {
-        params.set("q", q);
-      }
-
       router.push(`/ranking?${params.toString()}`);
       setIsOpen(false);
     },
-    [query, router],
+    [router],
   );
 
   const handleSelectDiscoveryCandidate = useCallback(
@@ -984,7 +982,7 @@ export function CommandPalette({
         type="button"
         onClick={() => setIsOpen(true)}
         data-testid="command-palette-open"
-        className="fixed bottom-6 right-6 z-[980] rounded-full border border-slate-700 bg-slate-950/95 px-4 py-2 text-xs font-medium text-slate-200 shadow-2xl backdrop-blur transition hover:border-cyan-400/30 hover:text-cyan-300"
+        className="relative z-[980] ml-auto mr-2 mt-1 flex min-h-11 w-fit items-center rounded-full border border-slate-700 bg-slate-950/95 px-4 py-2 text-xs font-medium text-slate-200 shadow-2xl backdrop-blur transition hover:border-cyan-400/30 hover:text-cyan-300"
       >
         단지·지역 검색
       </button>

@@ -34,6 +34,7 @@ interface RankingBoardClientProps {
   items: RankingItem[];
   initialUniverseCode?: string;
   boardError?: string | null;
+  initialLatestBoardDate?: string | null;
 
   title?: string;
   apiBasePath?: string;
@@ -43,7 +44,7 @@ interface RankingBoardClientProps {
 
   enableTierFilters?: boolean;
   useInternalScroll?: boolean;
-  presentation?: "default" | "weekly-movement-full-board";
+  presentation?: "default" | "home-flagship" | "weekly-movement-full-board";
 }
 
 type ApiEnvelope<T> = T | { data?: T | null } | null;
@@ -63,6 +64,7 @@ type RankingsApiResponse = {
   fallbackUsed?: boolean;
   degraded?: boolean;
   latestBoardDate?: string | null;
+  snapshot_date?: string | null;
   reason?: string | null;
   count?: number;
   items?: RankingItem[];
@@ -102,6 +104,42 @@ type RankingBoardPayload = {
   delivery: RankingBoardDeliveryMeta;
 };
 
+type BoardRequestStatus =
+  | "pending"
+  | "fulfilled"
+  | "aborted"
+  | "rejected";
+
+type InflightBoardRequest = {
+  promise: Promise<RankingBoardPayload>;
+  ownerSignal: AbortSignal;
+  status: BoardRequestStatus;
+};
+
+type CanonicalSidoIdentity =
+  | "SEOUL_ALL"
+  | "BUSAN_ALL"
+  | "DAEGU_ALL"
+  | "INCHEON_ALL"
+  | "GWANGJU_ALL"
+  | "DAEJEON_ALL"
+  | "ULSAN_ALL"
+  | "SEJONG_ALL"
+  | "GYEONGGI_ALL"
+  | "GANGWON_ALL"
+  | "CHUNGBUK_ALL"
+  | "CHUNGNAM_ALL"
+  | "JEONBUK_ALL"
+  | "JEONNAM_ALL"
+  | "GYEONGBUK_ALL"
+  | "GYEONGNAM_ALL"
+  | "JEJU_ALL";
+
+type DistrictIdentity = {
+  sido: CanonicalSidoIdentity | null;
+  sigungu: string;
+};
+
 type TierFilterKey = "ALL" | "S" | "A" | "B" | "C" | "D";
 type MovementFilterKey = "ALL" | "UP" | "DOWN" | "NEW";
 
@@ -127,6 +165,102 @@ const MOVEMENT_FILTER_OPTIONS: Array<{
   { key: "NEW", label: "NEW" },
 ];
 
+const SIDO_ALIAS_ENTRIES: ReadonlyArray<
+  readonly [string, CanonicalSidoIdentity]
+> = [
+  ["세종특별자치시", "SEJONG_ALL"],
+  ["강원특별자치도", "GANGWON_ALL"],
+  ["전북특별자치도", "JEONBUK_ALL"],
+  ["제주특별자치도", "JEJU_ALL"],
+  ["서울특별시", "SEOUL_ALL"],
+  ["부산광역시", "BUSAN_ALL"],
+  ["대구광역시", "DAEGU_ALL"],
+  ["인천광역시", "INCHEON_ALL"],
+  ["광주광역시", "GWANGJU_ALL"],
+  ["대전광역시", "DAEJEON_ALL"],
+  ["울산광역시", "ULSAN_ALL"],
+  ["경기도", "GYEONGGI_ALL"],
+  ["강원도", "GANGWON_ALL"],
+  ["충청북도", "CHUNGBUK_ALL"],
+  ["충청남도", "CHUNGNAM_ALL"],
+  ["전라북도", "JEONBUK_ALL"],
+  ["전라남도", "JEONNAM_ALL"],
+  ["경상북도", "GYEONGBUK_ALL"],
+  ["경상남도", "GYEONGNAM_ALL"],
+  ["제주도", "JEJU_ALL"],
+  ["서울시", "SEOUL_ALL"],
+  ["부산시", "BUSAN_ALL"],
+  ["대구시", "DAEGU_ALL"],
+  ["인천시", "INCHEON_ALL"],
+  ["광주시", "GWANGJU_ALL"],
+  ["대전시", "DAEJEON_ALL"],
+  ["울산시", "ULSAN_ALL"],
+  ["세종시", "SEJONG_ALL"],
+  ["서울", "SEOUL_ALL"],
+  ["부산", "BUSAN_ALL"],
+  ["대구", "DAEGU_ALL"],
+  ["인천", "INCHEON_ALL"],
+  ["광주", "GWANGJU_ALL"],
+  ["대전", "DAEJEON_ALL"],
+  ["울산", "ULSAN_ALL"],
+  ["세종", "SEJONG_ALL"],
+  ["경기", "GYEONGGI_ALL"],
+  ["강원", "GANGWON_ALL"],
+  ["충북", "CHUNGBUK_ALL"],
+  ["충남", "CHUNGNAM_ALL"],
+  ["전북", "JEONBUK_ALL"],
+  ["전남", "JEONNAM_ALL"],
+  ["경북", "GYEONGBUK_ALL"],
+  ["경남", "GYEONGNAM_ALL"],
+  ["제주", "JEJU_ALL"],
+];
+
+const SIDO_BY_UNIVERSE_CODE: Readonly<
+  Partial<Record<string, CanonicalSidoIdentity>>
+> = {
+  SEOUL_ALL: "SEOUL_ALL",
+  BUSAN_ALL: "BUSAN_ALL",
+  DAEGU_ALL: "DAEGU_ALL",
+  INCHEON_ALL: "INCHEON_ALL",
+  GWANGJU_ALL: "GWANGJU_ALL",
+  DAEJEON_ALL: "DAEJEON_ALL",
+  ULSAN_ALL: "ULSAN_ALL",
+  SEJONG_ALL: "SEJONG_ALL",
+  GYEONGGI_ALL: "GYEONGGI_ALL",
+  GANGWON_ALL: "GANGWON_ALL",
+  CHUNGBUK_ALL: "CHUNGBUK_ALL",
+  CHUNGNAM_ALL: "CHUNGNAM_ALL",
+  JEONBUK_ALL: "JEONBUK_ALL",
+  JEONNAM_ALL: "JEONNAM_ALL",
+  GYEONGBUK_ALL: "GYEONGBUK_ALL",
+  GYEONGNAM_ALL: "GYEONGNAM_ALL",
+  JEJU_ALL: "JEJU_ALL",
+};
+
+const SIDO_BY_ADMIN_PREFIX: Readonly<
+  Partial<Record<string, CanonicalSidoIdentity>>
+> = {
+  "11": "SEOUL_ALL",
+  "26": "BUSAN_ALL",
+  "27": "DAEGU_ALL",
+  "28": "INCHEON_ALL",
+  "29": "GWANGJU_ALL",
+  "30": "DAEJEON_ALL",
+  "31": "ULSAN_ALL",
+  "36": "SEJONG_ALL",
+  "41": "GYEONGGI_ALL",
+  "42": "GANGWON_ALL",
+  "43": "CHUNGBUK_ALL",
+  "44": "CHUNGNAM_ALL",
+  "45": "JEONBUK_ALL",
+  "46": "JEONNAM_ALL",
+  "47": "GYEONGBUK_ALL",
+  "48": "GYEONGNAM_ALL",
+  "50": "JEJU_ALL",
+  "51": "GANGWON_ALL",
+  "52": "JEONBUK_ALL",
+};
+
 function parseTierFilter(value?: string | null): TierFilterKey {
   if (
     value === "S" ||
@@ -147,6 +281,92 @@ function parseMovementFilter(value?: string | null): MovementFilterKey {
   if (normalized === "down") return "DOWN";
   if (normalized === "new") return "NEW";
   return "ALL";
+}
+
+function normalizeAdministrativeLabel(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFC")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function resolveCanonicalSidoLabel(
+  value: unknown,
+): CanonicalSidoIdentity | null {
+  const normalized = normalizeAdministrativeLabel(value);
+  if (!normalized) return null;
+
+  return (
+    SIDO_ALIAS_ENTRIES.find(([alias]) => alias === normalized)?.[1] ?? null
+  );
+}
+
+function resolveSidoFromUniverseCode(
+  universeCode?: string | null,
+): CanonicalSidoIdentity | null {
+  const normalized = String(universeCode ?? "")
+    .trim()
+    .toUpperCase();
+  const direct = SIDO_BY_UNIVERSE_CODE[normalized];
+  if (direct) return direct;
+
+  const sggMatch = normalized.match(/^SGG_(\d{2})\d{3}$/);
+  return sggMatch ? SIDO_BY_ADMIN_PREFIX[sggMatch[1]] ?? null : null;
+}
+
+function parseDistrictIdentity(value: unknown): DistrictIdentity | null {
+  const normalized = normalizeAdministrativeLabel(value);
+  if (!normalized) return null;
+
+  for (const [alias, sido] of SIDO_ALIAS_ENTRIES) {
+    if (!normalized.startsWith(`${alias} `)) continue;
+
+    const sigungu = normalizeAdministrativeLabel(
+      normalized.slice(alias.length + 1),
+    );
+
+    return /[시군구]$/.test(sigungu) ? { sido, sigungu } : null;
+  }
+
+  return /[시군구]$/.test(normalized)
+    ? { sido: null, sigungu: normalized }
+    : null;
+}
+
+function matchesStructuredDistrict(
+  item: RankingItem,
+  selectedDistrict: string,
+  boardUniverseCode: string,
+): boolean {
+  const selected = parseDistrictIdentity(selectedDistrict);
+  const rowDistrict = parseDistrictIdentity(
+    item.sigunguName ?? item.sigungu_name,
+  );
+
+  if (!selected || !rowDistrict) return false;
+  if (selected.sigungu !== rowDistrict.sigungu) return false;
+
+  const rawCityName = normalizeAdministrativeLabel(item.cityName);
+  const cityFromField = resolveCanonicalSidoLabel(rawCityName);
+  if (rawCityName && !cityFromField) return false;
+
+  const rowSidoEvidence = [
+    cityFromField,
+    rowDistrict.sido,
+    resolveSidoFromUniverseCode(item.universeCode ?? item.universe_code),
+    resolveSidoFromUniverseCode(boardUniverseCode),
+  ].filter((value): value is CanonicalSidoIdentity => value !== null);
+
+  if (rowSidoEvidence.length === 0) return false;
+
+  const rowSido = rowSidoEvidence[0];
+  if (rowSidoEvidence.some((value) => value !== rowSido)) return false;
+
+  const selectedSido =
+    selected.sido ?? resolveSidoFromUniverseCode(boardUniverseCode);
+  if (!selectedSido) return false;
+
+  return rowSido === selectedSido;
 }
 
 function normalizeRankMovement(item: RankingItem): RankMovement | null {
@@ -254,6 +474,7 @@ function buildRankingPayload(
       : fallbackMode !== "none" && fallbackMode !== "unknown";
   const degraded =
     typeof json.degraded === "boolean" ? json.degraded : fallbackUsed;
+  const latestBoardDate = json.latestBoardDate ?? null;
 
   return {
     items,
@@ -272,7 +493,7 @@ function buildRankingPayload(
       fallbackMode,
       fallbackUsed,
       degraded,
-      latestBoardDate: json.latestBoardDate ?? null,
+      latestBoardDate: latestBoardDate ?? json.snapshot_date ?? null,
       reason: json.reason ?? json.message ?? null,
     },
   };
@@ -445,6 +666,7 @@ export function RankingBoardClient({
   items,
   initialUniverseCode = DEFAULT_UNIVERSE_CODE,
   boardError,
+  initialLatestBoardDate = null,
 
   title = "KOAPTIX 500",
   apiBasePath = "/api/rankings",
@@ -468,6 +690,7 @@ export function RankingBoardClient({
   );
   const isWeeklyMovementFullBoard =
     presentation === "weekly-movement-full-board";
+  const isHomeFlagship = presentation === "home-flagship";
 
   const urlUniverseCode = resolveBoardUniverseCode(
     searchParams?.get("universe") ?? initialUniverseCode,
@@ -491,6 +714,7 @@ export function RankingBoardClient({
           source: items.length > 0 ? "server_seed" : "client_pending",
           cacheState: items.length > 0 ? "server_seed" : "miss",
           fallbackMode: boardError ? "server_seed_degraded" : "none",
+          latestBoardDate: initialLatestBoardDate,
         }).delivery,
     );
   const [liveBoardError, setLiveBoardError] = useState<string | null>(
@@ -542,12 +766,13 @@ export function RankingBoardClient({
 
   const initialItemsRef = useRef(items);
   const initialBoardErrorRef = useRef(boardError ?? null);
+  const initialLatestBoardDateRef = useRef(initialLatestBoardDate);
   const initializedFromServerRef = useRef(false);
   const boardCacheRef = useRef<Partial<Record<string, RankingBoardPayload>>>(
     {},
   );
   const inflightBoardRef = useRef<
-    Partial<Record<string, Promise<RankingBoardPayload>>>
+    Partial<Record<string, InflightBoardRequest>>
   >({});
   const discoverySearchCacheRef = useRef<Record<string, DiscoverySearchPayload>>({});
 
@@ -781,8 +1006,19 @@ export function RankingBoardClient({
       }
 
       const inflight = inflightBoardRef.current[cacheKey];
-      if (inflight !== undefined) {
-        return inflight;
+      if (
+        inflight !== undefined &&
+        inflight.status === "pending" &&
+        !inflight.ownerSignal.aborted
+      ) {
+        return inflight.promise;
+      }
+
+      if (
+        inflight !== undefined &&
+        inflightBoardRef.current[cacheKey] === inflight
+      ) {
+        delete inflightBoardRef.current[cacheKey];
       }
 
       const localController = signal ? null : new AbortController();
@@ -795,22 +1031,47 @@ export function RankingBoardClient({
         boardLimit,
       );
 
-      const request = readRankingPayload(
+      const baseRequest = readRankingPayload(
         RANKINGS_API(apiBasePath, universeCode, requestLimit),
         nextSignal,
         universeCode,
         requestLimit,
         strictUniverseIdentity,
-      )
-        .then((nextPayload) => {
-          boardCacheRef.current[cacheKey] = nextPayload;
-          return nextPayload;
-        })
+      );
+
+      const entry: InflightBoardRequest = {
+        promise: baseRequest,
+        ownerSignal: nextSignal,
+        status: "pending",
+      };
+
+      const request = baseRequest
+        .then(
+          (nextPayload) => {
+            entry.status = "fulfilled";
+
+            if (inflightBoardRef.current[cacheKey] === entry) {
+              boardCacheRef.current[cacheKey] = nextPayload;
+            }
+
+            return nextPayload;
+          },
+          (error: unknown) => {
+            entry.status =
+              nextSignal.aborted || isAbortError(error)
+                ? "aborted"
+                : "rejected";
+            throw error;
+          },
+        )
         .finally(() => {
-          delete inflightBoardRef.current[cacheKey];
+          if (inflightBoardRef.current[cacheKey] === entry) {
+            delete inflightBoardRef.current[cacheKey];
+          }
         });
 
-      inflightBoardRef.current[cacheKey] = request;
+      entry.promise = request;
+      inflightBoardRef.current[cacheKey] = entry;
       return request;
     },
     [apiBasePath, boardLimit, getBoardCacheKey],
@@ -844,6 +1105,7 @@ export function RankingBoardClient({
             fallbackMode: "none",
             fallbackUsed: false,
             degraded: false,
+            latestBoardDate: initialLatestBoardDateRef.current,
             reason: null,
           },
         );
@@ -895,19 +1157,34 @@ export function RankingBoardClient({
       setIsBoardLoading(true);
       setLiveBoardError(null);
 
+      const acquireBoard = () =>
+        fetchBoardUniverse(boardUniverseCode, controller.signal);
+
+      const acquireBoardWithOneReacquisition = async () => {
+        try {
+          return await acquireBoard();
+        } catch (error) {
+          const borrowedAbort =
+            !timedOut &&
+            !cancelled &&
+            !controller.signal.aborted &&
+            isAbortError(error);
+
+          if (!borrowedAbort) throw error;
+          return acquireBoard();
+        }
+      };
+
       try {
-        const nextPayload = await fetchBoardUniverse(
-          boardUniverseCode,
-          controller.signal,
-        );
+        const nextPayload = await acquireBoardWithOneReacquisition();
 
         if (cancelled) return;
         setBoardItems(nextPayload.items);
         setBoardDeliveryMeta(nextPayload.delivery);
         setStaleBoardUniverseCode(null);
       } catch (error) {
-        // Unmount abort: return silently without touching state.
-        if (!timedOut && (controller.signal.aborted || cancelled || isAbortError(error))) {
+        // Only cancellation owned by this effect may exit silently.
+        if (cancelled || (!timedOut && controller.signal.aborted)) {
           return;
         }
 
@@ -1147,10 +1424,12 @@ export function RankingBoardClient({
     }
 
     if (districtQueryLocal) {
-      result = result.filter(
-        (item) =>
-          item.sigunguName?.includes(districtQueryLocal) ||
-          item.locationLabel?.includes(districtQueryLocal),
+      result = result.filter((item) =>
+        matchesStructuredDistrict(
+          item,
+          districtQueryLocal,
+          boardUniverseCode,
+        ),
       );
     }
 
@@ -1177,6 +1456,7 @@ export function RankingBoardClient({
     selectedMovementFilter,
     selectedTierFilter,
     districtQueryLocal,
+    boardUniverseCode,
     searchQuery,
     showBookmarksOnly,
     bookmarks,
@@ -1404,7 +1684,11 @@ export function RankingBoardClient({
   return (
     <>
       <div
-        className={`flex w-full min-w-0 max-w-full min-h-0 flex-col rounded-2xl border border-slate-700/50 bg-[#0b1118]/90 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)] backdrop-blur-sm ${useInternalScroll ? "h-full overflow-hidden" : "overflow-visible"
+        className={`flex w-full min-w-0 max-w-full min-h-0 flex-col border backdrop-blur-sm ${
+          isHomeFlagship
+            ? "rounded-[1.35rem] border-slate-600/70 bg-[#090f16] shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_20px_50px_rgba(0,0,0,0.42)]"
+            : "rounded-2xl border-slate-700/50 bg-[#0b1118]/90 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_18px_40px_rgba(0,0,0,0.4)]"
+        } ${useInternalScroll ? "h-full overflow-hidden" : "overflow-visible"
           }`}
         data-testid="ranking-board"
         data-universe-code={boardUniverseCode}
@@ -1425,16 +1709,28 @@ export function RankingBoardClient({
           className={`flex min-w-0 max-w-full shrink-0 flex-col border-b border-slate-800/80 ${
             isWeeklyMovementFullBoard
               ? "gap-2 p-3 sm:p-4 lg:p-4"
-              : "gap-3 p-4 lg:p-5"
+              : isHomeFlagship
+                ? "gap-1 p-2 sm:gap-2 sm:p-4"
+                : "gap-3 p-4 lg:p-5"
           }`}
         >
           <div
-            className={`flex flex-col sm:flex-row sm:items-start sm:justify-between ${
-              isWeeklyMovementFullBoard ? "gap-2" : "gap-3"
-            }`}
+            className={
+              isHomeFlagship
+                ? "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 sm:flex sm:items-start sm:justify-between"
+                : `flex flex-col sm:flex-row sm:items-start sm:justify-between ${
+                    isWeeklyMovementFullBoard ? "gap-2" : "gap-3"
+                  }`
+            }
           >
             <div className="w-full min-w-0 max-w-full">
-              <h2 className="break-words text-base font-bold tracking-tight text-slate-100 [overflow-wrap:anywhere] sm:text-lg">
+              <h2
+                className={`break-words font-bold text-slate-100 [overflow-wrap:anywhere] ${
+                  isHomeFlagship
+                    ? "font-mono text-xl tracking-[-0.03em] sm:text-2xl"
+                    : "text-base tracking-tight sm:text-lg"
+                }`}
+              >
                 {title}
               </h2>
 
@@ -1445,8 +1741,14 @@ export function RankingBoardClient({
               )}
 
               {!isWeeklyMovementFullBoard && (
-                <p className="mt-1 max-w-xl break-words text-[11px] leading-5 text-slate-500 [overflow-wrap:anywhere]">
-                  {LAUNCH_COPY.boardIntro}
+                <p
+                  className={`mt-1 max-w-xl break-words text-[11px] leading-5 text-slate-500 [overflow-wrap:anywhere] ${
+                    isHomeFlagship ? "hidden sm:block" : ""
+                  }`}
+                >
+                  {isHomeFlagship
+                    ? "단지별 추정 시가총액 순위와 공표된 주간 순위 이동을 함께 읽는 전술 보드입니다."
+                    : LAUNCH_COPY.boardIntro}
                 </p>
               )}
             </div>
@@ -1460,6 +1762,14 @@ export function RankingBoardClient({
                   Updated {formattedLatestBoardDate}
                 </span>
               )}
+              {isHomeFlagship && formattedLatestBoardDate && (
+                <span
+                  className="w-fit rounded-full border border-slate-700 bg-slate-950/80 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-300"
+                  data-testid="home-ranking-freshness"
+                >
+                  Snapshot {formattedLatestBoardDate}
+                </span>
+              )}
               {isBoardLoading && (
                 <span className="w-fit rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
                   보드 새로고침 중
@@ -1468,14 +1778,22 @@ export function RankingBoardClient({
             </div>
           </div>
 
-          <BetaDisclosure variant="compact" />
+          {!isHomeFlagship && <BetaDisclosure variant="compact" />}
 
-          <div className={isWeeklyMovementFullBoard ? "" : "mt-3"}>
+          <div
+            className={
+              isWeeklyMovementFullBoard || isHomeFlagship ? "" : "mt-3"
+            }
+          >
             <UniverseSelector
               value={boardUniverseCode}
               options={universeOptions}
               onChange={handleUniverseChange}
-              density={isWeeklyMovementFullBoard ? "compact" : "default"}
+              density={
+                isWeeklyMovementFullBoard || isHomeFlagship
+                  ? "compact"
+                  : "default"
+              }
             />
           </div>
 
@@ -1549,8 +1867,18 @@ export function RankingBoardClient({
             </div>
           )}
 
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 w-full rounded-lg border border-slate-700/50 bg-black/40 p-1 lg:w-auto">
+          <div
+            className={
+              isHomeFlagship
+                ? "grid grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] items-stretch gap-2 sm:flex sm:items-center sm:justify-between"
+                : "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+            }
+          >
+            <div
+              className={`flex min-w-0 w-full rounded-lg border border-slate-700/50 bg-black/40 p-1 ${
+                isHomeFlagship ? "sm:w-auto" : "lg:w-auto"
+              }`}
+            >
               <button
                 onClick={() => setShowBookmarksOnly(false)}
                 className={`min-h-11 flex-1 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-bold transition-all sm:min-h-0 ${!showBookmarksOnly
@@ -1571,7 +1899,13 @@ export function RankingBoardClient({
               </button>
             </div>
 
-            <div className="w-full lg:max-w-[200px]">
+            <div
+              className={
+                isHomeFlagship
+                  ? "min-w-0 w-full sm:max-w-[200px]"
+                  : "w-full lg:max-w-[200px]"
+              }
+            >
               <input
                 type="text"
                 placeholder="보드 안에서 단지·지역 찾기"
@@ -1667,7 +2001,11 @@ export function RankingBoardClient({
               </div>
             )}
 
-          <div className="mt-1 flex justify-between text-[11px] text-slate-500">
+          <div
+            className={`mt-1 justify-between text-[11px] text-slate-500 ${
+              isHomeFlagship ? "hidden sm:flex" : "flex"
+            }`}
+          >
             <span>표시 {filteredItems.length}개</span>
             <span>전체 {presentationBoardItems.length}개</span>
           </div>
