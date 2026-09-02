@@ -7,6 +7,7 @@ import type {
   DiscoveryCandidate,
   RankingItem,
   ComplexDetail,
+  RankMovement,
 } from "../../lib/koaptix/types";
 import type {
   RegionAliasApiMetadata,
@@ -42,6 +43,7 @@ interface RankingBoardClientProps {
 
   enableTierFilters?: boolean;
   useInternalScroll?: boolean;
+  presentation?: "default" | "weekly-movement-full-board";
 }
 
 type ApiEnvelope<T> = T | { data?: T | null } | null;
@@ -60,6 +62,7 @@ type RankingsApiResponse = {
   fallbackMode?: string;
   fallbackUsed?: boolean;
   degraded?: boolean;
+  latestBoardDate?: string | null;
   reason?: string | null;
   count?: number;
   items?: RankingItem[];
@@ -90,6 +93,7 @@ type RankingBoardDeliveryMeta = {
   fallbackMode: string;
   fallbackUsed: boolean;
   degraded: boolean;
+  latestBoardDate: string | null;
   reason: string | null;
 };
 
@@ -99,6 +103,7 @@ type RankingBoardPayload = {
 };
 
 type TierFilterKey = "ALL" | "S" | "A" | "B" | "C" | "D";
+type MovementFilterKey = "ALL" | "UP" | "DOWN" | "NEW";
 
 const TIER_FILTER_OPTIONS: Array<{
   key: TierFilterKey;
@@ -112,6 +117,16 @@ const TIER_FILTER_OPTIONS: Array<{
     { key: "D", label: "D 301-1000" },
   ];
 
+const MOVEMENT_FILTER_OPTIONS: Array<{
+  key: MovementFilterKey;
+  label: string;
+}> = [
+  { key: "ALL", label: "All" },
+  { key: "UP", label: "Rising" },
+  { key: "DOWN", label: "Falling" },
+  { key: "NEW", label: "NEW" },
+];
+
 function parseTierFilter(value?: string | null): TierFilterKey {
   if (
     value === "S" ||
@@ -124,6 +139,28 @@ function parseTierFilter(value?: string | null): TierFilterKey {
   }
 
   return "ALL";
+}
+
+function parseMovementFilter(value?: string | null): MovementFilterKey {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "up") return "UP";
+  if (normalized === "down") return "DOWN";
+  if (normalized === "new") return "NEW";
+  return "ALL";
+}
+
+function normalizeRankMovement(item: RankingItem): RankMovement | null {
+  const value = item.rankMovement ?? item.rank_movement;
+  if (value === "NEW" || value === "UP" || value === "DOWN" || value === "SAME") {
+    return value;
+  }
+
+  return null;
+}
+
+function formatSnapshotDate(value: string | null): string | null {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}.${match[2]}.${match[3]}` : null;
 }
 
 function getRankValue(item: RankingItem): number | null {
@@ -190,6 +227,7 @@ function buildLocalRankingPayload(
       fallbackMode: delivery?.fallbackMode ?? "none",
       fallbackUsed: delivery?.fallbackUsed ?? false,
       degraded: delivery?.degraded ?? false,
+      latestBoardDate: delivery?.latestBoardDate ?? null,
       reason: delivery?.reason ?? null,
     },
   };
@@ -234,6 +272,7 @@ function buildRankingPayload(
       fallbackMode,
       fallbackUsed,
       degraded,
+      latestBoardDate: json.latestBoardDate ?? null,
       reason: json.reason ?? json.message ?? null,
     },
   };
@@ -305,6 +344,31 @@ async function readApiData<T>(
   return (json ?? null) as T | null;
 }
 
+function hasValidClarificationChoices(
+  value: unknown,
+): value is RegionClarificationChoice[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (choice) =>
+        choice !== null &&
+        typeof choice === "object" &&
+        "canonicalRegionCode" in choice &&
+        "qualifiedNameKo" in choice &&
+        "regionLevel" in choice &&
+        "replacementQuery" in choice &&
+        "compatibility" in choice &&
+        typeof choice.canonicalRegionCode === "string" &&
+        typeof choice.qualifiedNameKo === "string" &&
+        typeof choice.regionLevel === "string" &&
+        typeof choice.replacementQuery === "string" &&
+        (choice.compatibility === "COMPATIBLE" ||
+          choice.compatibility === "INCOMPATIBLE" ||
+          choice.compatibility === "UNKNOWN"),
+    )
+  );
+}
+
 async function readDiscoveryCandidates(
   input: string,
   signal: AbortSignal,
@@ -317,7 +381,13 @@ async function readDiscoveryCandidates(
 
   const json = (await response.json()) as DiscoverySearchApiResponse;
 
-  if (!response.ok || json.ok === false) {
+  const isValidClarificationConflict =
+    response.status === 409 &&
+    (json.regionResolution?.state === "AMBIGUOUS" ||
+      json.regionResolution?.state === "UNIVERSE_CONFLICT") &&
+    hasValidClarificationChoices(json.clarificationChoices);
+
+  if ((!response.ok || json.ok === false) && !isValidClarificationConflict) {
     throw new Error(
       json.message ?? `Request failed: ${response.status} ${input}`,
     );
@@ -383,6 +453,7 @@ export function RankingBoardClient({
   emptyMessage = "데이터가 없습니다.",
   enableTierFilters = false,
   useInternalScroll = true,
+  presentation = "default",
 }: RankingBoardClientProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -392,6 +463,11 @@ export function RankingBoardClient({
   const initialSelectedComplexId = searchParams?.get("complexId") ?? null;
   const initialSearchQuery = searchParams?.get("q") ?? "";
   const initialSelectedTierFilter = parseTierFilter(searchParams?.get("tier"));
+  const initialMovementFilter = parseMovementFilter(
+    searchParams?.get("movement"),
+  );
+  const isWeeklyMovementFullBoard =
+    presentation === "weekly-movement-full-board";
 
   const urlUniverseCode = resolveBoardUniverseCode(
     searchParams?.get("universe") ?? initialUniverseCode,
@@ -445,6 +521,10 @@ export function RankingBoardClient({
   const [isDiscoverySearchPending, setIsDiscoverySearchPending] = useState(false);
   const [selectedTierFilter, setSelectedTierFilter] =
     useState<TierFilterKey>(initialSelectedTierFilter);
+  const [selectedMovementFilter, setSelectedMovementFilter] =
+    useState<MovementFilterKey>(
+      isWeeklyMovementFullBoard ? initialMovementFilter : "ALL",
+    );
 
   const { bookmarks, toggleBookmark, isLoaded } = useBookmarks();
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
@@ -460,6 +540,8 @@ export function RankingBoardClient({
     null,
   );
 
+  const initialItemsRef = useRef(items);
+  const initialBoardErrorRef = useRef(boardError ?? null);
   const initializedFromServerRef = useRef(false);
   const boardCacheRef = useRef<Partial<Record<string, RankingBoardPayload>>>(
     {},
@@ -496,11 +578,21 @@ export function RankingBoardClient({
     if (syncRankingUrlState) {
       setSearchQuery(params.get("q") ?? "");
       setSelectedTierFilter(parseTierFilter(params.get("tier")));
+      setSelectedMovementFilter(
+        isWeeklyMovementFullBoard
+          ? parseMovementFilter(params.get("movement"))
+          : "ALL",
+      );
     } else {
       setSearchQuery("");
       setSelectedTierFilter("ALL");
+      setSelectedMovementFilter("ALL");
     }
-  }, [initialUniverseCode, syncRankingUrlState]);
+  }, [
+    initialUniverseCode,
+    isWeeklyMovementFullBoard,
+    syncRankingUrlState,
+  ]);
 
   useEffect(() => {
     syncLocalStateFromUrl();
@@ -570,9 +662,17 @@ export function RankingBoardClient({
       } else {
         params.delete("tier");
       }
+
+      if (isWeeklyMovementFullBoard && selectedMovementFilter !== "ALL") {
+        params.set("movement", selectedMovementFilter.toLowerCase());
+      } else {
+        params.delete("movement");
+      }
     }, "replace");
   }, [
+    isWeeklyMovementFullBoard,
     searchQuery,
+    selectedMovementFilter,
     selectedTierFilter,
     syncRankingUrlState,
     replaceUrlParams,
@@ -720,10 +820,13 @@ export function RankingBoardClient({
     if (!initializedFromServerRef.current) {
       initializedFromServerRef.current = true;
 
-      setBoardItems(items);
-      setLiveBoardError(boardError ?? null);
+      const initialItems = initialItemsRef.current;
+      const initialBoardError = initialBoardErrorRef.current;
 
-      const hasUsableServerSeed = !boardError && items.length > 0;
+      setBoardItems(initialItems);
+      setLiveBoardError(initialBoardError);
+
+      const hasUsableServerSeed = !initialBoardError && initialItems.length > 0;
       const boardRequestLimit = getHomeBoardRequestLimit(
         apiBasePath,
         boardUniverseCode,
@@ -732,7 +835,7 @@ export function RankingBoardClient({
 
       if (hasUsableServerSeed) {
         const serverSeedPayload = buildLocalRankingPayload(
-          items,
+          initialItems,
           boardUniverseCode,
           boardRequestLimit,
           {
@@ -758,10 +861,10 @@ export function RankingBoardClient({
         buildLocalRankingPayload([], boardUniverseCode, boardRequestLimit, {
           source: "client_pending",
           cacheState: "miss",
-          fallbackMode: boardError ? "server_seed_degraded" : "none",
-          fallbackUsed: Boolean(boardError),
-          degraded: Boolean(boardError),
-          reason: boardError ?? null,
+          fallbackMode: initialBoardError ? "server_seed_degraded" : "none",
+          fallbackUsed: Boolean(initialBoardError),
+          degraded: Boolean(initialBoardError),
+          reason: initialBoardError,
         }).delivery,
       );
       setIsBoardLoading(true);
@@ -858,8 +961,6 @@ export function RankingBoardClient({
     boardUniverseCode,
     boardLimit,
     apiBasePath,
-    items,
-    boardError,
     fetchBoardUniverse,
     getBoardCacheKey,
   ]);
@@ -898,6 +999,7 @@ export function RankingBoardClient({
           fallbackMode: "stale_while_syncing",
           fallbackUsed: true,
           degraded: true,
+          latestBoardDate: null,
           reason: "stale_while_syncing",
         },
       );
@@ -1014,9 +1116,29 @@ export function RankingBoardClient({
     (searchQuery.trim().length >= RANKING_DISCOVERY_SEARCH_MIN_QUERY_LENGTH &&
       isDiscoverySearchPending);
 
+  const presentationBoardItems = useMemo(() => {
+    const deliveryIdentityMatches =
+      boardDeliveryMeta.requestedUniverseCode === boardUniverseCode &&
+      boardDeliveryMeta.renderedUniverseCode === boardUniverseCode;
+    if (!deliveryIdentityMatches) return [];
+
+    const containsMismatchedUniverse = boardItems.some((item) => {
+      const itemUniverseCode = item.universeCode ?? item.universe_code;
+      return Boolean(itemUniverseCode && itemUniverseCode !== boardUniverseCode);
+    });
+
+    return containsMismatchedUniverse ? [] : boardItems;
+  }, [boardDeliveryMeta, boardItems, boardUniverseCode]);
+
   const filteredItems = useMemo(() => {
     if (shouldSuppressSearchResults) return [];
-    let result = boardItems;
+    let result = presentationBoardItems;
+
+    if (isWeeklyMovementFullBoard && selectedMovementFilter !== "ALL") {
+      result = result.filter(
+        (item) => normalizeRankMovement(item) === selectedMovementFilter,
+      );
+    }
 
     if (enableTierFilters && selectedTierFilter !== "ALL") {
       result = result.filter((item) =>
@@ -1049,8 +1171,10 @@ export function RankingBoardClient({
 
     return result;
   }, [
-    boardItems,
+    presentationBoardItems,
     enableTierFilters,
+    isWeeklyMovementFullBoard,
+    selectedMovementFilter,
     selectedTierFilter,
     districtQueryLocal,
     searchQuery,
@@ -1060,13 +1184,59 @@ export function RankingBoardClient({
     shouldSuppressSearchResults,
   ]);
 
+  const filteredZeroMessage = useMemo(() => {
+    if (presentationBoardItems.length === 0 || filteredItems.length > 0) {
+      return null;
+    }
+
+    if (searchQuery.trim()) {
+      return "현재 선택한 보드 안에서는 일치하는 단지가 없습니다.";
+    }
+
+    const hasMovementFilter =
+      isWeeklyMovementFullBoard && selectedMovementFilter !== "ALL";
+    const hasOtherLocalFilter =
+      (enableTierFilters && selectedTierFilter !== "ALL") ||
+      Boolean(districtQueryLocal) ||
+      (showBookmarksOnly && isLoaded);
+
+    if (hasMovementFilter && !hasOtherLocalFilter) {
+      if (selectedMovementFilter === "UP") {
+        return "현재 상승 조건에 해당하는 단지가 없습니다.";
+      }
+      if (selectedMovementFilter === "DOWN") {
+        return "현재 하락 조건에 해당하는 단지가 없습니다.";
+      }
+      if (selectedMovementFilter === "NEW") {
+        return "현재 신규 진입 조건에 해당하는 단지가 없습니다.";
+      }
+    }
+
+    if (hasMovementFilter || hasOtherLocalFilter) {
+      return "현재 선택한 조건에 해당하는 단지가 없습니다.";
+    }
+
+    return null;
+  }, [
+    districtQueryLocal,
+    enableTierFilters,
+    filteredItems.length,
+    isLoaded,
+    isWeeklyMovementFullBoard,
+    presentationBoardItems.length,
+    searchQuery,
+    selectedMovementFilter,
+    selectedTierFilter,
+    showBookmarksOnly,
+  ]);
+
   const visibleDiscoveryCandidates = useMemo(() => {
     if (searchQuery.trim().length < RANKING_DISCOVERY_SEARCH_MIN_QUERY_LENGTH) {
       return [];
     }
 
     const rankedComplexIds = new Set(
-      boardItems
+      presentationBoardItems
         .map((item) => String(item.complexId ?? "").trim())
         .filter(Boolean),
     );
@@ -1081,7 +1251,7 @@ export function RankingBoardClient({
         return true;
       })
       .slice(0, RANKING_DISCOVERY_SEARCH_LIMIT);
-  }, [boardItems, discoveryCandidates, searchQuery]);
+  }, [presentationBoardItems, discoveryCandidates, searchQuery]);
 
   const hasDiscoveryCandidates = visibleDiscoveryCandidates.length > 0;
 
@@ -1096,20 +1266,27 @@ export function RankingBoardClient({
     return `${scopeLabel} ${districtQueryLocal}`.trim();
   }, [boardUniverseCode, districtQueryLocal]);
   const selectedItem =
-    boardItems.find((i) => i.complexId === selectedComplexId) ??
+    presentationBoardItems.find((i) => i.complexId === selectedComplexId) ??
     items.find((i) => i.complexId === selectedComplexId) ??
     null;
   const selectedDetail =
     complexDetail?.complexId === selectedComplexId ? complexDetail : null;
-  const isShowingStaleBoard =
-    isBoardLoading && staleBoardUniverseCode !== null && boardItems.length > 0;
-  const boardDeliveryState = isShowingStaleBoard
-    ? "stale-while-syncing"
-    : isBoardLoading
-      ? "loading"
-      : liveBoardError
-        ? "degraded"
-        : "ready";
+  const isSuppressingStaleBoard =
+    staleBoardUniverseCode !== null &&
+    boardItems.length > 0 &&
+    presentationBoardItems.length === 0;
+  const boardDeliveryState = isBoardLoading
+    ? isSuppressingStaleBoard
+      ? "stale-suppressed"
+      : "loading"
+    : liveBoardError
+      ? "degraded"
+      : "ready";
+  const formattedLatestBoardDate =
+    boardDeliveryMeta.requestedUniverseCode === boardUniverseCode &&
+    boardDeliveryMeta.renderedUniverseCode === boardUniverseCode
+      ? formatSnapshotDate(boardDeliveryMeta.latestBoardDate)
+      : null;
   const renderDiscoveryCandidatesSection = () => {
     if (!hasDiscoveryCandidates) return null;
 
@@ -1241,38 +1418,113 @@ export function RankingBoardClient({
         data-board-fallback-used={boardDeliveryMeta.fallbackUsed ? "true" : "false"}
         data-board-degraded={boardDeliveryMeta.degraded ? "true" : "false"}
         data-board-stale-universe-code={staleBoardUniverseCode ?? ""}
+        data-latest-board-date={boardDeliveryMeta.latestBoardDate ?? ""}
+        data-ranking-presentation={presentation}
       >
-        <div className="flex min-w-0 max-w-full shrink-0 flex-col gap-3 border-b border-slate-800/80 p-4 lg:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div
+          className={`flex min-w-0 max-w-full shrink-0 flex-col border-b border-slate-800/80 ${
+            isWeeklyMovementFullBoard
+              ? "gap-2 p-3 sm:p-4 lg:p-4"
+              : "gap-3 p-4 lg:p-5"
+          }`}
+        >
+          <div
+            className={`flex flex-col sm:flex-row sm:items-start sm:justify-between ${
+              isWeeklyMovementFullBoard ? "gap-2" : "gap-3"
+            }`}
+          >
             <div className="w-full min-w-0 max-w-full">
               <h2 className="break-words text-base font-bold tracking-tight text-slate-100 [overflow-wrap:anywhere] sm:text-lg">
                 {title}
               </h2>
 
-              <p className="mt-1 max-w-xl break-words text-[11px] leading-5 text-slate-500 [overflow-wrap:anywhere]">
-                {LAUNCH_COPY.boardIntro}
-              </p>
+              {isWeeklyMovementFullBoard && (
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">
+                  Authoritative weekly universe-rank movement
+                </p>
+              )}
+
+              {!isWeeklyMovementFullBoard && (
+                <p className="mt-1 max-w-xl break-words text-[11px] leading-5 text-slate-500 [overflow-wrap:anywhere]">
+                  {LAUNCH_COPY.boardIntro}
+                </p>
+              )}
             </div>
 
-            {isBoardLoading && (
-              <span className="w-fit rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
-                보드 새로고침 중
-              </span>
-            )}
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {isWeeklyMovementFullBoard && formattedLatestBoardDate && (
+                <span
+                  className="w-fit rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-300"
+                  data-testid="ranking-freshness"
+                >
+                  Updated {formattedLatestBoardDate}
+                </span>
+              )}
+              {isBoardLoading && (
+                <span className="w-fit rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
+                  보드 새로고침 중
+                </span>
+              )}
+            </div>
           </div>
 
           <BetaDisclosure variant="compact" />
 
-          <div className="mt-3">
+          <div className={isWeeklyMovementFullBoard ? "" : "mt-3"}>
             <UniverseSelector
               value={boardUniverseCode}
               options={universeOptions}
               onChange={handleUniverseChange}
+              density={isWeeklyMovementFullBoard ? "compact" : "default"}
             />
           </div>
 
+          {isWeeklyMovementFullBoard && (
+            <div
+              className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-2.5"
+              data-testid="ranking-movement-filters"
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                  Weekly Rank Movement
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  Published state
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap">
+                {MOVEMENT_FILTER_OPTIONS.map((movement) => {
+                  const isActive = selectedMovementFilter === movement.key;
+
+                  return (
+                    <button
+                      key={movement.key}
+                      type="button"
+                      data-movement-filter={movement.key.toLowerCase()}
+                      aria-pressed={isActive}
+                      onClick={() => setSelectedMovementFilter(movement.key)}
+                      className={`min-h-11 rounded-lg border px-2 py-2 text-xs font-semibold transition-all sm:min-h-0 sm:px-3 ${
+                        isActive
+                          ? "border-cyan-300/60 bg-cyan-400/15 text-cyan-200 shadow-[0_0_14px_rgba(34,211,238,0.08)]"
+                          : "border-slate-700 bg-slate-900/60 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                      }`}
+                    >
+                      {movement.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {enableTierFilters && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div
+              className={
+                isWeeklyMovementFullBoard
+                  ? "flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0"
+                  : "mt-3 flex flex-wrap items-center gap-2"
+              }
+            >
               {TIER_FILTER_OPTIONS.map((tier) => {
                 const isActive = selectedTierFilter === tier.key;
 
@@ -1281,7 +1533,11 @@ export function RankingBoardClient({
                     key={tier.key}
                     type="button"
                     onClick={() => setSelectedTierFilter(tier.key)}
-                    className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-all ${isActive
+                    className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-all ${
+                      isWeeklyMovementFullBoard
+                        ? "min-h-11 shrink-0 whitespace-nowrap sm:min-h-0 "
+                        : ""
+                    }${isActive
                       ? "border-cyan-400/40 bg-cyan-500/15 text-cyan-300"
                       : "border-slate-700 bg-slate-800/30 text-slate-400 hover:border-slate-500 hover:text-slate-200"
                       }`}
@@ -1294,10 +1550,10 @@ export function RankingBoardClient({
           )}
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex w-full rounded-lg border border-slate-700/50 bg-black/40 p-1 lg:w-auto">
+            <div className="flex min-w-0 w-full rounded-lg border border-slate-700/50 bg-black/40 p-1 lg:w-auto">
               <button
                 onClick={() => setShowBookmarksOnly(false)}
-                className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold transition-all ${!showBookmarksOnly
+                className={`min-h-11 flex-1 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-bold transition-all sm:min-h-0 ${!showBookmarksOnly
                   ? "bg-slate-700 text-white shadow"
                   : "text-slate-500 hover:text-slate-300"
                   }`}
@@ -1306,7 +1562,7 @@ export function RankingBoardClient({
               </button>
               <button
                 onClick={() => setShowBookmarksOnly(true)}
-                className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold transition-all ${showBookmarksOnly
+                className={`min-h-11 flex-1 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-bold transition-all sm:min-h-0 ${showBookmarksOnly
                   ? "bg-yellow-500/10 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.1)]"
                   : "text-slate-500 hover:text-slate-300"
                   }`}
@@ -1321,7 +1577,7 @@ export function RankingBoardClient({
                 placeholder="보드 안에서 단지·지역 찾기"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border border-slate-700/50 bg-slate-800/30 px-3 py-2 text-sm text-slate-200 outline-none transition-all focus:border-cyan-500/50 focus:bg-slate-800/60"
+                className="min-h-11 w-full rounded-lg border border-slate-700/50 bg-slate-800/30 px-3 py-2 text-sm text-slate-200 outline-none transition-all focus:border-cyan-500/50 focus:bg-slate-800/60 sm:min-h-0"
               />
             </div>
           </div>
@@ -1332,7 +1588,7 @@ export function RankingBoardClient({
             </div>
           )}
 
-          {isShowingStaleBoard && (
+          {isBoardLoading && isSuppressingStaleBoard && (
             <div
               className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
               data-testid="ranking-board-degraded-state"
@@ -1345,12 +1601,13 @@ export function RankingBoardClient({
               data-board-stale-universe-code={staleBoardUniverseCode ?? ""}
             >
               {getUniverseLabel(boardUniverseCode)} 보드를 다시 확인하는 중입니다.
-              새 관측값이 도착할 때까지 이전 보드를 유지합니다.
+              다른 유니버스의 이전 행은 새 관측값이 도착할 때까지 숨깁니다.
             </div>
           )}
 
           {(districtQueryLocal ||
             searchQuery ||
+            (isWeeklyMovementFullBoard && selectedMovementFilter !== "ALL") ||
             (enableTierFilters && selectedTierFilter !== "ALL")) && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <span className="text-[10px] uppercase tracking-widest text-slate-500">
@@ -1368,6 +1625,21 @@ export function RankingBoardClient({
                     </button>
                   </div>
                 )}
+
+                {isWeeklyMovementFullBoard &&
+                  selectedMovementFilter !== "ALL" && (
+                    <div className="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
+                      <span>Weekly {selectedMovementFilter}</span>
+                      <button
+                        type="button"
+                        aria-label="Clear weekly movement filter"
+                        onClick={() => setSelectedMovementFilter("ALL")}
+                        className="ml-1 flex h-4 w-4 items-center justify-center rounded-full text-cyan-300/70 transition-all hover:bg-cyan-500/20 hover:text-cyan-100"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
 
                 {districtQueryLocal && (
                   <div className="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-400">
@@ -1397,7 +1669,7 @@ export function RankingBoardClient({
 
           <div className="mt-1 flex justify-between text-[11px] text-slate-500">
             <span>표시 {filteredItems.length}개</span>
-            <span>전체 {boardItems.length}개</span>
+            <span>전체 {presentationBoardItems.length}개</span>
           </div>
         </div>
 
@@ -1411,10 +1683,18 @@ export function RankingBoardClient({
               }`}
           >
             {renderRegionResolutionNotice()}
-            {isBoardLoading && boardItems.length === 0 ? (
+            {isBoardLoading && presentationBoardItems.length === 0 ? (
               <div className="flex h-32 flex-col items-center justify-center gap-2 text-slate-500">
                 <span className="text-2xl opacity-50">📡</span>
                 <p className="text-sm">공개 랭킹 보드를 불러오는 중입니다.</p>
+              </div>
+            ) : liveBoardError && presentationBoardItems.length === 0 ? (
+              <div
+                className="flex h-32 flex-col items-center justify-center gap-2 text-rose-300"
+                data-testid="ranking-board-error-state"
+              >
+                <span className="text-2xl opacity-60">!</span>
+                <p className="text-sm">요청한 유니버스 보드를 표시할 수 없습니다.</p>
               </div>
             ) : filteredItems.length > 0 ? (
               <div className="flex flex-col gap-2 pb-2">
@@ -1422,6 +1702,10 @@ export function RankingBoardClient({
                   <RankingCard
                     key={item.complexId}
                     item={item}
+                    variant={
+                      isWeeklyMovementFullBoard ? "full-board" : "default"
+                    }
+                    currentSnapshotDate={boardDeliveryMeta.latestBoardDate}
                     isBookmarked={bookmarks.includes(item.complexId)}
                     onToggleBookmark={toggleBookmark}
                     isCompared={comparisonItems.some(
@@ -1459,14 +1743,15 @@ export function RankingBoardClient({
             ) : (
               <div className="flex h-32 flex-col items-center justify-center gap-2 text-slate-500">
                 <span className="text-2xl opacity-50">
-                  {searchQuery.trim() && boardItems.length > 0 ? "🔍" : "📡"}
+                  {filteredZeroMessage ? "⌕" : "📡"}
                 </span>
-                <p className="text-sm">
-                  {searchQuery.trim() && boardItems.length > 0
-                    ? "현재 선택한 보드 안에서는 일치하는 단지가 없습니다."
-                    : emptyMessage}
+                <p
+                  className="text-center text-sm"
+                  data-testid="ranking-empty-message"
+                >
+                  {filteredZeroMessage ?? emptyMessage}
                 </p>
-                {searchQuery.trim() && boardItems.length > 0 && (
+                {searchQuery.trim() && presentationBoardItems.length > 0 && (
                   <p className="text-xs text-slate-600">
                     더 넓은 공개 결과는 화면 우하단 단지·지역 검색에서 이어서 볼 수 있습니다.
                   </p>

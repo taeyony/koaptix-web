@@ -13,10 +13,7 @@ import {
 import type { RankingItem } from "../../lib/koaptix/types";
 
 import { RankingBoardClient } from "../../components/home/RankingBoardClient";
-import {
-  BetaDisclosure,
-  LAUNCH_COPY,
-} from "../../components/home/BetaDisclosure";
+import { LAUNCH_COPY } from "../../components/home/BetaDisclosure";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -90,7 +87,7 @@ export default async function RankingPage({
 
   return (
     <main
-      className="min-h-screen overflow-x-hidden bg-[#06090f] px-2 py-4 sm:p-4 lg:p-6"
+      className="min-h-screen overflow-x-hidden bg-[#06090f] px-2 py-3 sm:p-4 lg:p-5"
       data-testid="ranking-page"
       data-universe-code={universeCode}
       data-universe-unavailable={universeUnavailable ? "true" : "false"}
@@ -102,10 +99,10 @@ export default async function RankingPage({
       data-has-query={initialSearchQuery ? "true" : "false"}
       data-selected-complex-id={initialComplexId ?? ""}
     >
-      <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-4 overflow-x-hidden">
+      <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-2 overflow-x-hidden">
         <section className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_rgba(0,0,0,0.4)]">
-          <div className="min-w-0 max-w-full border-b border-slate-800/80 px-4 py-3 lg:px-5 lg:py-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 max-w-full border-b border-slate-800/80 px-3 py-2.5 lg:px-4 lg:py-3">
+            <div className="flex items-start justify-between gap-3">
               <div className="w-full min-w-0 max-w-full">
                 <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">
                   KOAPTIX RANKING BOARD
@@ -115,7 +112,7 @@ export default async function RankingPage({
                 </h1>
 
                 {/* 🚨 지차장 지시 C: 헤더 설명에 현재 유니버스 배지 추가 */}
-                <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
                   <p className="min-w-0 max-w-full break-words text-xs text-slate-300 [overflow-wrap:anywhere] sm:text-sm">
                     {LAUNCH_COPY.rankingSubtitle}
                   </p>
@@ -124,14 +121,25 @@ export default async function RankingPage({
                   </span>
                 </div>
 
-                <BetaDisclosure variant="ranking" className="mt-3 max-w-4xl" />
+                <div
+                  className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+                  data-testid="ranking-weekly-movement-hero"
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">
+                    Weekly Rank Movement
+                  </span>
+                  <span className="font-medium text-slate-200 sm:text-sm">
+                    대한민국 아파트 추정 시가총액 순위의 주간 이동
+                  </span>
+                </div>
+
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 {/* 🚨 지차장 지시 D: 홈으로 돌아갈 때 현재 유니버스를 유지하는 링크로 교체 */}
                 <Link
                   href={homeHref}
-                  className="rounded-xl border border-slate-700 px-3 py-2 text-xs uppercase tracking-[0.16em] text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
+                  className="shrink-0 whitespace-nowrap rounded-lg border border-slate-700 px-2.5 py-2 text-xs uppercase tracking-[0.16em] text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
                 >
                   홈으로
                 </Link>
@@ -147,15 +155,15 @@ export default async function RankingPage({
             }
           >
             <RankingBoardClient
-              key={`ranking-${universeCode}`}
               items={items}
               initialUniverseCode={universeCode}
-              title="KOAPTIX TOP1000"
+              title="WEEKLY RANK MOVEMENT"
               apiBasePath="/api/ranking"
               boardLimit={1000}
-              emptyMessage="현재 공개 TOP1000 보드를 준비 중입니다."
+              emptyMessage="현재 선택한 유니버스의 공개 TOP1000 보드에는 표시할 단지가 없습니다."
               enableTierFilters={true}
               useInternalScroll={false}
+              presentation="weekly-movement-full-board"
             />
           </Suspense>
         </section>

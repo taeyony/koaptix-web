@@ -26,6 +26,14 @@ function countMatches(source: string, pattern: RegExp): number {
   return Array.from(source.matchAll(pattern)).length;
 }
 
+function sourceBetween(source: string, start: string, end: string): string {
+  const startIndex = source.indexOf(start);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  assert.notEqual(startIndex, -1, `missing source marker: ${start}`);
+  assert.notEqual(endIndex, -1, `missing source marker: ${end}`);
+  return source.slice(startIndex, endIndex);
+}
+
 function serviceRow(overrides: Record<string, unknown> = {}) {
   return {
     generation_id: GENERATION_G1,
@@ -212,6 +220,71 @@ test("rank readers use the published surface and forbid independent latest label
   assert.match(sources.search, /requirePublicationIdentity\(row/);
   assert.match(sources.search, /selectMatchingPublicationItems/);
   assert.doesNotMatch(sources.search, /source:\s*"live_dynamic"/);
+});
+
+test("TOP1000 V1 preserves authoritative weekly movement and exact-date cap semantics", () => {
+  const page = readSource("src/app/ranking/page.tsx");
+  const client = readSource("src/components/home/RankingBoardClient.tsx");
+  const card = readSource("src/components/home/RankingCard.tsx");
+  const route = readSource("src/app/api/ranking/route.ts");
+  const queries = readSource("src/lib/koaptix/queries.ts");
+  const types = readSource("src/lib/koaptix/types.ts");
+
+  assert.match(page, /KOAPTIX TOP1000/);
+  assert.match(page, /Weekly Rank Movement/i);
+  assert.match(page, /presentation="weekly-movement-full-board"/);
+
+  assert.match(
+    types,
+    /export type RankMovement = "NEW" \| "UP" \| "DOWN" \| "SAME"/,
+  );
+  assert.match(route, /previous_rank_all,/);
+  assert.match(route, /rank_delta_w,/);
+  assert.match(route, /rank_movement,/);
+  assert.match(route, /normalizeRankMovement\(row\.rank_movement\)/);
+
+  const itemMapper = sourceBetween(
+    route,
+    "function toRankingItem(",
+    "export async function GET",
+  );
+  assert.match(itemMapper, /const rankDelta7d = toNullableNumber\(/);
+  assert.doesNotMatch(itemMapper, /rankDelta7d[\s\S]{0,80}\?\?\s*0/);
+  assert.doesNotMatch(itemMapper, /marketCapDelta7d[\s\S]{0,80}\?\?\s*0/);
+  assert.doesNotMatch(
+    itemMapper,
+    /marketCapDeltaPct7d[\s\S]{0,80}\?\?\s*0/,
+  );
+
+  const exactCapHelper = sourceBetween(
+    queries,
+    "export async function getExactWeeklyMarketCapComparisonMap(",
+    "async function fetchWeeklyComparisonByComplexId(",
+  );
+  assert.match(exactCapHelper, /shiftSeoulDateString\(normalizedBoardDate, -7\)/);
+  assert.match(exactCapHelper, /\.eq\("snapshot_date", previousSnapshotDate\)/);
+  assert.match(exactCapHelper, /\.in\("complex_id", complexIds\)/);
+  assert.doesNotMatch(exactCapHelper, /getWeeklyAnchorDate/);
+  assert.doesNotMatch(exactCapHelper, /rank_delta|rank_movement/);
+  assert.match(route, /getExactWeeklyMarketCapComparisonMap\(latestBoardDate, rows\)/);
+  assert.match(route, /history_snapshot_date: comparison\?\.history_snapshot_date \?\? null/);
+  assert.match(route, /latestBoardDate,/);
+
+  assert.match(client, /type MovementFilterKey = "ALL" \| "UP" \| "DOWN" \| "NEW"/);
+  assert.match(client, /normalizeRankMovement\(item\) === selectedMovementFilter/);
+  assert.match(client, /params\.set\("movement", selectedMovementFilter\.toLowerCase\(\)\)/);
+  assert.match(client, /json\.latestBoardDate \?\? null/);
+  assert.match(client, /Updated \{formattedLatestBoardDate\}/);
+  assert.match(client, /const presentationBoardItems = useMemo/);
+  assert.match(client, /containsMismatchedUniverse \? \[\] : boardItems/);
+  assert.match(client, /response\.status === 409/);
+  assert.match(client, /hasValidClarificationChoices/);
+
+  assert.match(card, /getAuthoritativeMovement\(item\)/);
+  assert.match(card, /data-rank-movement=\{movement \?\? "UNKNOWN"\}/);
+  assert.match(card, /movement === "NEW"/);
+  assert.match(card, /isExactWeeklyWindow\(previousSnapshotDate, currentSnapshotDate\)/);
+  assert.match(card, /data-weekly-cap-available=/);
 });
 
 test("rank routes have private no-store and no cross-request rank caches", () => {

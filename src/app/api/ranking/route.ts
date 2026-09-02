@@ -14,6 +14,7 @@ import {
   type UniverseRequestResolution,
 } from "../../../lib/koaptix/universes";
 import {
+  getExactWeeklyMarketCapComparisonMap,
   getLatestRankBoard,
   toNullableNumber,
 } from "../../../lib/koaptix/queries";
@@ -23,6 +24,7 @@ import type {
   KoaptixUniverseServicePublicationIdentity,
   NullableNumberLike,
   PublishedRankingItem,
+  RankMovement,
   RankingItem,
 } from "../../../lib/koaptix/types";
 
@@ -81,7 +83,7 @@ type RankingBoardRow = DbLatestRankBoardWeeklyRow & {
   previous_rank_all?: NullableNumberLike;
   market_cap_delta_7d?: NullableNumberLike;
   market_cap_delta_pct_7d?: NullableNumberLike;
-  rank_movement?: string | null;
+  rank_movement?: RankMovement | null;
   __koaptixBoardSource?: string | null;
   __koaptixFallbackMode?: string | null;
 };
@@ -252,6 +254,14 @@ function deriveLatestBoardDate(rows: RankingBoardRow[]): string | null {
   return dates.size === 1 ? Array.from(dates)[0] : null;
 }
 
+function normalizeRankMovement(value: unknown): RankMovement | null {
+  if (value === "NEW" || value === "UP" || value === "DOWN" || value === "SAME") {
+    return value;
+  }
+
+  return null;
+}
+
 function deriveBoardSource(rows: RankingBoardRow[]): RankingApiResponse["source"] {
   const firstSource = rows
     .map((row) => row.__koaptixBoardSource)
@@ -365,10 +375,12 @@ function toRankingItem(
   );
   const rankDelta7d = toNullableNumber(
     row.rank_delta_w ?? row.rank_delta_7d,
-  ) ?? 0;
-  const marketCapDelta7d = toNullableNumber(row.market_cap_delta_7d) ?? 0;
-  const marketCapDeltaPct7d =
-    toNullableNumber(row.market_cap_delta_pct_7d) ?? 0;
+  );
+  const marketCapDelta7d = toNullableNumber(row.market_cap_delta_7d);
+  const marketCapDeltaPct7d = toNullableNumber(
+    row.market_cap_delta_pct_7d,
+  );
+  const rankMovement = normalizeRankMovement(row.rank_movement);
   const sigunguName = row.sigungu_name ?? "";
   const legalDongName = row.legal_dong_name ?? "";
   const name = row.apt_name_ko ?? row.name ?? "";
@@ -423,8 +435,8 @@ function toRankingItem(
     deltaWindow: "7d",
     rankDelta1d: 0,
 
-    rankMovement: row.rank_movement ?? null,
-    rank_movement: row.rank_movement ?? null,
+    rankMovement,
+    rank_movement: rankMovement,
 
     previousRankAll: toNullableNumber(row.previous_rank_all),
     previous_rank_all: toNullableNumber(row.previous_rank_all),
@@ -496,10 +508,25 @@ export async function GET(request: NextRequest) {
 
     const identity = requireUniformUniverseServicePublication(rows, universeCode);
     const latestBoardDate = deriveLatestBoardDate(rows);
+    const weeklyCapComparisonByComplexId = latestBoardDate
+      ? await getExactWeeklyMarketCapComparisonMap(latestBoardDate, rows)
+      : new Map();
+    const rowsWithWeeklyCap = rows.map((row) => {
+      const complexId = row.complex_id == null ? "" : String(row.complex_id);
+      const comparison = weeklyCapComparisonByComplexId.get(complexId);
+
+      return {
+        ...row,
+        history_snapshot_date: comparison?.history_snapshot_date ?? null,
+        market_cap_delta_7d: comparison?.market_cap_delta_7d ?? null,
+        market_cap_delta_pct_7d:
+          comparison?.market_cap_delta_pct_7d ?? null,
+      };
+    });
     const source = deriveBoardSource(rows);
     const fallbackMode = deriveFallbackMode(source);
     const fallbackUsed = fallbackMode !== "none";
-    const items = rows
+    const items = rowsWithWeeklyCap
       .map((row) => toRankingItem(row, universeCode))
       .filter((item) => matchesTier(item, tier))
       .filter((item) => matchesQuery(item, q));

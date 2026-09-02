@@ -18,6 +18,7 @@ import type {
   DbLatestRankBoardRow,
   DbLatestRankBoardWeeklyRow,
   DbRankHistoryRow,
+  RankMovement,
 } from "./types";
 import { requireUniformUniverseServicePublication } from "./currentness";
 import {
@@ -70,7 +71,13 @@ type WeeklyDerivedPayload = {
   rank_delta_7d: number | null;
   market_cap_delta_7d: number | null;
   market_cap_delta_pct_7d: number | null;
-  rank_movement: "NEW" | "UP" | "DOWN" | "SAME";
+  rank_movement: RankMovement;
+};
+
+export type ExactWeeklyMarketCapComparison = {
+  history_snapshot_date: string;
+  market_cap_delta_7d: number;
+  market_cap_delta_pct_7d: number;
 };
 
 function createServerSupabase() {
@@ -258,37 +265,76 @@ async function getWeeklyAnchorDate(
   }
 }
 
-async function fetchWeeklyComparisonMap(
-  supabase: ReturnType<typeof createServerSupabase>,
-  complexIds: number[]
-): Promise<Map<string, DbRankHistoryRow>> {
+export async function getExactWeeklyMarketCapComparisonMap(
+  currentBoardDate: string,
+  currentRows: DbLatestRankBoardRow[],
+): Promise<Map<string, ExactWeeklyMarketCapComparison>> {
+  const complexIds = Array.from(new Set(extractComplexIds(currentRows))).slice(
+    0,
+    1000,
+  );
   if (complexIds.length === 0) return new Map();
 
-  const anchorDate = await getWeeklyAnchorDate(supabase);
-  const targetDate = shiftSeoulDateString(anchorDate, -7);
-  const floorDate = shiftSeoulDateString(targetDate, -14);
+  const normalizedBoardDate = currentBoardDate.match(/^\d{4}-\d{2}-\d{2}$/)?.[0];
+  if (!normalizedBoardDate) return new Map();
+
+  const previousSnapshotDate = shiftSeoulDateString(normalizedBoardDate, -7);
+  const currentMarketCapByComplexId = new Map<string, number>();
+
+  for (const row of currentRows) {
+    const key = row.complex_id == null ? "" : String(row.complex_id);
+    const marketCap = toNullableNumber(row.market_cap_krw);
+    if (!key || marketCap === null) continue;
+    currentMarketCapByComplexId.set(key, marketCap);
+  }
+
+  const supabase = createServerSupabase();
 
   try {
-    const { data, error } = await supabase
-      .from("complex_rank_history")
-      .select("snapshot_date, complex_id, market_cap_krw, rank_all")
-      .in("complex_id", complexIds)
-      .gte("snapshot_date", floorDate)
-      .lte("snapshot_date", targetDate)
-      .order("snapshot_date", { ascending: false })
-      .limit(Math.min(Math.max(complexIds.length * 14, 50), 1000));
+    const { data, error } = await withLocalQueryTimeout(
+      supabase
+        .from("complex_rank_history")
+        .select("snapshot_date, complex_id, market_cap_krw")
+        .eq("snapshot_date", previousSnapshotDate)
+        .in("complex_id", complexIds)
+        .limit(complexIds.length),
+      900,
+      "EXACT_WEEKLY_MARKET_CAP_LOCAL_TIMEOUT",
+    );
 
     if (error) throw error;
 
-    const result = new Map<string, DbRankHistoryRow>();
+    const comparisons = new Map<string, ExactWeeklyMarketCapComparison>();
     for (const row of (data ?? []) as DbRankHistoryRow[]) {
       const key = row.complex_id == null ? "" : String(row.complex_id);
-      if (!key || result.has(key)) continue;
-      result.set(key, row);
+      const currentMarketCap = currentMarketCapByComplexId.get(key);
+      const previousMarketCap = toNullableNumber(row.market_cap_krw);
+
+      if (
+        !key ||
+        row.snapshot_date !== previousSnapshotDate ||
+        currentMarketCap === undefined ||
+        previousMarketCap === null ||
+        previousMarketCap <= 0
+      ) {
+        continue;
+      }
+
+      const marketCapDelta7d = currentMarketCap - previousMarketCap;
+      const marketCapDeltaPct7d = Number(
+        ((marketCapDelta7d / previousMarketCap) * 100).toFixed(2),
+      );
+
+      comparisons.set(key, {
+        history_snapshot_date: previousSnapshotDate,
+        market_cap_delta_7d: marketCapDelta7d,
+        market_cap_delta_pct_7d: marketCapDeltaPct7d,
+      });
     }
-    return result;
+
+    return comparisons;
   } catch (error) {
-    console.warn("[KOAPTIX] weekly comparison history lookup failed:", error);
+    console.warn("[KOAPTIX] exact weekly market-cap lookup failed:", error);
     return new Map();
   }
 }

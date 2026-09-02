@@ -21,6 +21,8 @@ export type KoaptixUniverseServicePublicationIdentity =
 
 export type WeeklyDeltaWindow = "7d";
 
+export type RankMovement = "NEW" | "UP" | "DOWN" | "SAME";
+
 export type WeeklyDeltaPayload = {
   history_snapshot_date: string | null;
   rank_delta_7d: number | null;
@@ -44,6 +46,10 @@ export type DbLatestRankBoardRow =
 
   universe_code: string;
   universe_name?: string | null;
+
+  previous_rank_all?: NullableNumberLike;
+  rank_delta_w?: NullableNumberLike;
+  rank_movement?: RankMovement | null;
 };
 
 export type DbRankHistoryRow = {

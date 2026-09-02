@@ -13,6 +13,7 @@ type UniverseSelectorProps = {
   value?: string;
   options: UniverseOption[];
   onChange: (nextCode: string) => void;
+  density?: "default" | "compact";
 };
 
 const RECENT_STORAGE_KEY = "koaptix_recent_universe_codes_v1";
@@ -190,6 +191,7 @@ export default function UniverseSelector({
   value,
   options,
   onChange,
+  density = "default",
 }: UniverseSelectorProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -198,6 +200,7 @@ export default function UniverseSelector({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [recentCodes, setRecentCodes] = useState<string[]>([]);
+  const isCompact = density === "compact";
 
   const sortedOptions = useMemo(() => {
     return [...options].sort(sortUniverseOptions);
@@ -410,7 +413,11 @@ export default function UniverseSelector({
 
       const baseClass =
         variant === "macro"
-          ? "min-w-0 max-w-full break-words rounded-xl border px-3 py-2 text-sm font-semibold transition-all [overflow-wrap:anywhere]"
+          ? `${
+              isCompact
+                ? "shrink-0 whitespace-nowrap"
+                : "min-w-0 max-w-full break-words [overflow-wrap:anywhere]"
+            } rounded-xl border px-3 py-2 text-sm font-semibold transition-all`
           : "min-w-0 max-w-full break-words rounded-lg border px-3 py-1.5 text-sm transition-all [overflow-wrap:anywhere]";
 
       const activeClass =
@@ -435,7 +442,7 @@ export default function UniverseSelector({
         </button>
       );
     },
-    [handleSelect, value],
+    [handleSelect, isCompact, value],
   );
 
   const currentRegionLabel = useMemo(() => {
@@ -456,26 +463,37 @@ export default function UniverseSelector({
   return (
     <div
       ref={rootRef}
-      className="relative flex w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden"
+      className={`relative flex w-full min-w-0 max-w-full flex-col overflow-x-hidden ${
+        isCompact ? "gap-2" : "gap-3"
+      }`}
+      data-universe-selector-density={density}
     >
-      <div className="flex max-w-full flex-wrap items-center gap-2">
+      <div
+        className={
+          isCompact
+            ? "hidden max-w-full items-center gap-2 sm:flex sm:flex-nowrap sm:overflow-x-auto sm:pb-1"
+            : "flex max-w-full flex-wrap items-center gap-2"
+        }
+      >
         {macroOptions.map((option) => renderChip(option, "macro"))}
 
-        <button
-          type="button"
-          onClick={() => setIsOpen((prev) => !prev)}
-          data-testid="universe-finder-toggle"
-          className={`min-w-0 max-w-full break-words rounded-xl border px-3 py-2 text-sm font-semibold transition-all [overflow-wrap:anywhere] ${
-            isOpen
-              ? "border-cyan-400/50 bg-cyan-500/15 text-cyan-300"
-              : "border-slate-700 bg-slate-900/70 text-slate-200 hover:border-slate-500 hover:text-white"
-          }`}
-        >
-          시군구 / 광역 찾기
-        </button>
+        {!isCompact && (
+          <button
+            type="button"
+            onClick={() => setIsOpen((prev) => !prev)}
+            data-testid="universe-finder-toggle"
+            className={`min-w-0 max-w-full break-words rounded-xl border px-3 py-2 text-sm font-semibold transition-all [overflow-wrap:anywhere] ${
+              isOpen
+                ? "border-cyan-400/50 bg-cyan-500/15 text-cyan-300"
+                : "border-slate-700 bg-slate-900/70 text-slate-200 hover:border-slate-500 hover:text-white"
+            }`}
+          >
+            시군구 / 광역 찾기
+          </button>
+        )}
       </div>
 
-      {contextualRecentOptions.length > 0 && (
+      {!isCompact && contextualRecentOptions.length > 0 && (
         <div className="flex max-w-full flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
             Recent
@@ -484,7 +502,11 @@ export default function UniverseSelector({
         </div>
       )}
 
-      <div className="min-w-0 max-w-full rounded-xl border border-slate-700/60 bg-slate-900/50 px-3 py-2">
+      <div
+        className={`min-w-0 max-w-full rounded-xl border border-slate-700/60 bg-slate-900/50 px-3 ${
+          isCompact ? "py-1.5" : "py-2"
+        }`}
+      >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
@@ -516,13 +538,16 @@ export default function UniverseSelector({
             type="button"
             onClick={() => setIsOpen((prev) => !prev)}
             data-testid="universe-finder-toggle"
-            className="rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-all hover:border-slate-500 hover:text-white"
+            className={`rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-all hover:border-slate-500 hover:text-white ${
+              isCompact ? "min-h-11 whitespace-nowrap sm:min-h-0" : ""
+            }`}
           >
             {isOpen ? "닫기" : "찾기"}
           </button>
         </div>
       </div>
 
+      {!isCompact && (
       <div className="flex max-w-full flex-wrap items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-slate-500">
         <span
           data-testid="universe-kind-chip"
@@ -555,6 +580,7 @@ export default function UniverseSelector({
           {sortedOptions.length}개 지역
         </span>
       </div>
+      )}
 
       {isOpen && (
         <div className="absolute left-0 top-full z-30 mt-2 w-full overflow-hidden rounded-2xl border border-slate-700/70 bg-[#0b1118] shadow-[0_18px_40px_rgba(0,0,0,0.45)]">
