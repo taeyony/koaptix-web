@@ -1,7 +1,7 @@
 # KOAPTIX Context Index
 
 - Document status: `CANONICAL_CONTEXT_RECORD`
-- Last updated: `2026-07-21`
+- Last updated: `2026-09-03`
 
 ## 1. Purpose
 
@@ -41,6 +41,7 @@ Tier가 높다고 해서 오래된 일반 문구가 더 구체적인 최신 승�
 
 - Watcher Y 방향은 [tracked brand guide](../brand/watcher_y_brand_tone_guide_20260706.md)를 읽는다.
 - ranking/discovery 전략은 [tracked product strategy note](../product_strategy/koaptix_product_strategy_canonical_notes_20260706.md)를 읽는다.
+- 장기 제품 단계와 후보 우선순위는 [KOAPTIX Product Development Master Roadmap](../product_strategy/KOAPTIX_PRODUCT_DEVELOPMENT_MASTER_ROADMAP.md)의 현재 product lane과 직접 관련된 구간만 읽는다. 이 roadmap은 매 startup에서 전문을 읽는 mandatory authority가 아니며, [KOAPTIX State Registry](KOAPTIX_STATE_REGISTRY.yaml)의 current capability state, [Confirmed Decisions](KOAPTIX_CONFIRMED_DECISIONS.md)의 accepted decisions, 또는 현재 `.handoff`의 bounded execution authority를 대체하거나 상회하지 않는다.
 - `KOAPTIX_HANDOFF_PROMPT_COMMON_RULES.txt`: `REFERENCE_NOT_VERIFIED_IN_REPOSITORY`. 이름만으로 경로나 내용을 만들지 않는다.
 
 ## 4. Conflict Resolution

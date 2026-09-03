@@ -4,6 +4,10 @@ This document records only long-lived KOAPTIX operating principles. It does not
 list temporary batches, individual SGG exposure results, timeout values, smoke
 logs, or release gate procedure details.
 
+## Product Development Roadmap
+
+Long-range product planning is maintained in the [KOAPTIX Product Development Master Roadmap](product_strategy/KOAPTIX_PRODUCT_DEVELOPMENT_MASTER_ROADMAP.md). The roadmap is a planning reference, not a statement of current implementation, current capability state, or execution authority; current capability state remains governed by the [KOAPTIX State Registry](governance/KOAPTIX_STATE_REGISTRY.yaml), and accepted durable decisions remain governed by [KOAPTIX Confirmed Decisions](governance/KOAPTIX_CONFIRMED_DECISIONS.md).
+
 ## Core Principles
 
 - Preserve the confirmed KOREA_ALL engine. Do not redesign or re-open it unless

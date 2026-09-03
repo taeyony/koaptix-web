@@ -1,7 +1,7 @@
 # KOAPTIX Continuity and Handoff Protocol
 
 - Document status: `CANONICAL_CONTEXT_RECORD`
-- Last updated: `2026-07-21`
+- Last updated: `2026-09-03`
 
 ## 1. Goal
 
@@ -124,6 +124,14 @@ Chat과 memory는 다섯 번째 secondary aid다. 문서를 찾는 데 도움을
 - Codex: 승인된 repository inspection, 문서 수정, test/실행, 결과 기록
 
 이 protocol은 context layer, promotion rule, handoff lifecycle, approval matrix가 바뀔 때만 docs-only review로 갱신한다.
+
+## 12. Roadmap and ChatGPT Sources Mirror Boundary
+
+- [KOAPTIX Product Development Master Roadmap](../product_strategy/KOAPTIX_PRODUCT_DEVELOPMENT_MASTER_ROADMAP.md)은 planning reference다. 현재 bounded execution은 `.handoff/inbox.md`에 기록된 승인 lane만 정의하며, inbox 문구도 상위 authority나 적용되는 금지사항을 우회하지 못한다.
+- Roadmap 후보 또는 accepted plan은 source 수정, DB 접근·변경, stage, commit, push, deploy 또는 production 실행을 승인하지 않는다.
+- 일반적인 repository-to-ChatGPT Sources mirror workflow에는 명시적으로 accepted된 public-safe tracked repository revision의 exact bytes만 들어갈 수 있다. 순서는 candidate review, 별도 승인된 tracked source write와 검증, 별도 승인된 stage와 commit, exact revision acceptance, 그 revision의 mirror export, 사용자의 Sources 교체다.
+- Private commercial material은 별도로 accepted된 private canonical location, durable authority·versioning rule 및 explicit mirror decision을 모두 요구한다. 그 조건이 없는 local private candidate는 noncanonical이고 normal public mirror workflow의 대상이 아니며 자동 upload 또는 mirror를 해서는 안 된다.
+- Candidate 또는 uncommitted bytes는 `accepted_commit: null`, `upload_ready: false`다. ChatGPT Sources는 secondary aid이며 repository authority를 대체하거나 상회하지 않는다.
 
 ## Related Documents
 
