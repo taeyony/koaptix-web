@@ -2747,7 +2747,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        ok: false,
+        ok: true,
         generation_id: localSource.generation_id,
         publication_version: localSource.publication_version,
         publication_event_id: localSource.publication_event_id,
@@ -2768,7 +2768,7 @@ export async function GET(request: NextRequest) {
         ...regionAliasMetadata,
       },
       {
-        status: 503,
+        status: 200,
         headers: {
           "Cache-Control": SEARCH_CACHE_CONTROL,
           ...getKoaptixDeploymentHeaders(),
