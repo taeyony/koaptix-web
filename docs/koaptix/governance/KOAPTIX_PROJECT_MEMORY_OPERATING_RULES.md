@@ -124,6 +124,26 @@ When the selected defect is narrow, apply the smallest correction that closes it
 
 A `COMPLETE_SEALED` capability is presumed correct, and the burden of proof is on reopening it. A new worker or chat may inspect its registry and evidence references but should not reproduce its full qualification by default.
 
+### PMV2-OV-014 — ARCHITECTURE PROPORTIONALITY / ANTI-OVERENGINEERING GATE
+
+1. **Two consecutive architecture BLOCKs.** If TWO CONSECUTIVE terminal BLOCK results occur within the same architecture family and both arise from architecture, safety or feasibility requirements, the next deeper implementation or design lane is PROHIBITED until a mandatory ARCHITECTURE PROPORTIONALITY REVIEW is completed. Incidental tooling, access or evidence-convenience failures do not by themselves count as architecture BLOCKs; record the classification and concrete reason.
+
+2. **Same-family definition.** Lanes belong to the same architecture family when they progressively attempt to satisfy the same core invariant, trust model or runtime architecture. Renaming a lane or moving the same problem into a narrower descendant does not create a new family.
+
+3. **Required review.** The review must explicitly evaluate actual product/business failure impact; data-integrity impact; whether the invariant is truly required; exactly-once execution versus idempotent/exactly-one-effect alternatives; implementation and runtime complexity; principal, secret and worker counts; Founder operating and failure-recovery burden; simpler safe alternatives; and whether an earlier CLOSED contract should be retained, simplified, superseded or retired prospectively. Preserve accepted history and record any proposed policy delta.
+
+4. **No automatic deeper lane.** After the second qualifying BLOCK, do not automatically issue a .1, .2, .3 or another narrower descendant lane. Complete the proportionality review first. A lane rename or minor implementation variation does not evade this gate.
+
+5. **Technical PASS does not force adoption.** A hardened architecture that later achieves technical PASS after the trigger has proved feasibility only. That PASS does not automatically authorize Production adoption, provisioning, source write or deployment until the proportionality decision is closed; all separately scoped mutation and release approvals still apply.
+
+6. **Safety before convenience, proportionality before maximalism.** Do not lower real data-integrity requirements for convenience. Do not impose financial-settlement-grade exactly-once guarantees on every recoverable data-pipeline failure without an explicit justification tied to its actual harmful consequence. Existing safety, semantic, evidence and authorization gates remain in force.
+
+7. **Default evaluation order for KOAPTIX data pipelines.** Unless actual risk proves otherwise, first evaluate idempotent/reconcilable execution + at-most-one canonical effect + immutable/auditable state before escalating to exactly-once execution + non-reusable one-shot runtime capabilities. This is an obligation to compare safe alternatives, not permission for blind retry, canonical overwrite, partial publication or unchecked simplification.
+
+8. **Counter reset.** The architecture-BLOCK counter and triggered review gate reset only when the architecture family is materially changed/simplified and CTO accepts the new boundary, or a proportionality review explicitly justifies retaining the hardened architecture. A lane rename, minor implementation variation or subsequent technical PASS alone does not reset it.
+
+9. **Founder/CTO visibility.** The terminal result after the second qualifying architecture BLOCK must explicitly state MANDATORY_PROPORTIONALITY_REVIEW_TRIGGERED, identify the family and the two qualifying BLOCKs, and state that deeper descendant work cannot continue before the mandatory review. Do not silently proceed.
+
 ## 8. Maintenance protocol
 
 - Update Project Memory only under an explicitly scoped lane.
