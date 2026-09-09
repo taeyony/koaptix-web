@@ -69,8 +69,10 @@ end;
 $roles$;
 
 create schema koaptix_s1 authorization koaptix_s1_owner;
+set local role koaptix_s1_owner;
 revoke all on schema koaptix_s1 from public;
 grant usage on schema koaptix_s1 to koaptix_publication_writer,koaptix_publication_verifier;
+reset role;
 grant usage on schema public to koaptix_s1_owner;
 -- The accepted source enables RLS on these relations without an S1-owner
 -- policy. Add only this NOLOGIN owner's required row visibility/INSERT path;
@@ -84,53 +86,67 @@ create policy koaptix_s1_owner_read on public.koaptix_rank_snapshot for select t
 create policy koaptix_s1_owner_insert on public.koaptix_rank_snapshot for insert to koaptix_s1_owner with check (true);
 create policy koaptix_s1_owner_read on public.koaptix_index_snapshot for select to koaptix_s1_owner using (true);
 create policy koaptix_s1_owner_insert on public.koaptix_index_snapshot for insert to koaptix_s1_owner with check (true);
-do $owner_rows$
+set local role koaptix_rank_authority_owner;
+do $owner_rows_authority$
 declare t text;
 begin
-  foreach t in array array['koaptix_rank_input_authority_manifest','koaptix_rank_input_manifest_revocation',
-    'koaptix_latest_board_generation','koaptix_latest_board_generation_surface',
+  foreach t in array array['koaptix_rank_input_authority_manifest','koaptix_rank_input_manifest_revocation'] loop
+    execute format('create policy koaptix_s1_owner_read on public.%I for select to koaptix_s1_owner using (true)',t);
+  end loop;
+  execute 'create policy koaptix_s1_owner_insert on public.koaptix_rank_input_authority_manifest for insert to koaptix_s1_owner with check (true)';
+end;
+$owner_rows_authority$;
+grant select on public.koaptix_rank_input_authority_manifest,
+  public.koaptix_rank_input_manifest_revocation to koaptix_s1_owner;
+grant insert on public.koaptix_rank_input_authority_manifest to koaptix_s1_owner;
+grant execute on function public.koaptix_text_array_is_distinct_nonblank(text[]) to koaptix_s1_owner;
+reset role;
+set local role koaptix_rank_publication_owner;
+do $owner_rows_publication$
+declare t text;
+begin
+  foreach t in array array['koaptix_latest_board_generation','koaptix_latest_board_generation_surface',
     'koaptix_latest_board_generation_universe','koaptix_latest_board_generation_row',
     'koaptix_latest_board_generation_global_row','koaptix_rank_publication_history_stage',
     'koaptix_rank_publication_snapshot_stage','koaptix_latest_board_publication_event',
     'koaptix_latest_board_publication'] loop
     execute format('create policy koaptix_s1_owner_read on public.%I for select to koaptix_s1_owner using (true)',t);
   end loop;
-  foreach t in array array['koaptix_rank_input_authority_manifest','koaptix_latest_board_publication_event'] loop
-    execute format('create policy koaptix_s1_owner_insert on public.%I for insert to koaptix_s1_owner with check (true)',t);
-  end loop;
+  execute 'create policy koaptix_s1_owner_insert on public.koaptix_latest_board_publication_event for insert to koaptix_s1_owner with check (true)';
 end;
-$owner_rows$;
+$owner_rows_publication$;
 create policy koaptix_s1_owner_pointer on public.koaptix_latest_board_publication
   for update to koaptix_s1_owner using (true) with check (true);
--- Temporary installation-only CREATE; revoked at the end of this transaction.
-grant create on schema public to koaptix_s1_owner;
-grant select on public.staging_market_raw,public.complex_name_alias,public.apt_complex,
-  public.koaptix_complex_region_map,public.region_dim,public.apt_market_cap_snapshot,
-  public.complex_eligibility_snapshot,public.v_koaptix_canonical_rank_input_u,
-  public.v_koaptix_rank_membership_authority_u,public.v_koaptix_universe_membership_u,
-  public.complex_rank_history,public.koaptix_rank_snapshot,public.koaptix_market_daily_summary,
-  public.koaptix_index_snapshot,public.koaptix_rank_input_authority_manifest,
-  public.koaptix_rank_input_manifest_revocation,public.koaptix_latest_board_generation,
-  public.koaptix_latest_board_generation_surface,public.koaptix_latest_board_generation_universe,
-  public.koaptix_latest_board_generation_row,public.koaptix_latest_board_generation_global_row,
-  public.koaptix_rank_publication_history_stage,public.koaptix_rank_publication_snapshot_stage,
-  public.koaptix_latest_board_publication_event,public.koaptix_latest_board_publication to koaptix_s1_owner;
-grant update(complex_id,apt_name_ko,sigungu_name,legal_dong_name,household_count,build_year,approval_year,
-  building_count,parking_count,recovery_52w,market_cap_krw,universe_code) on public.staging_market_raw to koaptix_s1_owner;
-grant insert,update on public.koaptix_complex_region_map to koaptix_s1_owner;
-grant insert on public.koaptix_rank_input_authority_manifest,public.complex_rank_history,
-  public.koaptix_rank_snapshot,public.koaptix_latest_board_publication_event,
-  public.koaptix_market_daily_summary,public.koaptix_index_snapshot to koaptix_s1_owner;
+grant select on public.v_koaptix_canonical_rank_input_u,
+  public.v_koaptix_rank_membership_authority_u,
+  public.koaptix_latest_board_generation,public.koaptix_latest_board_generation_surface,
+  public.koaptix_latest_board_generation_universe,public.koaptix_latest_board_generation_row,
+  public.koaptix_latest_board_generation_global_row,public.koaptix_rank_publication_history_stage,
+  public.koaptix_rank_publication_snapshot_stage,public.koaptix_latest_board_publication_event,
+  public.koaptix_latest_board_publication to koaptix_s1_owner;
+grant insert on public.koaptix_latest_board_publication_event to koaptix_s1_owner;
 grant update(active_event_id,active_generation_id,previous_generation_id,publication_version,published_at)
   on public.koaptix_latest_board_publication to koaptix_s1_owner;
 grant references(event_id,publication_version,to_generation_id,recorded_at)
   on public.koaptix_latest_board_publication_event to koaptix_s1_owner;
 grant execute on function public.koaptix_compute_rank_input_authority(date),
-  public.koaptix_text_array_is_distinct_nonblank(text[]),
   public.koaptix_assert_rank_input_authority(text,date,jsonb),
   public.koaptix_verify_latest_board_generation(uuid),
   public.koaptix_insert_latest_board_generation_packet(jsonb,text,text,text,date,text[],boolean)
   to koaptix_s1_owner;
+reset role;
+-- Temporary installation-only CREATE; revoked at the end of this transaction.
+grant create on schema public to koaptix_s1_owner;
+grant select on public.staging_market_raw,public.complex_name_alias,public.apt_complex,
+  public.koaptix_complex_region_map,public.region_dim,public.apt_market_cap_snapshot,
+  public.complex_eligibility_snapshot,public.v_koaptix_universe_membership_u,
+  public.complex_rank_history,public.koaptix_rank_snapshot,public.koaptix_market_daily_summary,
+  public.koaptix_index_snapshot to koaptix_s1_owner;
+grant update(complex_id,apt_name_ko,sigungu_name,legal_dong_name,household_count,build_year,approval_year,
+  building_count,parking_count,recovery_52w,market_cap_krw,universe_code) on public.staging_market_raw to koaptix_s1_owner;
+grant insert,update on public.koaptix_complex_region_map to koaptix_s1_owner;
+grant insert on public.complex_rank_history,public.koaptix_rank_snapshot,
+  public.koaptix_market_daily_summary,public.koaptix_index_snapshot to koaptix_s1_owner;
 do $sequence$
 declare v_sequence regclass;
 begin
@@ -2605,6 +2621,7 @@ grant execute on function koaptix_s1.admit_phase(text,text),koaptix_s1.read_evid
   to koaptix_publication_writer,koaptix_publication_verifier;
 grant execute on function koaptix_s1.record_verification(text,jsonb) to koaptix_publication_verifier;
 
+grant execute on function public.koaptix_s1_guard_dated_write() to postgres;
 reset role;
 revoke create on schema public from koaptix_s1_owner;
 
@@ -2624,6 +2641,11 @@ create trigger s1_summary_no_truncate before truncate on public.koaptix_market_d
 for each statement execute function public.koaptix_s1_guard_dated_write();
 create trigger s1_index_no_truncate before truncate on public.koaptix_index_snapshot
 for each statement execute function public.koaptix_s1_guard_dated_write();
+set local role koaptix_s1_owner;
+revoke execute on function public.koaptix_s1_guard_dated_write() from postgres;
+grant usage on schema koaptix_s1 to postgres;
+grant execute on function koaptix_s1.koaptix_get_household_relation() to postgres;
+reset role;
 
 -- Grant only the selected finite household source. No caller-selected relation.
 do $household$
@@ -2638,7 +2660,12 @@ begin
 end;
 $household$;
 
+set local role koaptix_s1_owner;
+revoke execute on function koaptix_s1.koaptix_get_household_relation() from postgres;
+revoke usage on schema koaptix_s1 from postgres;
+reset role;
 -- Accepted prospective NULL-tier prerequisite; no M908/M909 runtime dependency.
+set local role koaptix_rank_publication_owner;
 ALTER TABLE public.koaptix_latest_board_generation_row
   ALTER COLUMN tier_code DROP NOT NULL,
   ALTER COLUMN tier_sort DROP NOT NULL;
@@ -2690,6 +2717,7 @@ CREATE TRIGGER koaptix_forward_projection_null_tiers
 BEFORE INSERT ON public.koaptix_latest_board_generation
 FOR EACH ROW
 EXECUTE FUNCTION public.koaptix_require_forward_projection_null_tiers();
+reset role;
 
 
 -- Effective runtime privileges, including inherited PUBLIC database/schema
