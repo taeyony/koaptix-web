@@ -3,6 +3,11 @@ from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler
 from datetime import datetime, timezone
+from functools import lru_cache
+from pathlib import Path
+import hashlib
+import os
+import stat
 from tooling.koaptix.idempotent_publication import contracts as c
 
 
@@ -11,6 +16,15 @@ MODES = frozenset(("VERIFY", "REFERENCE", "R_P", "R_S", "R_A", "R_B", "R_D"))
 READ = "select koaptix_s1.read_evidence(%s,%s)::text"
 ADMIT = "select koaptix_s1.admit_phase(%s,%s)::text"
 APPEND = "select koaptix_s1.record_verification(%s,%s::jsonb)::text"
+_CREDENTIAL_KEYS = ("host", "port", "dbname", "user", "password")
+_VERIFIER_IDENTITY = {
+    "host": "aws-1-ap-northeast-2.pooler.supabase.com",
+    "port": "5432",
+    "dbname": "postgres",
+    "user": "koaptix_publication_verifier.dsnqbadkyfmzeikzgvqp",
+}
+_CA_NAME = "supabase-root-2021-ca.pem"
+_CA_SHA256 = "700723581420DD1AC98FD7E9AC529F0EF210EADCAF87FC868A3AD7D114C2F3B7"
 
 
 class VerificationStop(Exception):
@@ -20,10 +34,60 @@ class VerificationStop(Exception):
         self.operation_result = operation_result
 
 
-def connect(dsn: str):
-    import psycopg
+def _guard_transport_environment():
+    for name in os.environ:
+        upper = name.upper()
+        if upper.startswith("PG") or upper in ("OPENSSL_CONF", "OPENSSL_CONF_INCLUDE"):
+            raise VerificationStop("FAIL_PRECOMMIT") from None
+
+
+def _credential_core(dsn: str) -> dict[str, str]:
     try:
-        return psycopg.connect(dsn, autocommit=True, connect_timeout=5,
+        from psycopg.conninfo import conninfo_to_dict, make_conninfo
+        if type(dsn) is not str or not dsn or len(dsn) > 16384 or "\x00" in dsn:
+            raise VerificationStop("FAIL_PRECOMMIT")
+        parsed = conninfo_to_dict(dsn)
+        if set(parsed) != set(_CREDENTIAL_KEYS):
+            raise VerificationStop("FAIL_PRECOMMIT")
+        if any(type(parsed[key]) is not str or not parsed[key] for key in _CREDENTIAL_KEYS):
+            raise VerificationStop("FAIL_PRECOMMIT")
+        if any(parsed[key] != value for key, value in _VERIFIER_IDENTITY.items()):
+            raise VerificationStop("FAIL_PRECOMMIT")
+        core = {key: parsed[key] for key in _CREDENTIAL_KEYS}
+        # Parsing alone loses duplicate-key history; require our producer's exact form.
+        if dsn != make_conninfo(**core):
+            raise VerificationStop("FAIL_PRECOMMIT")
+        return core
+    except Exception:
+        raise VerificationStop("FAIL_PRECOMMIT") from None
+
+
+@lru_cache(maxsize=1)
+def _verified_ca_path() -> str:
+    try:
+        module_path = Path(__file__).resolve(strict=True)
+        ca_path = module_path.with_name(_CA_NAME)
+        metadata = ca_path.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or getattr(metadata, "st_file_attributes", 0) & 0x400:
+            raise VerificationStop("FAIL_PRECOMMIT")
+        resolved = ca_path.resolve(strict=True)
+        if resolved != ca_path or resolved.parent != module_path.parent:
+            raise VerificationStop("FAIL_PRECOMMIT")
+        if hashlib.sha256(resolved.read_bytes()).hexdigest().upper() != _CA_SHA256:
+            raise VerificationStop("FAIL_PRECOMMIT")
+        return str(resolved)
+    except Exception:
+        raise VerificationStop("FAIL_PRECOMMIT") from None
+
+
+def connect(dsn: str):
+    try:
+        _guard_transport_environment()
+        core = _credential_core(dsn)
+        ca_path = _verified_ca_path()
+        import psycopg
+        return psycopg.connect(**core, sslmode="verify-full", sslrootcert=ca_path,
+                              gssencmode="disable", autocommit=True, connect_timeout=5,
                               application_name="koaptix_s1_verifier",
                               options="-c timezone=UTC -c lock_timeout=1000 -c statement_timeout=20000")
     except Exception:
