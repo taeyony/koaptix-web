@@ -4,7 +4,7 @@
   "builds": [
     {
       "src": "services/koaptix_daily/writer/api/index.py",
-      "use": "@vercel/python@13.0.4",
+      "use": "@vercel/python@13.0.1",
       "config": {
         "excludeFiles": [
           "@(!(services|tooling|_vendor))",
@@ -15,8 +15,8 @@
           "services/koaptix_daily/@(!(writer))/**",
           "services/koaptix_daily/writer/@(!(api|requirements.txt|vercel.json))",
           "services/koaptix_daily/writer/@(!(api|requirements.txt|vercel.json))/**",
-          "services/koaptix_daily/writer/api/@(!(index.py))",
-          "services/koaptix_daily/writer/api/@(!(index.py))/**",
+          "services/koaptix_daily/writer/api/@(!(index.py|supabase-root-2021-ca.pem))",
+          "services/koaptix_daily/writer/api/@(!(index.py|supabase-root-2021-ca.pem))/**",
           "tooling/@(!(koaptix))",
           "tooling/@(!(koaptix))/**",
           "tooling/koaptix/@(!(idempotent_publication))",
