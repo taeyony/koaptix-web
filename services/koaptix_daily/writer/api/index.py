@@ -6,8 +6,11 @@ from functools import lru_cache
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 import hashlib
+import json
 import os
 import stat
+import time
+from uuid import uuid4
 from tooling.koaptix.idempotent_publication import contracts as c
 from tooling.koaptix.idempotent_publication import forward_projection as projection
 
@@ -32,6 +35,27 @@ _WRITER_IDENTITY = {
 }
 _CA_NAME = "supabase-root-2021-ca.pem"
 _CA_SHA256 = "700723581420DD1AC98FD7E9AC529F0EF210EADCAF87FC868A3AD7D114C2F3B7"
+
+
+def _stage(diagnostic, event, state, *, failure_class=None):
+    """Best-effort, payload-free markers; context exists only for this request."""
+    try:
+        if diagnostic is None:
+            if (event, state) != ("request", "entered"):
+                return None
+            diagnostic = (time.monotonic(), uuid4().hex)
+        message = {"event": event, "state": state,
+                   "elapsed_ms": max(0, int((time.monotonic() - diagnostic[0]) * 1000)),
+                   "correlation_id": diagnostic[1]}
+        if failure_class in ("AUTHORIZATION_REJECTED", "TRANSPORT_OR_CONNECT_FAILED",
+                             "TRANSACTION_FAILED", "ACK_UNKNOWN", "RECONCILIATION_FAILED",
+                             "WORKFLOW_STOP", "UNEXPECTED_FAILURE"):
+            message["failure_class"] = failure_class
+        print(json.dumps(message, separators=(",", ":"), allow_nan=False), flush=True)
+    except Exception:
+        # Logging, clock or UUID failures must not change business behavior.
+        pass
+    return diagnostic
 
 
 class WorkflowStop(Exception):
@@ -87,52 +111,71 @@ def _verified_ca_path() -> str:
         raise WorkflowStop("FAIL_PRECOMMIT", retryable=True) from None
 
 
-def connect(dsn: str):
+def connect(dsn: str, *, diagnostic=None):
     try:
+        _stage(diagnostic, "transport_validation", "entered")
         _guard_transport_environment()
         core = _credential_core(dsn)
         ca_path = _verified_ca_path()
+        _stage(diagnostic, "transport_validation", "completed")
         import psycopg
-        return psycopg.connect(**core, sslmode="verify-full", sslrootcert=ca_path,
+        _stage(diagnostic, "db_connect", "entered")
+        connection = psycopg.connect(**core, sslmode="verify-full", sslrootcert=ca_path,
                               gssencmode="disable", autocommit=True, connect_timeout=5,
                               application_name="koaptix_s1_writer",
                               options="-c timezone=UTC -c lock_timeout=1000 -c statement_timeout=20000")
+        _stage(diagnostic, "db_connect", "completed")
+        return connection
     except Exception:
+        _stage(diagnostic, "initial_connection", "failed", failure_class="TRANSPORT_OR_CONNECT_FAILED")
         raise WorkflowStop("FAIL_PRECOMMIT", retryable=True) from None
 
 
-def json_call(conn, sql: str, parameters=()):
+def json_call(conn, sql: str, parameters=(), *, diagnostic=None):
+    _stage(diagnostic, "admit_due_occurrence_execute", "entered")
     row = conn.execute(sql, parameters).fetchone()
+    _stage(diagnostic, "admit_due_occurrence_execute", "completed")
+    _stage(diagnostic, "admit_due_occurrence_fetch_json", "entered")
     if row is None or row[0] is None:
         raise WorkflowStop("BLOCK_PARTIAL")
-    return c.load_exact_json(row[0])
+    value = c.load_exact_json(row[0])
+    _stage(diagnostic, "admit_due_occurrence_fetch_json", "completed")
+    return value
 
 
-def transaction(conn, operation, *, preparation=None):
+def transaction(conn, operation, *, preparation=None, diagnostic=None):
     """One transaction and one COMMIT submission. No driver retry or reconnect."""
     commit_sent = False
     result = None
     try:
+        _stage(diagnostic, "initial_transaction", "entered")
         conn.execute("BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE")
+        _stage(diagnostic, "initial_transaction", "completed")
         if preparation is not None:
             milliseconds = max(1, int(min(20, remaining(preparation)) * 1000))
             conn.execute("select set_config('statement_timeout',%s,true)", (str(milliseconds),))
             conn.execute("select set_config('lock_timeout',%s,true)", (str(min(1000, milliseconds)),))
         result = operation()
         commit_sent = True
+        _stage(diagnostic, "initial_commit", "submitted")
         ack = conn.execute("COMMIT")
         if ack.statusmessage != "COMMIT":
             raise WorkflowStop("FAIL_PRECOMMIT")
+        _stage(diagnostic, "initial_commit", "acknowledged")
         return result
     except Exception as exc:
+        _stage(diagnostic, "initial_transaction", "failed", failure_class="TRANSACTION_FAILED")
         try:
+            _stage(diagnostic, "initial_rollback", "entered")
             conn.execute("ROLLBACK")
+            _stage(diagnostic, "initial_rollback", "completed")
         except Exception:
             pass
         if isinstance(exc, WorkflowStop):
             raise
         state = getattr(exc, "sqlstate", None)
         if commit_sent and (state is None or state.startswith("08")):
+            _stage(diagnostic, "initial_commit_ack_unknown", "detected", failure_class="ACK_UNKNOWN")
             raise WorkflowStop("ACK_UNKNOWN", ack="UNKNOWN", retryable=True, operation_result=result) from None
         if isinstance(exc, c.ContractError):
             raise WorkflowStop("BLOCK_CONFLICT") from None
@@ -158,7 +201,7 @@ def phase_observation(phase, result, original_ack, reconciliation):
             "finished_at": datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")}
 
 
-def verifier_request(config: dict, plan_id: str, mode: str, timeout: float):
+def verifier_request(config: dict, plan_id: str, mode: str, timeout: float, *, diagnostic=None):
     from urllib.request import Request, HTTPRedirectHandler, build_opener
     from urllib.parse import urlsplit
 
@@ -176,9 +219,14 @@ def verifier_request(config: dict, plan_id: str, mode: str, timeout: float):
         "Content-Type": "application/json", "Authorization": "Bearer " + config["verify_request_secret"],
     })
     try:
+        _stage(diagnostic, "initial_reconcile_rp_open", "entered")
         with build_opener(NoRedirect()).open(request, timeout=min(60, timeout)) as response:
+            _stage(diagnostic, "initial_reconcile_rp_open", "completed")
+            _stage(diagnostic, "initial_reconcile_rp_read_json", "entered")
             payload = c.load_exact_json(response.read(1_048_577).decode("utf-8"))
+            _stage(diagnostic, "initial_reconcile_rp_read_json", "completed")
     except Exception:
+        _stage(diagnostic, "initial_reconcile_rp", "failed", failure_class="ACK_UNKNOWN")
         raise WorkflowStop("ACK_UNKNOWN", ack="UNKNOWN", retryable=True) from None
     if payload.get("plan_id") != plan_id:
         raise WorkflowStop("BLOCK_VERIFICATION")
@@ -187,12 +235,15 @@ def verifier_request(config: dict, plan_id: str, mode: str, timeout: float):
     return payload
 
 
-def reconcile(config: dict, p: dict, phase: str) -> dict:
-    response = verifier_request(config, p["plan_id"], "R_" + phase, min(60, remaining(p)))
+def reconcile(config: dict, p: dict, phase: str, *, diagnostic=None) -> dict:
+    _stage(diagnostic, "initial_reconcile_rp", "entered")
+    response = verifier_request(config, p["plan_id"], "R_" + phase, min(60, remaining(p)), diagnostic=diagnostic)
     if response.get("classification") not in ("EXACT_COMMITTED", "ABSENT_AT_SNAPSHOT"):
         classification = response.get("classification")
+        _stage(diagnostic, "initial_reconcile_rp", "failed", failure_class="RECONCILIATION_FAILED")
         raise WorkflowStop("BLOCK_PARTIAL" if classification == "PARTIAL" else
                            "BLOCK_CONFLICT" if classification == "CONFLICT" else "BLOCK_VERIFICATION")
+    _stage(diagnostic, "initial_reconcile_rp", "completed")
     return response
 
 
@@ -289,29 +340,37 @@ def append_observations(config, p, observations):
             audit.close()
 
 
-def run_workflow(config: dict) -> dict:
-    conn = connect(config["dsn"])
+def run_workflow(config: dict, *, diagnostic=None) -> dict:
+    conn = connect(config["dsn"], diagnostic=diagnostic)
     try:
-        admitted = transaction(conn, lambda: json_call(conn, "select koaptix_s1.admit_due_occurrence()::text"))
+        admitted = transaction(conn, lambda: json_call(conn, "select koaptix_s1.admit_due_occurrence()::text", diagnostic=diagnostic), diagnostic=diagnostic)
     except WorkflowStop as exc:
+        _stage(diagnostic, "initial_connection_close", "entered")
         conn.close()
+        _stage(diagnostic, "initial_connection_close", "completed")
         candidate = exc.operation_result
         if not isinstance(candidate, dict) or not candidate.get("preparation") or not candidate.get("P_admission"):
             raise
         p = candidate["preparation"]
         c.validate_frozen_plan(p)
-        observation = reconcile(config, p, "P")
+        _stage(diagnostic, "initial_reconcile_candidate", "completed")
+        observation = reconcile(config, p, "P", diagnostic=diagnostic)
         admission = candidate["P_admission"]
         if not any(r["ordinal"] == admission["ordinal"] and r["phase_identity"] == admission["phase_identity"]
                    and r["actor"] == "koaptix_publication_writer" for r in observation.get("admissions", [])):
             raise WorkflowStop("ACK_UNKNOWN", ack="UNKNOWN")
         admitted = candidate
-        conn = connect(config["dsn"])
+        _stage(diagnostic, "initial_reconcile_admission", "completed")
+        conn = connect(config["dsn"], diagnostic=diagnostic)
     except Exception:
+        _stage(diagnostic, "initial_connection_close", "entered")
         conn.close()
+        _stage(diagnostic, "initial_connection_close", "completed")
         raise
     if admitted.get("result"):
+        _stage(diagnostic, "initial_connection_close", "entered")
         conn.close()
+        _stage(diagnostic, "initial_connection_close", "completed")
         return admitted
     p, observations = admitted["preparation"], []
     published = False
@@ -319,6 +378,7 @@ def run_workflow(config: dict) -> dict:
     phase = "P"
     try:
         c.validate_frozen_plan(p)
+        _stage(diagnostic, "admission_proven", "completed")
         observations.append(run_phase(config, p, "P", initial_conn=conn, initial_admission=admitted["P_admission"]))
         conn = None
         reference_conn = connect(config["dsn"])
@@ -390,23 +450,34 @@ class handler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self):
+        diagnostic = _stage(None, "request", "entered")
         import os
         from secrets import compare_digest
         cron_secret = os.environ.get("CRON_SECRET")
         if self.path != "/api/index" or not cron_secret or not compare_digest(self.headers.get("Authorization", ""), "Bearer " + cron_secret):
+            _stage(diagnostic, "authorization", "failed", failure_class="AUTHORIZATION_REJECTED")
             self.send_error(403)
+            _stage(diagnostic, "handler_returning", "returning")
             return
+        _stage(diagnostic, "authorization", "completed")
         try:
+            _stage(diagnostic, "required_env_validation", "entered")
             config = {"dsn": os.environ[DB_BINDING], "verify_url": os.environ["S1_VERIFY_URL"],
                       "verify_request_secret": os.environ["S1_VERIFY_REQUEST_SECRET"]}
-            payload = run_workflow(config)
+            _stage(diagnostic, "required_env_validation", "completed")
+            payload = run_workflow(config, diagnostic=diagnostic)
         except WorkflowStop as exc:
+            _stage(diagnostic, "request", "failed", failure_class="WORKFLOW_STOP")
             payload = {"result": exc.result, "original_ack": exc.ack}
         except Exception:
+            _stage(diagnostic, "request", "failed", failure_class="UNEXPECTED_FAILURE")
             payload = {"result": "FAIL_PRECOMMIT"}
+        _stage(diagnostic, "response_serialization", "entered")
         body = c.canonical_json(payload).encode("utf-8")
+        _stage(diagnostic, "response_serialization", "completed")
         self.send_response(200 if payload.get("result") in ("SUCCESS_NEW", "SUCCESS_EXISTING", "NOOP_ALREADY_COMPLETE", "BLOCK_EXPIRED", "NO_NEW_SOURCE_INPUT", "VERIFIED_NO_OUTPUT_CHANGE") else 500)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+        _stage(diagnostic, "handler_returning", "returning")
