@@ -133,8 +133,11 @@ def connect(dsn: str, *, diagnostic=None):
 
 def json_call(conn, sql: str, parameters=(), *, diagnostic=None):
     _stage(diagnostic, "admit_due_occurrence_execute", "entered")
-    row = conn.execute(sql, parameters).fetchone()
+    cursor = conn.execute(sql, parameters)
     _stage(diagnostic, "admit_due_occurrence_execute", "completed")
+    _stage(diagnostic, "admit_due_occurrence_fetchone", "entered")
+    row = cursor.fetchone()
+    _stage(diagnostic, "admit_due_occurrence_fetchone", "completed")
     _stage(diagnostic, "admit_due_occurrence_fetch_json", "entered")
     if row is None or row[0] is None:
         raise WorkflowStop("BLOCK_PARTIAL")
