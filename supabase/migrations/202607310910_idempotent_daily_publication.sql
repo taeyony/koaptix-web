@@ -1292,9 +1292,14 @@ begin
                      from public.complex_rank_history h where h.snapshot_date=(
                        select max(snapshot_date) from public.complex_rank_history where snapshot_date<p_d)),
     'prior_snapshots',(select coalesce(jsonb_agg(to_jsonb(s) order by s.universe_code collate "C",s.complex_id),'[]'::jsonb)
-                       from public.koaptix_rank_snapshot s where s.snapshot_date=(
-                         select max(x.snapshot_date) from public.koaptix_rank_snapshot x
-                         where x.universe_code=s.universe_code and x.snapshot_date<p_d)),
+                       from public.koaptix_rank_snapshot s
+                       join (
+                         select x.universe_code,max(x.snapshot_date) as snapshot_date
+                         from public.koaptix_rank_snapshot x
+                         where x.snapshot_date<p_d
+                         group by x.universe_code
+                       ) latest on latest.universe_code=s.universe_code
+                               and latest.snapshot_date=s.snapshot_date),
     'index_dependencies',(select coalesce(jsonb_agg(to_jsonb(i) order by i.universe_code collate "C",i.snapshot_date,i.index_code),'[]'::jsonb)
                           from public.koaptix_index_snapshot i where
                            i.snapshot_date=(select min(x.snapshot_date) from public.koaptix_index_snapshot x where x.universe_code=i.universe_code)
