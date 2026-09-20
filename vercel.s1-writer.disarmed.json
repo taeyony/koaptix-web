@@ -1,0 +1,50 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "builds": [
+    {
+      "src": "services/koaptix_daily/writer/api/index.py",
+      "use": "@vercel/python@14.0.0",
+      "config": {
+        "excludeFiles": [
+          "@(!(services|tooling|_vendor))",
+          "@(!(services|tooling|_vendor))/**",
+          "services/@(!(koaptix_daily))",
+          "services/@(!(koaptix_daily))/**",
+          "services/koaptix_daily/@(!(writer))",
+          "services/koaptix_daily/@(!(writer))/**",
+          "services/koaptix_daily/writer/@(!(api|requirements.txt|vercel.json))",
+          "services/koaptix_daily/writer/@(!(api|requirements.txt|vercel.json))/**",
+          "services/koaptix_daily/writer/api/@(!(index.py|supabase-root-2021-ca.pem))",
+          "services/koaptix_daily/writer/api/@(!(index.py|supabase-root-2021-ca.pem))/**",
+          "tooling/@(!(koaptix))",
+          "tooling/@(!(koaptix))/**",
+          "tooling/koaptix/@(!(idempotent_publication))",
+          "tooling/koaptix/@(!(idempotent_publication))/**",
+          "tooling/koaptix/idempotent_publication/@(!(contracts.py|forward_projection.py))",
+          "tooling/koaptix/idempotent_publication/@(!(contracts.py|forward_projection.py))/**",
+          "**/.env",
+          "**/.env.*",
+          "**/__pycache__/**"
+        ]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "^/(api/index)$",
+      "dest": "/services/koaptix_daily/writer/api/index.py",
+      "transforms": [
+        {
+          "type": "request.path",
+          "op": "set",
+          "args": "/$1"
+        }
+      ]
+    },
+    {
+      "src": "/(.*)",
+      "status": 404
+    }
+  ]
+}
