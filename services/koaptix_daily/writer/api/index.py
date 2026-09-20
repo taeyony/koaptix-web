@@ -146,7 +146,7 @@ def json_call(conn, sql: str, parameters=(), *, diagnostic=None):
     return value
 
 
-def transaction(conn, operation, *, preparation=None, diagnostic=None):
+def transaction(conn, operation, *, preparation=None, baseline_timeouts=False, diagnostic=None):
     """One transaction and one COMMIT submission. No driver retry or reconnect."""
     commit_sent = False
     result = None
@@ -154,8 +154,8 @@ def transaction(conn, operation, *, preparation=None, diagnostic=None):
         _stage(diagnostic, "initial_transaction", "entered")
         conn.execute("BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE")
         _stage(diagnostic, "initial_transaction", "completed")
-        if preparation is not None:
-            milliseconds = max(1, int(min(20, remaining(preparation)) * 1000))
+        if preparation is not None or baseline_timeouts:
+            milliseconds = 20000 if preparation is None else max(1, int(min(20, remaining(preparation)) * 1000))
             conn.execute("select set_config('statement_timeout',%s,true)", (str(milliseconds),))
             conn.execute("select set_config('lock_timeout',%s,true)", (str(min(1000, milliseconds)),))
         result = operation()
@@ -346,7 +346,7 @@ def append_observations(config, p, observations):
 def run_workflow(config: dict, *, diagnostic=None) -> dict:
     conn = connect(config["dsn"], diagnostic=diagnostic)
     try:
-        admitted = transaction(conn, lambda: json_call(conn, "select koaptix_s1.admit_due_occurrence()::text", diagnostic=diagnostic), diagnostic=diagnostic)
+        admitted = transaction(conn, lambda: json_call(conn, "select koaptix_s1.admit_due_occurrence()::text", diagnostic=diagnostic), baseline_timeouts=True, diagnostic=diagnostic)
     except WorkflowStop as exc:
         _stage(diagnostic, "initial_connection_close", "entered")
         conn.close()
