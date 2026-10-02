@@ -37,13 +37,66 @@ _CA_NAME = "supabase-root-2021-ca.pem"
 _CA_SHA256 = "700723581420DD1AC98FD7E9AC529F0EF210EADCAF87FC868A3AD7D114C2F3B7"
 
 
+def _failure_mark(diagnostic, stage, flag=None):
+    """Best-effort request-local evidence; never changes control flow."""
+    try:
+        state = diagnostic[2]
+        if state.get("_failed"):
+            return
+        if stage in ("REQUEST", "REQUIRED_ENV", "ENV_GUARD", "DSN_CORE", "CA_VALIDATION",
+                     "DRIVER_IMPORT", "CONNECT", "TX_BEGIN", "TIMEOUT_SETUP",
+                     "ADMIT_EXECUTE", "ADMIT_FETCH", "ADMIT_PARSE", "COMMIT"):
+            state["failure_stage"] = stage
+        if flag in ("connection_acquired", "transaction_entered", "admit_due_occurrence_entered"):
+            state[flag] = True
+    except Exception:
+        pass
+
+
+def _failure_note(diagnostic, exc):
+    """Capture only the first exception's allowlisted class and SQLSTATE."""
+    try:
+        state = diagnostic[2]
+        if state.get("_failed"):
+            return
+        name = type(exc).__name__
+        allowed = ("WorkflowStop", "ContractError", "OperationalError", "InterfaceError",
+                   "ProgrammingError", "DatabaseError", "PermissionError", "FileNotFoundError",
+                   "OSError", "ValueError", "TypeError", "KeyError", "JSONDecodeError",
+                   "RuntimeError", "ImportError", "ModuleNotFoundError", "InvalidPassword",
+                   "InsufficientPrivilege", "QueryCanceled", "LockNotAvailable",
+                   "InvalidSchemaName", "UndefinedFunction", "UndefinedTable",
+                   "SerializationFailure", "DeadlockDetected", "ConnectionFailure")
+        state["exception_class"] = name if name in allowed else "Exception"
+        value = getattr(exc, "sqlstate", None)
+        state["sqlstate"] = value if (type(value) is str and len(value) == 5
+                                     and all(ch in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" for ch in value)) else None
+        state["_failed"] = True
+    except Exception:
+        pass
+
+
+def _failure_snapshot(diagnostic):
+    try:
+        state = diagnostic[2]
+        if state.get("_failed") is not True:
+            return {}
+        return {key: state[key] for key in ("failure_stage", "exception_class", "sqlstate",
+                "connection_acquired", "transaction_entered", "admit_due_occurrence_entered")}
+    except Exception:
+        return {}
+
+
 def _stage(diagnostic, event, state, *, failure_class=None):
     """Best-effort, payload-free markers; context exists only for this request."""
     try:
         if diagnostic is None:
             if (event, state) != ("request", "entered"):
                 return None
-            diagnostic = (time.monotonic(), uuid4().hex)
+            diagnostic = (time.monotonic(), uuid4().hex, {
+                "failure_stage": "REQUEST", "exception_class": None, "sqlstate": None,
+                "connection_acquired": False, "transaction_entered": False,
+                "admit_due_occurrence_entered": False, "_failed": False})
         message = {"event": event, "state": state,
                    "elapsed_ms": max(0, int((time.monotonic() - diagnostic[0]) * 1000)),
                    "correlation_id": diagnostic[1]}
@@ -114,31 +167,41 @@ def _verified_ca_path() -> str:
 def connect(dsn: str, *, diagnostic=None):
     try:
         _stage(diagnostic, "transport_validation", "entered")
+        _failure_mark(diagnostic, "ENV_GUARD")
         _guard_transport_environment()
+        _failure_mark(diagnostic, "DSN_CORE")
         core = _credential_core(dsn)
+        _failure_mark(diagnostic, "CA_VALIDATION")
         ca_path = _verified_ca_path()
         _stage(diagnostic, "transport_validation", "completed")
+        _failure_mark(diagnostic, "DRIVER_IMPORT")
         import psycopg
         _stage(diagnostic, "db_connect", "entered")
+        _failure_mark(diagnostic, "CONNECT")
         connection = psycopg.connect(**core, sslmode="verify-full", sslrootcert=ca_path,
                               gssencmode="disable", autocommit=True, connect_timeout=5,
                               application_name="koaptix_s1_writer",
                               options="-c timezone=UTC -c lock_timeout=1000 -c statement_timeout=20000")
+        _failure_mark(diagnostic, "CONNECT", "connection_acquired")
         _stage(diagnostic, "db_connect", "completed")
         return connection
-    except Exception:
+    except Exception as exc:
+        _failure_note(diagnostic, exc)
         _stage(diagnostic, "initial_connection", "failed", failure_class="TRANSPORT_OR_CONNECT_FAILED")
         raise WorkflowStop("FAIL_PRECOMMIT", retryable=True) from None
 
 
 def json_call(conn, sql: str, parameters=(), *, diagnostic=None):
     _stage(diagnostic, "admit_due_occurrence_execute", "entered")
+    _failure_mark(diagnostic, "ADMIT_EXECUTE", "admit_due_occurrence_entered")
     cursor = conn.execute(sql, parameters)
     _stage(diagnostic, "admit_due_occurrence_execute", "completed")
     _stage(diagnostic, "admit_due_occurrence_fetchone", "entered")
+    _failure_mark(diagnostic, "ADMIT_FETCH")
     row = cursor.fetchone()
     _stage(diagnostic, "admit_due_occurrence_fetchone", "completed")
     _stage(diagnostic, "admit_due_occurrence_fetch_json", "entered")
+    _failure_mark(diagnostic, "ADMIT_PARSE")
     if row is None or row[0] is None:
         raise WorkflowStop("BLOCK_PARTIAL")
     value = c.load_exact_json(row[0])
@@ -152,21 +215,26 @@ def transaction(conn, operation, *, preparation=None, baseline_timeouts=False, d
     result = None
     try:
         _stage(diagnostic, "initial_transaction", "entered")
+        _failure_mark(diagnostic, "TX_BEGIN")
         conn.execute("BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE")
+        _failure_mark(diagnostic, "TX_BEGIN", "transaction_entered")
         _stage(diagnostic, "initial_transaction", "completed")
         if preparation is not None or baseline_timeouts:
+            _failure_mark(diagnostic, "TIMEOUT_SETUP")
             milliseconds = 20000 if preparation is None else max(1, int(min(20, remaining(preparation)) * 1000))
             conn.execute("select set_config('statement_timeout',%s,true)", (str(milliseconds),))
             conn.execute("select set_config('lock_timeout',%s,true)", (str(min(1000, milliseconds)),))
         result = operation()
         commit_sent = True
         _stage(diagnostic, "initial_commit", "submitted")
+        _failure_mark(diagnostic, "COMMIT")
         ack = conn.execute("COMMIT")
         if ack.statusmessage != "COMMIT":
             raise WorkflowStop("FAIL_PRECOMMIT")
         _stage(diagnostic, "initial_commit", "acknowledged")
         return result
     except Exception as exc:
+        _failure_note(diagnostic, exc)
         _stage(diagnostic, "initial_transaction", "failed", failure_class="TRANSACTION_FAILED")
         try:
             _stage(diagnostic, "initial_rollback", "entered")
@@ -465,6 +533,7 @@ class handler(BaseHTTPRequestHandler):
         _stage(diagnostic, "authorization", "completed")
         try:
             _stage(diagnostic, "required_env_validation", "entered")
+            _failure_mark(diagnostic, "REQUIRED_ENV")
             config = {"dsn": os.environ[DB_BINDING], "verify_url": os.environ["S1_VERIFY_URL"],
                       "verify_request_secret": os.environ["S1_VERIFY_REQUEST_SECRET"]}
             _stage(diagnostic, "required_env_validation", "completed")
@@ -472,9 +541,14 @@ class handler(BaseHTTPRequestHandler):
         except WorkflowStop as exc:
             _stage(diagnostic, "request", "failed", failure_class="WORKFLOW_STOP")
             payload = {"result": exc.result, "original_ack": exc.ack}
-        except Exception:
+            if exc.result == "FAIL_PRECOMMIT":
+                _failure_note(diagnostic, exc)
+                payload.update(_failure_snapshot(diagnostic))
+        except Exception as exc:
             _stage(diagnostic, "request", "failed", failure_class="UNEXPECTED_FAILURE")
             payload = {"result": "FAIL_PRECOMMIT"}
+            _failure_note(diagnostic, exc)
+            payload.update(_failure_snapshot(diagnostic))
         _stage(diagnostic, "response_serialization", "entered")
         body = c.canonical_json(payload).encode("utf-8")
         _stage(diagnostic, "response_serialization", "completed")
