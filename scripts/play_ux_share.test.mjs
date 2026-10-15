@@ -71,14 +71,14 @@ test("share data fails closed on wrong ID, publication scope, rank or missing ca
 });
 
 test("share metadata names the complex, actual public date and scope; missing data never invents metrics", async () => {
-  const metadata = moduleFrom(read("src/lib/koaptix/metadata.ts"), { require: () => ({ getLatestRankBoard: async () => [fixture] }) });
+  const metadata = moduleFrom(read("src/lib/koaptix/metadata.ts"), { require: () => ({ getPublicPageComplex: async () => fixture, PUBLIC_SITE_ORIGIN: "https://www.koaptix.com", publicRegionLabel: code => code }) });
   const result = await metadata.buildComplexMetadata("5037");
   assert.match(result.title, /잠실엘스.*KOAPTIX/);
   assert.match(result.description, /2026-08-31 기준.*전국 공개 랭킹 2위/);
   assert.equal(result.openGraph.url, "/complex/5037");
   assert.equal(result.openGraph.images[0].url, "/complex/5037/opengraph-image?v=2");
   assert.doesNotMatch(result.description, /최근 7일|0.00%|LIVE/);
-  const missing = moduleFrom(read("src/lib/koaptix/metadata.ts"), { require: () => ({ getLatestRankBoard: async () => { throw new Error("unavailable"); } }) });
+  const missing = moduleFrom(read("src/lib/koaptix/metadata.ts"), { require: () => ({ getPublicPageComplex: async () => null, PUBLIC_SITE_ORIGIN: "https://www.koaptix.com", publicRegionLabel: code => code }) });
   const fallback = await missing.buildComplexMetadata("5037");
   assert.doesNotMatch(fallback.description, /0위|0원|0.00%|LIVE/);
 });

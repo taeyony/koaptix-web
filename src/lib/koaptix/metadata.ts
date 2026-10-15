@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { getLatestRankBoard } from "./queries";
+import { getPublicPageComplex, PUBLIC_SITE_ORIGIN, publicRegionLabel } from "./publicPageData";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://koaptix.com";
-const METADATA_BASE = new URL(SITE_URL);
+const METADATA_BASE = new URL(PUBLIC_SITE_ORIGIN);
 
 function formatMarketCapKrw(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "-";
@@ -51,22 +50,24 @@ function getDefaultMetadata(): Metadata {
 }
 
 export async function buildComplexMetadata(
-  complexId?: string | null
+  complexId?: string | null,
+  universeCode = "KOREA_ALL",
 ): Promise<Metadata> {
   if (!complexId) {
     return getDefaultMetadata();
   }
 
   try {
-    const [row] = await getLatestRankBoard("KOREA_ALL", 1, { complexId });
+    const row = await getPublicPageComplex(complexId, universeCode);
     if (!row) {
-      return getDefaultMetadata();
+      return { ...getDefaultMetadata(), robots: { index: false, follow: true } };
     }
+    universeCode = row.universe_code;
 
     const title = `${row.apt_name_ko} | KOAPTIX 아파트 시가총액 랭킹`;
     const description = [
       `${row.snapshot_date} 기준`,
-      `전국 공개 랭킹 ${row.rank_all}위`,
+      `${universeCode === "KOREA_ALL" ? "전국" : publicRegionLabel(universeCode)} 공개 랭킹 ${row.rank_all}위`,
       `단지 전체 추정 시가총액 ${formatMarketCapKrw(Number(row.market_cap_krw))}`,
       [row.sigungu_name, row.legal_dong_name].filter(Boolean).join(" "),
       "실거래가와 세대수로 추정한 참고 정보입니다.",
@@ -74,8 +75,9 @@ export async function buildComplexMetadata(
       .filter(Boolean)
       .join(" · ");
 
-    const sharePath = `/complex/${encodeURIComponent(String(row.complex_id))}`;
-    const ogImagePath = `${sharePath}/opengraph-image?v=2`;
+    const detailPath = `/complex/${encodeURIComponent(String(row.complex_id))}`;
+    const sharePath = universeCode === "KOREA_ALL" ? detailPath : `${detailPath}?${new URLSearchParams({ universe: universeCode })}`;
+    const ogImagePath = universeCode === "KOREA_ALL" ? `${detailPath}/opengraph-image?v=2` : "/opengraph-image.jpg";
 
     return {
       metadataBase: METADATA_BASE,
@@ -108,6 +110,6 @@ export async function buildComplexMetadata(
       },
     };
   } catch {
-    return getDefaultMetadata();
+    return { ...getDefaultMetadata(), robots: { index: false, follow: true } };
   }
 }

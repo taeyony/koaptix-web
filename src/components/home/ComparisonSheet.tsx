@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { buildComparisonSharePath, isComparisonDate } from "../../lib/koaptix/complexShare";
+import { resolveUniverseRequest, getUniverseLabel } from "../../lib/koaptix/universes";
 
 type ComparisonSheetProps = {
   open: boolean;
@@ -9,6 +11,7 @@ type ComparisonSheetProps = {
   onClose: () => void;
   onRemoveItem?: (item: unknown) => void;
   onClear?: () => void;
+  sharedDate?: string | null;
 };
 
 type WinnerSide = "left" | "right" | null;
@@ -210,8 +213,10 @@ function MetricCell({ value, winner, side }: { value: string; winner: WinnerSide
   );
 }
 
-export default function ComparisonSheet({ open, items, onClose, onRemoveItem, onClear }: ComparisonSheetProps) {
+export default function ComparisonSheet({ open, items, onClose, onRemoveItem, onClear, sharedDate }: ComparisonSheetProps) {
   const [isMounted, setIsMounted] = useState(false);
+  const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -247,13 +252,23 @@ export default function ComparisonSheet({ open, items, onClose, onRemoveItem, on
   }, [isMounted, open, onClose]);
 
   const [leftItem, rightItem] = items.slice(0, 2);
+  const leftCode = readString(leftItem, ["universeCode", "universe_code"]);
+  const rightCode = readString(rightItem, ["universeCode", "universe_code"]);
+  const leftDate = readString(leftItem, ["snapshotDate", "snapshot_date"]);
+  const rightDate = readString(rightItem, ["snapshotDate", "snapshot_date"]);
+  const sharePath = leftCode && leftCode === rightCode && leftDate === rightDate && isComparisonDate(leftDate) &&
+    !resolveUniverseRequest(leftCode, { capability: "ranking" }).universeUnavailable
+    ? buildComparisonSharePath([readString(leftItem, ["complexId", "complex_id"]) ?? "", readString(rightItem, ["complexId", "complex_id"]) ?? ""], leftCode, leftDate) : null;
 
-  const metricRows = useMemo(() => {
-    if (!leftItem || !rightItem) return [];
-    return buildMetricRows(leftItem, rightItem);
-  }, [leftItem, rightItem]);
+  async function copyComparison() {
+    if (!sharePath) return;
+    try { await navigator.clipboard.writeText(new URL(sharePath, window.location.origin).toString()); setCopiedPath(sharePath); setCopyError(false); }
+    catch { setCopyError(true); }
+  }
 
-  if (!isMounted || (!open && items.length === 0)) return null;
+  const metricRows = leftItem && rightItem ? buildMetricRows(leftItem, rightItem) : [];
+
+  if (!isMounted || !open) return null;
 
   const content = (
     <div className={cx("fixed inset-0 z-[1000] isolate", open ? "pointer-events-auto" : "pointer-events-none")}>
@@ -266,12 +281,17 @@ export default function ComparisonSheet({ open, items, onClose, onRemoveItem, on
                 <p className="text-caption font-medium uppercase tracking-label text-slate-500">두 단지 한눈에 비교</p>
                 <h2 id="comparison-sheet-title" className="ko-section-title mt-2 text-section font-bold text-slate-100">우리 아파트와 비교해 볼까요?</h2>
                 <p className="ko-copy mt-1 text-sm text-slate-500">초록색은 시가총액·세대수 등이 더 크거나, 준공 후 기간이 짧은 쪽을 표시해요. 투자 가치를 평가한 것은 아닙니다.</p>
+                <p className="mt-2 text-control text-slate-300">{leftCode ? getUniverseLabel(leftCode) : "지역 확인 중"} · {leftDate ?? "기준일 확인 중"}{leftDate !== rightDate && rightDate ? ` / ${rightDate}` : ""} 기준</p>
+                {sharedDate && sharedDate !== leftDate ? <p role="status" className="mt-2 text-caption text-amber-300">공유 당시 기준일은 {sharedDate}예요. 지금은 현재 공개된 {leftDate ?? "최신"} 자료로 비교합니다.</p> : null}
               </div>
               <div className="flex items-center gap-2">
+                {sharePath ? <button type="button" onClick={copyComparison} className="min-h-11 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-control font-semibold text-cyan-200">{copiedPath === sharePath ? "복사 완료" : "비교 링크 복사"}</button> : null}
                 {onClear ? <button type="button" onClick={onClear} className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-cyan-400/30 hover:text-cyan-300">초기화</button> : null}
                 <button type="button" onClick={onClose} className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-cyan-400/30 hover:text-cyan-300">닫기</button>
               </div>
             </div>
+            {copyError ? <p role="status" className="mt-2 text-caption text-amber-300">링크를 복사하지 못했어요. 브라우저의 클립보드 허용 상태를 확인해 주세요.</p> : copiedPath === sharePath && sharePath ? <p role="status" className="mt-2 text-caption text-cyan-200">비교 링크를 복사했어요. 다시 열면 공개 자료를 확인하며, 갱신되면 기준일이 달라질 수 있어요.</p> : null}
+            {sharePath ? <a className="ko-text-link mt-2 inline-flex min-h-10 items-center text-control text-cyan-200" href={sharePath}>비교 링크 열기 ↗</a> : null}
           </div>
           <div className="max-h-[78vh] overflow-y-auto overscroll-contain" onWheelCapture={(event) => event.stopPropagation()}>
             {!leftItem || !rightItem ? (

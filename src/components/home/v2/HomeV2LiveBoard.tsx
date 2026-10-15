@@ -383,6 +383,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
           ))}
         </div>
         <p className="ko-copy mt-4 text-caption text-muted">순위는 비교 대상 단지 구성의 영향도 받아요. 시총 변화는 단지 전체의 추정 가치 변화이며, 집 한 채의 가격 변동률과 달라요.</p>
+        <div className="mt-4 flex flex-wrap gap-5 text-control text-accent"><Link className="ko-text-link" href={`${rankingHref}&sort=rank-up`}>순위가 많이 오른 순으로 보기 ↗</Link><Link className="ko-text-link" href={`${rankingHref}&sort=cap-up`}>시총 증가율순으로 보기 ↗</Link></div>
         </> : <details>
           <summary className="cursor-pointer text-control font-semibold text-ink">이번 주 순위가 많이 바뀐 단지 · {state.status === "loading" && !universeUnavailable ? "공개 자료 확인 중" : state.status === "error" || universeUnavailable ? "공개 자료를 불러오지 못했어요" : knownMovement.length ? "순위 변화 없음" : "지난주 비교 자료 준비 중"}</summary>
           <p className="ko-copy mt-3 text-sm text-muted">지난주와 비교할 자료가 있으면 순위가 오른·내린 단지를 보여드려요. 자료가 없는 경우와 순위가 그대로인 경우는 구분합니다. 집값의 상승·하락을 뜻하지 않아요.</p>

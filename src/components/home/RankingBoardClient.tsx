@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { startTransition, useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import { RankingCard } from "./RankingCard";
 import { DISCOVERY_SEARCH_REQUEST_TIMEOUT_MS } from "../../lib/koaptix/discoverySearch";
@@ -21,6 +21,8 @@ import type {
 import type { UniverseOption } from "../../lib/koaptix/universes";
 import { useBookmarks } from "../../hooks/useBookmarks";
 import ComparisonSheet from "./ComparisonSheet";
+import { parseRankingSort, sortRankingItems, type RankingSort } from "../../lib/koaptix/rankingPresentation";
+import { parseComparisonIds, isComparisonDate } from "../../lib/koaptix/complexShare";
 import { matchesStructuredDistrict } from "../../lib/koaptix/districtIdentity";
 export { parseDistrictIdentity, resolveSidoFromUniverseCode } from "../../lib/koaptix/districtIdentity";
 import { ComplexDetailSheet } from "./ComplexDetailSheet";
@@ -565,7 +567,13 @@ export function RankingBoardClient({
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(searchParams?.get("view") === "watchlist");
 
   const [comparisonItems, setComparisonItems] = useState<RankingItem[]>([]);
+  const [rankingSort, setRankingSort] = useState<RankingSort>(() => parseRankingSort(searchParams?.get("sort")));
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+  const comparisonRestoreRef = useRef("");
+  const [comparisonLinkError, setComparisonLinkError] = useState<{ key: string; message: string } | null>(null);
+  const requestedComparison = searchParams?.get("compare") ?? "";
+  const requestedComparisonDate = searchParams?.get("comparisonDate") ?? null;
+  const comparisonRequestKey = `${boardUniverseCode}:${requestedComparison}`;
 
   const [complexDetail, setComplexDetail] = useState<ComplexDetail | null>(
     null,
@@ -705,12 +713,15 @@ export function RankingBoardClient({
       } else {
         params.delete("movement");
       }
+      if (rankingSort !== "rank") params.set("sort", rankingSort);
+      else params.delete("sort");
     }, "replace");
   }, [
     isWeeklyMovementFullBoard,
     searchQuery,
     selectedMovementFilter,
     selectedTierFilter,
+    rankingSort,
     syncRankingUrlState,
     replaceUrlParams,
   ]);
@@ -1068,8 +1079,7 @@ export function RankingBoardClient({
     getBoardCacheKey,
   ]);
 
-  const handleUniverseChange = useCallback(
-    (nextUniverseCode: string) => {
+  function handleUniverseChange(nextUniverseCode: string) {
       const normalizedNext = resolveBoardUniverseCode(nextUniverseCode);
 
       if (normalizedNext === boardUniverseCode) {
@@ -1115,6 +1125,8 @@ export function RankingBoardClient({
       replaceUrlParams((params) => {
         params.delete("district");
         params.delete("complexId");
+        params.delete("compare");
+        params.delete("comparisonDate");
 
         if (normalizedNext === DEFAULT_UNIVERSE_CODE) {
           params.delete("universe");
@@ -1124,19 +1136,10 @@ export function RankingBoardClient({
       }, "replace", true);
 
       setBoardUniverseCode(normalizedNext);
-    },
-    [
-      boardDeliveryMeta,
-      boardItems,
-      boardLimit,
-      apiBasePath,
-      boardUniverseCode,
-      replaceUrlParams,
-      getBoardCacheKey,
-    ],
-  );
+  }
 
   const toggleComparisonItem = useCallback((item: RankingItem) => {
+    replaceUrlParams(params => { params.delete("compare"); params.delete("comparisonDate"); });
     setComparisonItems((prev) => {
       const isAlreadyIn = prev.some((p) => p.complexId === item.complexId);
       if (isAlreadyIn)
@@ -1144,7 +1147,7 @@ export function RankingBoardClient({
       if (prev.length < 2) return [...prev, item];
       return [prev[1], item];
     });
-  }, []);
+  }, [replaceUrlParams]);
 
   useEffect(() => {
     if (comparisonItems.length === 2) setIsComparisonOpen(true);
@@ -1233,6 +1236,24 @@ export function RankingBoardClient({
     return containsMismatchedUniverse ? [] : boardItems;
   }, [boardDeliveryMeta, boardItems, boardUniverseCode]);
 
+  useEffect(() => {
+    if (!requestedComparison) { comparisonRestoreRef.current = ""; return; }
+    if (isBoardLoading || boardDeliveryMeta.source === "client_pending" ||
+      boardDeliveryMeta.renderedUniverseCode !== boardUniverseCode || comparisonRestoreRef.current === comparisonRequestKey) return;
+    comparisonRestoreRef.current = comparisonRequestKey;
+    const ids = parseComparisonIds(requestedComparison);
+    const selected = ids.map(id => presentationBoardItems.find(item => item.complexId === id));
+    if (ids.length !== 2 || selected.some(item => !item)) {
+      startTransition(() => setComparisonLinkError({ key: comparisonRequestKey, message: "공유한 두 단지를 현재 지역의 공개 TOP1000에서 모두 확인하지 못했어요. 검색하거나 다른 단지를 선택해 주세요." }));
+      return;
+    }
+    startTransition(() => {
+      setComparisonLinkError(null);
+      setComparisonItems(selected as RankingItem[]);
+      setIsComparisonOpen(true);
+    });
+  }, [requestedComparison, comparisonRequestKey, boardUniverseCode, boardDeliveryMeta, presentationBoardItems, isBoardLoading]);
+
   const filteredItems = useMemo(() => {
     if (shouldSuppressSearchResults) return [];
     let result = presentationBoardItems;
@@ -1277,9 +1298,10 @@ export function RankingBoardClient({
       result = result.filter((item) => bookmarks.includes(item.complexId));
     }
 
-    return result;
+    return sortRankingItems(result, rankingSort);
   }, [
     presentationBoardItems,
+    rankingSort,
     enableTierFilters,
     isWeeklyMovementFullBoard,
     selectedMovementFilter,
@@ -1639,6 +1661,7 @@ export function RankingBoardClient({
               className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-2.5"
               data-testid="ranking-movement-filters"
             >
+              {comparisonLinkError?.key === comparisonRequestKey ? <p role="alert" className="mb-3 text-control text-amber-300">{comparisonLinkError.message}</p> : null}
               <div className="mb-2 flex items-center justify-between gap-3">
                 <span className="text-caption font-semibold uppercase tracking-label text-cyan-300">
                   이번 주 순위 변화
@@ -1669,6 +1692,13 @@ export function RankingBoardClient({
                   );
                 })}
               </div>
+              <label className="mt-3 flex flex-wrap items-center gap-3 text-control text-slate-300">
+                정렬
+                <select aria-label="랭킹 정렬" className="ko-index-select min-h-11 max-w-full rounded-lg border border-[var(--ko-border)] px-3 py-2 font-semibold text-ink" value={rankingSort} onChange={event => setRankingSort(parseRankingSort(event.target.value))}>
+                  <option value="rank">시가총액 순위순</option><option value="rank-up">순위가 많이 오른 순</option><option value="rank-down">순위가 많이 내린 순</option><option value="cap-up">시총 증가율이 큰 순</option><option value="cap-down">시총 감소율이 큰 순</option>
+                </select>
+              </label>
+              <p className="mt-2 text-caption text-slate-400">현재 지역의 공개 랭킹 안에서 정렬해요. 변동은 7일 전과 비교하며, 비교 자료가 없는 단지는 마지막에 표시해요.</p>
             </div>
           )}
 
@@ -1958,6 +1988,7 @@ export function RankingBoardClient({
       <ComparisonSheet
         open={isComparisonOpen}
         items={comparisonItems}
+        sharedDate={isComparisonDate(requestedComparisonDate) && parseComparisonIds(requestedComparison).length === 2 && parseComparisonIds(requestedComparison).every(id => comparisonItems.some(item => item.complexId === id)) ? requestedComparisonDate : null}
         onClose={() => setIsComparisonOpen(false)}
         onRemoveItem={(item: any) => toggleComparisonItem(item)}
         onClear={() => {

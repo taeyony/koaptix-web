@@ -3,6 +3,29 @@ import type { RankingItem } from "./types";
 const integerFormat = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 });
 const percentFormat = new Intl.NumberFormat("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+export type RankingSort = "rank" | "rank-up" | "rank-down" | "cap-up" | "cap-down";
+export function parseRankingSort(value: string | null | undefined): RankingSort {
+  return value === "rank-up" || value === "rank-down" || value === "cap-up" || value === "cap-down" ? value : "rank";
+}
+
+/** Sort existing values only; missing comparisons are last, never zero. */
+export function sortRankingItems(items: readonly RankingItem[], sort: RankingSort): RankingItem[] {
+  const value = (item: RankingItem): number | null => {
+    if (sort === "rank") return item.rank;
+    if (!item.snapshotDate || !item.historySnapshotDate ||
+      new Date(item.snapshotDate + "T00:00:00Z").getTime() - new Date(item.historySnapshotDate + "T00:00:00Z").getTime() !== 7 * 86_400_000) return null;
+    const delta = sort.startsWith("cap-") ? item.marketCapDeltaPct7d : item.rankDelta7d;
+    return typeof delta === "number" && Number.isFinite(delta) ? delta : null;
+  };
+  return [...items].sort((a, b) => {
+    const left = value(a), right = value(b);
+    if (left === null && right !== null) return 1;
+    if (right === null && left !== null) return -1;
+    const direction = sort === "rank-up" || sort === "cap-up" ? -1 : 1;
+    return (left !== null && right !== null ? (left - right) * direction : 0) || a.rank - b.rank || a.complexId.localeCompare(b.complexId);
+  });
+}
+
 export function formatRankMovement(delta: number | null | undefined): string {
   if (typeof delta !== "number" || !Number.isSafeInteger(delta)) return "순위 비교 자료 없음";
   if (delta === 0) return "순위 변동 없음";

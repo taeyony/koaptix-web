@@ -4,7 +4,10 @@
  */
 
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
+import { getPublicPageBoard, PUBLIC_SITE_ORIGIN, publicRegionLabel } from "../../lib/koaptix/publicPageData";
+import { formatKrwCompact } from "../../lib/formatters";
 
 import {
   DEFAULT_UNIVERSE_CODE,
@@ -53,6 +56,19 @@ function getUniverseResolutionLabel(
   return resolution.registryItem?.label ?? resolution.requestedUniverseCode;
 }
 
+export async function generateMetadata({ searchParams }: { searchParams?: Promise<SearchParamsShape> }): Promise<Metadata> {
+  const params = await resolveSearchParams(searchParams);
+  const scope = resolveUniverseRequest(pickSingleParam(params?.universe), { capability: "ranking" });
+  const label = publicRegionLabel(scope.requestedUniverseCode);
+  const filtered = Object.keys(params ?? {}).some(key => key !== "universe");
+  const canonical = scope.requestedUniverseCode === DEFAULT_UNIVERSE_CODE ? "/ranking" : `/ranking?${new URLSearchParams({ universe: scope.requestedUniverseCode })}`;
+  const title = `${label} 아파트 시가총액 순위 | KOAPTIX`;
+  const description = `${label}에서 공개된 아파트의 단지 전체 추정 시가총액과 순위를 살펴보세요. 기준일과 포함 범위를 함께 안내합니다. 집 한 채의 가격이나 투자 추천이 아닙니다.`;
+  return { metadataBase: new URL(PUBLIC_SITE_ORIGIN), title, description,
+    alternates: { canonical }, openGraph: { title, description, url: canonical },
+    robots: { index: !scope.universeUnavailable && !filtered, follow: true } };
+}
+
 export default async function RankingPage({
   searchParams,
 }: {
@@ -85,6 +101,7 @@ export default async function RankingPage({
   // Keep the ranking HTML shell lightweight; the client board keeps the TOP1000
   // contract by fetching the full payload through /api/ranking after hydration.
   const items: RankingItem[] = [];
+  const preview = universeUnavailable ? [] : await getPublicPageBoard(universeCode, 5);
 
   return (
     <main
@@ -151,6 +168,16 @@ export default async function RankingPage({
         </section>
 
         <section className="min-h-0">
+          {preview.length ? <details className="mb-3 rounded-2xl border border-[var(--ko-border)] bg-surface p-4 text-ink" data-testid="regional-ranking-preview">
+            <summary className="cursor-pointer text-control font-semibold">{publicRegionLabel(universeCode)} 상위 단지 빠른보기 · {preview[0].snapshot_date} 기준</summary>
+            <p className="mt-3 text-caption text-muted">공개 랭킹 상위 {preview.length}개예요. 아래 전체 랭킹에서 검색·비교·주간 변동 정렬을 이용할 수 있어요.</p>
+            <ol className="mt-3 divide-y divide-[var(--ko-border)]">
+              {preview.map(row => <li key={String(row.complex_id)} className="flex items-center justify-between gap-3 py-4 text-body">
+                <Link className="ko-text-link font-semibold" href={`/complex/${row.complex_id}${universeCode === DEFAULT_UNIVERSE_CODE ? "" : `?universe=${universeCode}`}`}>{row.rank_all}위 · {row.apt_name_ko}</Link>
+                <span className="shrink-0 tabular-nums">{formatKrwCompact(row.market_cap_krw)}</span>
+              </li>)}
+            </ol>
+          </details> : null}
           <Suspense
             fallback={
               <div className="h-[70vh] w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />
