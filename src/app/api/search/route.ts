@@ -2183,13 +2183,14 @@ async function fetchRankVisibleFallbackItems(
   items: PublishedRankingItem[],
   q: string,
   universeCode: string,
+  preloadedRows?: PublishedNameSearchRow[],
 ): Promise<PublishedRankingItem[]> {
   const normalizedQ = normalizeExactName(q);
   if (!normalizedQ) return [];
 
   // Bounded rank-visible fallback: search only the approved Top1000-style
   // rank-board path, never apt_complex-only discovery or unranked rows.
-  const namedRows = await loadPublishedNameMatches(createDiscoverySupabase(), q, [universeCode]);
+  const namedRows = preloadedRows ?? await loadPublishedNameMatches(createDiscoverySupabase(), q, [universeCode]);
   return mergeUniqueByComplexId([...filterItemsByQuery(
     items.filter(isPublishedRankingVisibleTop1000),
     q,
@@ -2244,6 +2245,7 @@ async function loadRegionalNameCompanionItems(
   q: string,
   alreadyShownItems: RankingItem[],
   limit: number,
+  preloadedRows?: PublishedNameSearchRow[],
 ) {
   const intent = buildRegionalNameCompanionIntent(q);
   const auxiliaryLimit = Math.max(
@@ -2255,7 +2257,7 @@ async function loadRegionalNameCompanionItems(
   const enabledCodes = intent.candidateUniverseCodes.filter(code => !resolveUniverseRequest(code, { capability: "search" }).universeUnavailable);
   let namedRows: PublishedNameSearchRow[];
   try {
-    namedRows = await loadPublishedNameMatches(createDiscoverySupabase(), intent.normalizedNameTerms[0], enabledCodes);
+    namedRows = preloadedRows ?? await loadPublishedNameMatches(createDiscoverySupabase(), intent.normalizedNameTerms[0], enabledCodes);
   } catch {
     console.info("[API /api/search] regional named publication lookup unavailable");
     return [];
@@ -2343,6 +2345,7 @@ async function loadGlobalAuxiliaryItems(
   requestedUniverseCode: string,
   localItems: RankingItem[],
   limit: number,
+  preloadedRows?: PublishedNameSearchRow[],
 ) {
   if (requestedUniverseCode === DEFAULT_UNIVERSE_CODE) {
     const regionalAuxiliaryItems = await loadRegionAuxiliaryItems(
@@ -2354,6 +2357,7 @@ async function loadGlobalAuxiliaryItems(
       q,
       [...localItems, ...regionalAuxiliaryItems],
       limit,
+      preloadedRows,
     );
 
     return mergeUniqueByComplexId([
@@ -2521,7 +2525,17 @@ export async function GET(request: NextRequest) {
       regionResolution.effectiveRegionScope ? q.normalize("NFC") : effectiveQuery,
       requestedUniverseCode,
     );
-    const localSource = await loadSourceItems(requestedUniverseCode);
+    const namedIntent = buildRegionalNameCompanionIntent(effectiveQuery);
+    const canShareRegionalNames = requestedUniverseCode === DEFAULT_UNIVERSE_CODE
+      && !regionResolution.effectiveRegionScope && regionResolution.globalFallbackAllowed
+      && namedIntent?.normalizedNameTerms[0] === normalizeSearchToken(effectiveQuery);
+    const namedCodes = [...new Set([requestedUniverseCode, ...(canShareRegionalNames ? namedIntent!.candidateUniverseCodes : [])])]
+      .filter(code => !resolveUniverseRequest(code, { capability: "search" }).universeUnavailable);
+    const [localSource, namedMatches] = await Promise.all([
+      loadSourceItems(requestedUniverseCode),
+      isStrictRegionIntentQuery(queryClassification.normalizedQuery) ? Promise.resolve([]) :
+        loadPublishedNameMatches(createDiscoverySupabase(), effectiveQuery, namedCodes).catch(() => []),
+    ]);
     let matchedLocalItems = filterItemsByQuery(localSource.items, effectiveQuery);
     let rankVisibleFallbackItems: PublishedRankingItem[] = [];
 
@@ -2546,6 +2560,7 @@ export async function GET(request: NextRequest) {
           localSource.items,
           effectiveQuery,
           requestedUniverseCode,
+          namedMatches.filter(row => row.universe_code === requestedUniverseCode),
         );
       } catch (fallbackError) {
         console.info("[API /api/search] rank-visible fallback skipped", {
@@ -2748,6 +2763,7 @@ export async function GET(request: NextRequest) {
               requestedUniverseCode,
               localItems,
               limit,
+              canShareRegionalNames ? namedMatches : undefined,
             ),
             localSource,
           );
