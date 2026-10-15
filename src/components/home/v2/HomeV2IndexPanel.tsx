@@ -21,10 +21,8 @@ export function HomeV2IndexPanel({ index }: { index: HomeIndexChartPayload }) {
   const options = getHomeUniverseRegistry().filter((item) => item.scope === "MACRO");
   const change = index.changePct1m;
 
-  return (
-    <section id="index" tabIndex={-1} className="order-1 min-h-[260px] border-b border-[var(--ko-border)] py-8 lg:order-2 lg:border-b-0 lg:border-l lg:px-8">
-      <HomeV2SectionHeading title="KOAPTIX Index" note={`${index.renderedUniverseLabel} · ${rows.length ? "공개 서비스 지수" : "공표 준비 중"}`} />
-      <label className="mt-4 flex items-center gap-3 text-caption font-semibold text-muted">
+  const regionSelector = (
+    <label className="mt-4 flex items-center gap-3 text-caption font-semibold text-muted">
         표시 지역
         <select aria-label="지수 표시 지역" value={index.requestedUniverseCode}
           onChange={(event) => router.push(`/?universe=${encodeURIComponent(event.target.value)}#index`)}
@@ -33,6 +31,26 @@ export function HomeV2IndexPanel({ index }: { index: HomeIndexChartPayload }) {
           {options.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
         </select>
       </label>
+  );
+
+  if (!rows.length) {
+    return (
+      <section id="index" tabIndex={-1} className="order-3 border-b border-[var(--ko-border)] py-6 lg:order-3 lg:border-b-0 lg:border-l lg:px-8">
+        <details>
+          <summary className="cursor-pointer text-control font-semibold text-ink">KOAPTIX Index · 공개 이력 준비 중</summary>
+          <p className="ko-copy mt-3 text-sm text-muted">검증과 공표가 완료된 지수 이력만 표시합니다. 공개 일정은 아직 정해지지 않았습니다.</p>
+          {regionSelector}
+          <a href="#koaptix-500" className="ko-text-link mt-3 inline-block text-control font-semibold">공표된 랭킹 확인 ↗</a>
+        </details>
+      </section>
+    );
+  }
+
+
+  return (
+    <section id="index" tabIndex={-1} className="order-3 min-h-[260px] border-b border-[var(--ko-border)] py-8 lg:order-3 lg:border-b-0 lg:border-l lg:px-8">
+      <HomeV2SectionHeading title="KOAPTIX Index" note={`${index.renderedUniverseLabel} · ${rows.length ? "공개 서비스 지수" : "공표 준비 중"}`} />
+      {regionSelector}
       <div className="mt-5 flex items-end justify-between gap-4">
         <div>
           <p className="text-label font-semibold uppercase tracking-label text-muted">{index.indexName ?? index.renderedUniverseLabel}</p>

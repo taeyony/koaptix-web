@@ -420,6 +420,10 @@ body {
   transition: fill 140ms ease, stroke-width 140ms ease;
 }
 
+.ko-map-region-link {
+  cursor: pointer;
+}
+
 .ko-map-region-link:hover .ko-map-region,
 .ko-map-region-link:focus-visible .ko-map-region {
   fill: var(--ko-accent-soft);

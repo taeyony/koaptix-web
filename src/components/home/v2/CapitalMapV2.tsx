@@ -147,7 +147,7 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
     <section
       id="capital-map"
       tabIndex={-1}
-      className="ko-capital-map order-4 min-h-[260px] border-b border-[var(--ko-border)] py-8 lg:order-1 lg:border-b-0 lg:pr-8"
+      className="ko-capital-map order-2 min-h-[260px] border-b border-[var(--ko-border)] py-8 lg:order-2 lg:border-b-0 lg:pr-8"
     >
       <HomeV2SectionHeading
         title="Capital Map"
@@ -192,7 +192,8 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
               {" · 색상·표시 조정"}
             </p>
           </figcaption>
-          <p className="text-center text-caption text-muted">지도에서 지역을 선택하세요. 공표 준비 중인 지역은 옅게 표시합니다.</p>
+          <p className="text-center text-control font-semibold text-accent">지역을 눌러 공개 랭킹 보기 ↗</p>
+          <p className="text-center text-caption text-muted">윤곽에 커서를 올리면 지역명이 표시됩니다. 공표 준비 중인 지역은 옅게 표시합니다.</p>
         </figure>
 
         <div className="ko-capital-map-regions space-y-3.5">

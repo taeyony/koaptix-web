@@ -18,6 +18,7 @@ import {
 import {
   getHomeKpi,
   getIndexChartPayload,
+  toNullableNumber,
   type HomeIndexChartPayload,
 } from "../lib/koaptix/queries";
 
@@ -195,6 +196,7 @@ export default async function Home({
       index={indexChartPayload}
       totalMarketCapLabel={rawKpi?.total_market_cap_krw_string ?? null}
       currentnessDate={kpiDate}
+      aggregateComplexCount={toNullableNumber(rawKpi?.listed_complex_count)}
       dataAvailable={indexChartPayload.rows.length > 0 || Boolean(rawKpi)}
       universeCode={universeCode}
       universeLabel={universeLabel}

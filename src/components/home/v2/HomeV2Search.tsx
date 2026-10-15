@@ -173,11 +173,11 @@ export function HomeV2Search({ universeCode }: { universeCode: string }) {
   }, [showResults]);
 
   return (
-    <div ref={searchRef} className="relative mt-7 max-w-md">
-      <label htmlFor="home-v2-search" className="sr-only">
-        공개 단지 검색
+    <div ref={searchRef} className="relative mt-6 max-w-2xl">
+      <label htmlFor="home-v2-search" className="mb-2 block text-control font-semibold text-ink">
+        우리 단지 찾기
       </label>
-      <form action="/ranking" className="flex items-center border-b border-[var(--ko-border)] py-2.5 focus-within:border-accent">
+      <form action="/ranking" className="flex items-center gap-2 rounded-xl border border-[var(--ko-border)] bg-surface px-4 py-2 focus-within:border-accent focus-within:ring-1 focus-within:ring-[var(--ko-focus)]">
         <input type="hidden" name="universe" value={universeCode} />
         <input
           id="home-v2-search"
@@ -188,7 +188,7 @@ export function HomeV2Search({ universeCode }: { universeCode: string }) {
             setQuery(nextQuery);
             setState(INITIAL_STATE);
           }}
-          placeholder="단지명 · 시군구 검색"
+          placeholder="단지명 또는 시군구를 입력하세요"
           autoComplete="off"
           onKeyDown={(event) => {
             if (event.key === "Escape") {
@@ -199,8 +199,8 @@ export function HomeV2Search({ universeCode }: { universeCode: string }) {
           className="min-w-0 flex-1 bg-transparent text-lg text-ink outline-none placeholder:text-muted"
         />
         {query ? <button type="button" aria-label="검색어 지우기" onClick={() => { setQuery(""); setState(INITIAL_STATE); }} className="ko-icon-button text-sm text-muted">×</button> : null}
-        <button type="submit" aria-label="전체 랭킹에서 검색" className="min-h-9 min-w-9 text-base text-accent">
-          ↗
+        <button type="submit" aria-label="전체 랭킹에서 검색" className="shrink-0 rounded-lg bg-[var(--ko-accent-soft)] px-4 text-control font-semibold text-accent">
+          검색
         </button>
       </form>
       <p className="mt-2 text-caption leading-copy text-muted">

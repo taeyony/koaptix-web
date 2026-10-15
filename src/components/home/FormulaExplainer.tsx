@@ -19,12 +19,14 @@ type FormulaExplainerProps = {
   title?: string;
   triggerLabel?: string;
   className?: string;
+  scopeSummary?: string;
 };
 
 export default function FormulaExplainer({
   title = formulaTitle,
   triggerLabel = "산식 보기",
   className,
+  scopeSummary,
 }: FormulaExplainerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -189,6 +191,7 @@ export default function FormulaExplainer({
                   </button>
                 </div>
 
+                {scopeSummary ? <p className="ko-copy mt-3 rounded-lg border border-slate-700 p-3 text-sm font-semibold leading-copy text-slate-200">{scopeSummary}</p> : null}
                 <p className="ko-copy mt-2 text-sm leading-copy text-slate-400">
                   {formulaLead}
                 </p>
