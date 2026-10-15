@@ -282,10 +282,12 @@ export function HomeV2Search({
                       <span className="block text-caption text-muted">추정 시총</span>
                       <strong className="block text-lg font-bold text-ink">{formatKrwCompact(item.marketCapKrw)}</strong>
                       <span className="block text-control font-semibold text-accent">{getUniverseLabel(item.universeCode || "KOREA_ALL")} · {item.rank.toLocaleString("ko-KR")}위</span>
+                      {item.snapshotDate ? <span className="block text-caption text-muted">{item.snapshotDate} 기준</span> : null}
                     </span>
                   ) : (
                     <span className="shrink-0 font-mono tabular-nums text-xs text-muted">
-                      #{item.rank}
+                      {getUniverseLabel(item.universeCode || universeCode)} · #{item.rank}
+                      {item.snapshotDate ? <span className="block text-caption">{item.snapshotDate} 기준</span> : null}
                     </span>
                   )}
                 </Link>

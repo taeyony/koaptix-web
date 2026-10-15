@@ -35,6 +35,7 @@ import {
   type DiscoveryRegionEvidence,
 } from "../../../lib/koaptix/discoverySearch";
 import { hydrateDiscoveryRegionFallbacks } from "../../../lib/koaptix/discoverySearch.server";
+import { loadPublishedNameMatches, type PublishedNameSearchRow } from "../../../lib/koaptix/publishedNameSearch.server";
 import {
   buildBoundedKoreaRankAuthoritySeedPlan,
   fetchBoundedKoreaRankAuthorityRows,
@@ -1444,6 +1445,7 @@ function toRankingItem(
 
     name: row.apt_name_ko ?? row.name ?? "",
     apt_name_ko: row.apt_name_ko ?? row.name ?? "",
+    snapshotDate: row.snapshot_date,
 
     rank,
     rank_all: rank,
@@ -1561,7 +1563,7 @@ function isKoreanLocationToken(value: string) {
 }
 
 function getSearchTextFields(item: RankingItem) {
-  const names = [item.name, item.apt_name_ko].filter(Boolean);
+  const names = [item.name, item.apt_name_ko, item.searchText].filter(Boolean);
   const regions = [item.sigunguName, item.sigungu_name].filter(Boolean);
   const districts = [item.legalDongName, item.legal_dong_name].filter(Boolean);
   const districtBases = districts
@@ -2177,19 +2179,22 @@ async function fetchSourceItems(
   return { identity, items };
 }
 
-function fetchRankVisibleFallbackItems(
+async function fetchRankVisibleFallbackItems(
   items: PublishedRankingItem[],
   q: string,
-): PublishedRankingItem[] {
+  universeCode: string,
+): Promise<PublishedRankingItem[]> {
   const normalizedQ = normalizeExactName(q);
   if (!normalizedQ) return [];
 
   // Bounded rank-visible fallback: search only the approved Top1000-style
   // rank-board path, never apt_complex-only discovery or unranked rows.
-  return filterItemsByQuery(
+  const namedRows = await loadPublishedNameMatches(createDiscoverySupabase(), q, [universeCode]);
+  return mergeUniqueByComplexId([...filterItemsByQuery(
     items.filter(isPublishedRankingVisibleTop1000),
     q,
-  ).slice(0, SEARCH_RANK_VISIBLE_FALLBACK_RESULT_LIMIT) as PublishedRankingItem[];
+  ), ...namedRows.map(row => ({ ...toRankingItem(row, universeCode), searchText: row.searchText }))])
+    .slice(0, SEARCH_RANK_VISIBLE_FALLBACK_RESULT_LIMIT) as PublishedRankingItem[];
 }
 
 function fetchRankVisibleRegionalAuxiliaryItems(
@@ -2208,8 +2213,9 @@ async function fetchRankVisibleRegionalNameCompanionItems(
   universeCode: string,
   intent: RegionalNameCompanionIntent,
   universeIndex: number,
+  namedRows?: PublishedNameSearchRow[],
 ): Promise<ScoredRegionalNameCompanionItem[]> {
-  const source = await loadSourceItems(universeCode);
+  const source = namedRows ? { items: namedRows.map(row => ({ ...toRankingItem(row, universeCode), searchText: row.searchText })) } : await loadSourceItems(universeCode);
 
   // KOREA_ALL companion search stays bounded to rank-visible regional boards.
   return source.items
@@ -2246,6 +2252,15 @@ async function loadRegionalNameCompanionItems(
   );
   if (!intent || auxiliaryLimit <= 0) return [];
 
+  const enabledCodes = intent.candidateUniverseCodes.filter(code => !resolveUniverseRequest(code, { capability: "search" }).universeUnavailable);
+  let namedRows: PublishedNameSearchRow[];
+  try {
+    namedRows = await loadPublishedNameMatches(createDiscoverySupabase(), intent.normalizedNameTerms[0], enabledCodes);
+  } catch {
+    console.info("[API /api/search] regional named publication lookup unavailable");
+    return [];
+  }
+
   const candidateResults = await Promise.all(
     intent.candidateUniverseCodes.map(async (candidateCode, universeIndex) => {
       const resolution = resolveUniverseRequest(candidateCode, {
@@ -2261,6 +2276,7 @@ async function loadRegionalNameCompanionItems(
           resolution.renderedUniverseCode,
           intent,
           universeIndex,
+          namedRows.filter(row => row.universe_code === resolution.renderedUniverseCode),
         );
       } catch (error) {
         console.info("[API /api/search] regional name companion skipped", {
@@ -2526,9 +2542,10 @@ export async function GET(request: NextRequest) {
       !isStrictRegionIntentQuery(queryClassification.normalizedQuery)
     ) {
       try {
-        rankVisibleFallbackItems = fetchRankVisibleFallbackItems(
+        rankVisibleFallbackItems = await fetchRankVisibleFallbackItems(
           localSource.items,
           effectiveQuery,
+          requestedUniverseCode,
         );
       } catch (fallbackError) {
         console.info("[API /api/search] rank-visible fallback skipped", {
@@ -2619,6 +2636,7 @@ export async function GET(request: NextRequest) {
                   rank,
                   rank_all: rank,
                   snapshot_date: localSource.snapshot_date,
+                  snapshotDate: localSource.snapshot_date,
                   universeCode: DEFAULT_UNIVERSE_CODE,
                   universe_code: DEFAULT_UNIVERSE_CODE,
                   universeName: row.universe_name ?? companion.universeName,

@@ -192,6 +192,7 @@ export type RankingItem = {
   cityName?: string;
   locationLabel: string;
   searchText?: string;
+  snapshotDate?: string;
 
   historySnapshotDate?: string | null;
   rankDelta7d: number | null;

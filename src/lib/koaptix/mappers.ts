@@ -156,6 +156,9 @@ export function mapLatestRankBoardRow(
     complexId,
     name,
     rank,
+    snapshotDate: row.snapshot_date,
+    universeCode: row.universe_code,
+    universeName: row.universe_name ?? null,
     marketCapKrw,
     marketCapTrillionKrw,
 

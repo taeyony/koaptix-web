@@ -15,6 +15,7 @@ import type {
   RankingItem,
 } from "../../lib/koaptix/types";
 import { KOAPTIX_OFFICIAL_BASE_DATE } from "../../types/koaptix";
+import { getUniverseLabel } from "../../lib/koaptix/universes";
 
 const ComplexHistoryMiniChart = dynamic(
   () =>
@@ -480,6 +481,7 @@ export function ComplexDetailSheet({
                 <p className="mt-1 truncate text-sm text-white/50 sm:text-control">
                   {location}
                 </p>
+                {item?.snapshotDate ? <p className="mt-1 text-caption text-muted">{getUniverseLabel(item.universeCode || "KOREA_ALL")} 공표 순위 · {item.snapshotDate} 기준</p> : null}
 
                 {tierBadges.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -517,7 +519,7 @@ export function ComplexDetailSheet({
           <div className="min-h-0 overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
             {error ? (
               <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
-                {error}
+                {item ? "추가 상세 정보는 아직 제공되지 않습니다. 아래는 공표된 랭킹 정보입니다." : error}
               </div>
             ) : null}
 

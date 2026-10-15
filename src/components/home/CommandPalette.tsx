@@ -761,12 +761,13 @@ export function CommandPalette({
 
   const handleSelectItem = useCallback(
     (item: RankingItem) => {
+      const selected = resolveUniverseRequest(item.universeCode || effectiveUniverseCode, { capability: "search" });
+      if (selected.universeUnavailable) return;
       replaceUrlParams((params) => {
         if (
-          effectiveUniverseCode &&
-          effectiveUniverseCode !== DEFAULT_UNIVERSE_CODE
+          selected.renderedUniverseCode !== DEFAULT_UNIVERSE_CODE
         ) {
-          params.set("universe", effectiveUniverseCode);
+          params.set("universe", selected.renderedUniverseCode);
         } else {
           params.delete("universe");
         }
@@ -929,6 +930,7 @@ export function CommandPalette({
           {" · "}
           ID {item.complexId}
         </p>
+        {item.snapshotDate ? <p className="mt-1 text-caption text-slate-400">{item.universeName || item.universeCode} · {item.snapshotDate} 기준</p> : null}
       </div>
 
       <div className="shrink-0 text-right">
