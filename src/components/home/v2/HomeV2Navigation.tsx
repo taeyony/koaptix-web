@@ -29,6 +29,7 @@ export function HomeV2Navigation({ universeCode }: { universeCode: string }) {
         <div className="order-last flex min-w-0 flex-1 basis-full items-center gap-5 overflow-x-auto text-control font-semibold md:order-none md:basis-auto">
           <Link href="/play" prefetch={false} className="shrink-0 rounded-lg bg-[var(--ko-accent-soft)] px-3 py-2 font-bold text-accent hover:underline">우리 아파트 몇 등? ↗</Link>
           <Link href={`/ranking?universe=${encodeURIComponent(universeCode)}`} className="shrink-0 py-1 text-muted hover:text-accent">랭킹</Link>
+          <Link href={`/map?universe=${encodeURIComponent(universeCode)}`} prefetch={false} className="shrink-0 py-1 text-muted hover:text-accent">상세 지도 ↗</Link>
           {sections.map(({ id, label }) => (
             <a key={id} href={`#${id}`} aria-current={active === id ? "location" : undefined}
               onClick={() => {

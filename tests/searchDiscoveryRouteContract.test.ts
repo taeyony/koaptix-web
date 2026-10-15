@@ -695,7 +695,7 @@ test("scoped KOREA keeps global rows empty and gives restored ranked IDs discove
   const localIndex = scopedSource.indexOf("let localItems:");
   const globalIndex = scopedSource.indexOf("const globalItems =");
   const discoveryIndex = scopedSource.indexOf(
-    "const discoveryCandidates = await loadDiscoveryCandidates(",
+    "const discoveryCandidates =",
   );
 
   assert.equal(localIndex >= 0, true);
@@ -703,12 +703,22 @@ test("scoped KOREA keeps global rows empty and gives restored ranked IDs discove
   assert.equal(discoveryIndex > globalIndex, true);
   assert.match(
     scopedSource,
-    /const globalItems =\s*regionResolution\.effectiveRegionScope\s*\|\|[\s\S]*?\?\s*\[\]/,
+    /const globalItems =\s*(?:autocompletePreview\s*\|\|\s*)?regionResolution\.effectiveRegionScope\s*\|\|[\s\S]*?\?\s*\[\]/,
   );
   assert.match(
     scopedSource,
     /new Set\(\s*\[\.\.\.localItems,\s*\.\.\.globalItems\]/,
   );
+});
+
+test("autocomplete preview never bypasses explicit regional authority or the existing miss path", () => {
+  const source = readSearchRouteSource();
+  assert.match(source, /const autocomplete = searchParams\.get\("mode"\) === "autocomplete"/);
+  assert.match(source, /const previewSource = autocomplete && !regionResolution\.effectiveRegionScope &&\s*!isStrictRegionIntentQuery/);
+  assert.match(source, /const autocompletePreview = Boolean\(previewSource && filterItemsByQuery\(previewSource\.items, effectiveQuery\)\.length\)/);
+  assert.match(source, /previewSource \? Promise\.resolve\(previewSource\) : loadSourceItems\(requestedUniverseCode\)/);
+  assert.match(source, /const discoveryCandidates = autocompletePreview \? \[\] : await loadDiscoveryCandidates/);
+  assert.match(source, /rankedCandidateItems = selectMatchingPublicationItems/);
 });
 
 test("ranked region helper has only bounded batch reads and no DB call inside a loop", () => {

@@ -2436,6 +2436,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
 
   const q = (searchParams.get("q") ?? "").trim();
+  const autocomplete = searchParams.get("mode") === "autocomplete";
   const rawUniverseCode =
     searchParams.get("universe_code") ?? searchParams.get("universe");
 
@@ -2536,9 +2537,16 @@ export async function GET(request: NextRequest) {
       && namedIntent?.normalizedNameTerms[0] === normalizeSearchToken(effectiveQuery);
     const namedCodes = [...new Set([requestedUniverseCode, ...(canShareRegionalNames ? namedIntent!.candidateUniverseCodes : [])])]
       .filter(code => !resolveUniverseRequest(code, { capability: "search" }).universeUnavailable);
+    // The landing preview can return already-published matches without waiting
+    // for alias/discovery expansion. A miss still uses the complete old path.
+    // Explicit region intent always retains its existing authority checks.
+    const previewSource = autocomplete && !regionResolution.effectiveRegionScope &&
+      !isStrictRegionIntentQuery(queryClassification.normalizedQuery)
+      ? await loadSourceItems(requestedUniverseCode) : null;
+    const autocompletePreview = Boolean(previewSource && filterItemsByQuery(previewSource.items, effectiveQuery).length);
     const [localSource, namedMatches] = await Promise.all([
-      loadSourceItems(requestedUniverseCode),
-      isStrictRegionIntentQuery(queryClassification.normalizedQuery) ? Promise.resolve([]) :
+      previewSource ? Promise.resolve(previewSource) : loadSourceItems(requestedUniverseCode),
+      autocompletePreview || isStrictRegionIntentQuery(queryClassification.normalizedQuery) ? Promise.resolve([]) :
         loadPublishedNameMatches(createDiscoverySupabase(), effectiveQuery, namedCodes).catch(() => []),
     ]);
     let matchedLocalItems = filterItemsByQuery(localSource.items, effectiveQuery);
@@ -2557,7 +2565,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (
-      matchedLocalItems.length < limit &&
+      !autocompletePreview && matchedLocalItems.length < limit &&
       !isStrictRegionIntentQuery(queryClassification.normalizedQuery)
     ) {
       try {
@@ -2759,7 +2767,7 @@ export async function GET(request: NextRequest) {
       }
     }
     const globalItems =
-      regionResolution.effectiveRegionScope ||
+      autocompletePreview || regionResolution.effectiveRegionScope ||
       !regionResolution.globalFallbackAllowed
         ? []
         : selectMatchingPublicationItems(
@@ -2772,7 +2780,7 @@ export async function GET(request: NextRequest) {
             ),
             localSource,
           );
-    const discoveryCandidates = await loadDiscoveryCandidates(
+    const discoveryCandidates = autocompletePreview ? [] : await loadDiscoveryCandidates(
       effectiveQuery,
       requestedUniverseCode,
       new Set(
@@ -2801,6 +2809,7 @@ export async function GET(request: NextRequest) {
         cacheState: localSource.cacheState,
         fallbackMode: localSource.fallbackMode,
         resultOrder: ["localItems", "globalItems"],
+        autocompletePreview,
         localItems,
         globalItems,
         discoveryCandidates,

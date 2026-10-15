@@ -564,7 +564,9 @@ const PUBLISHED_UNIVERSE_SERVICE_VIEW =
 export async function getLatestRankBoard(
   universeCode: KnownUniverseCode | string = DEFAULT_UNIVERSE_CODE,
   limit: number = HOME_TACTICAL_RANK_BOARD_LIMIT,
+  selection?: { complexId: string },
 ): Promise<DbLatestRankBoardWeeklyRow[]> {
+  if (selection && !/^[1-9]\d*$/.test(selection.complexId)) throw new Error("Invalid public complex ID");
   const supabase = createServerSupabase();
 
   const safeUniverseCode = resolveServiceUniverseCode(
@@ -590,11 +592,7 @@ export async function getLatestRankBoard(
 
   for (const attemptLimit of retryLimits) {
     try {
-      const result = await withLocalQueryTimeout<{
-        data: any[] | null;
-        error: { code?: string | null; message?: string | null } | null;
-      }>(
-        supabase
+      const query = supabase
           .from(PUBLISHED_UNIVERSE_SERVICE_VIEW)
           .select(
             `
@@ -632,7 +630,15 @@ export async function getLatestRankBoard(
           .eq("surface_code", "UNIVERSE_SERVICE")
           .eq("universe_code", safeUniverseCode)
           .order("rank_all", { ascending: true })
-          .limit(attemptLimit),
+          .limit(attemptLimit);
+      if (selection) {
+        query.eq("complex_id", normalizeComplexId(selection.complexId)).gte("rank_all", 1).lte("rank_all", 1000);
+      }
+      const result = await withLocalQueryTimeout<{
+        data: any[] | null;
+        error: { code?: string | null; message?: string | null } | null;
+      }>(
+        query,
         latestBoardAttemptTimeoutMs,
         "LATEST_BOARD_LOCAL_TIMEOUT",
       );
@@ -647,6 +653,11 @@ export async function getLatestRankBoard(
         liveRows,
         safeUniverseCode,
       );
+      if (selection && liveRows.some((row) =>
+        String(row.complex_id) !== selection.complexId || !row.apt_name_ko?.trim() ||
+        !Number.isInteger(Number(row.rank_all)) || Number(row.rank_all) < 1 || Number(row.rank_all) > 1000 ||
+        !Number.isSafeInteger(Number(row.market_cap_krw)) || Number(row.market_cap_krw) <= 0
+      )) throw new Error("Invalid published share row");
 
       return liveRows.map((row: any) => ({
         ...row,

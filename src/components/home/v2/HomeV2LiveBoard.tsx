@@ -10,6 +10,8 @@ import { HomeV2SectionHeading } from "./HomeV2SectionHeading";
 import UniverseSelector from "../UniverseSelector";
 import ComparisonSheet from "../ComparisonSheet";
 import { getHomeUniverseRegistry } from "../../../lib/koaptix/universes";
+import { formatMarketCapMovement, formatRankMovement, formatRankTransition, selectMovementHighlights } from "../../../lib/koaptix/rankingPresentation";
+import { HomeV2MovementTicker } from "./HomeV2MovementTicker";
 
 type RankingsPayload = {
   ok?: boolean;
@@ -47,13 +49,6 @@ function marketCapLabel(item: RankingItem): string {
 
 function locationLabel(item: RankingItem): string {
   return [item.sigunguName, item.legalDongName].filter(Boolean).join(" ") || "지역 확인 중";
-}
-
-function movementLabel(delta: number | null): string {
-  if (delta === null) return "비교 자료 없음";
-  if (delta > 0) return `↑ ${delta}`;
-  if (delta < 0) return `↓ ${Math.abs(delta)}`;
-  return "— 0";
 }
 
 function movementTone(delta: number | null): string {
@@ -151,6 +146,8 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
   }, [retryKey, universeCode, universeUnavailable]);
 
   const items = state.items;
+  const boardDate = state.status === "ready" ? state.metadata.latestBoardDate ?? state.metadata.snapshot_date ?? null : null;
+  const tickerItems = useMemo(() => selectMovementHighlights(items, boardDate), [items, boardDate]);
   const needsNationalWatchlist = isLoaded && bookmarks.length > 0 && universeCode !== "KOREA_ALL";
   const watchlistPending = needsNationalWatchlist && nationalWatchlistState === "pending";
   const watchlistError = state.status === "error" || (needsNationalWatchlist && nationalWatchlistState === "error");
@@ -308,7 +305,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
                 <span
                   className={`hidden text-right font-mono tabular-nums text-xs font-semibold md:block ${movementTone(item.rankDelta7d)}`}
                 >
-                  {movementLabel(item.rankDelta7d)}
+                  {formatRankMovement(item.rankDelta7d)}
                 </span>
                 <button
                   type="button"
@@ -339,13 +336,13 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
       <section className="order-4 border-b border-[var(--ko-border)] py-8 lg:order-4 lg:border-b-0 lg:border-l lg:pl-7">
         {rising.length || falling.length ? <>
         <HomeV2SectionHeading
-          title="이번 주 눈에 띄는 단지"
-          note="공개 랭킹 안에서 순위가 오른·내린 단지"
+          title="이번 주 순위가 많이 바뀐 단지"
+          note="시가총액 순위의 변화예요. 금액 변화와 구분해 보세요."
         />
         <div className="mt-6 grid grid-cols-2 gap-5 lg:grid-cols-1 lg:gap-6">
           {[
-            { label: "상승", items: rising, tone: "text-up" },
-            { label: "하락", items: falling, tone: "text-down" },
+            { label: "순위 상승", items: rising, tone: "text-up" },
+            { label: "순위 하락", items: falling, tone: "text-down" },
           ].map((group) => (
             <div key={group.label}>
               <p
@@ -358,29 +355,33 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
                   group.items.map((item) => (
                     <Link href={detailHref(item)}
                       key={item.complexId}
-                      className="flex items-start justify-between gap-3 text-sm"
+                      className="block rounded-lg border border-[var(--ko-border)] p-3 text-sm transition hover:border-accent"
                     >
-                      <span className="min-w-0 truncate text-ink">
+                      <span className="block font-semibold text-ink">
                         {item.name}
                       </span>
                       <span
-                        className={`shrink-0 font-mono tabular-nums font-semibold ${group.tone}`}
+                        className={`mt-2 block tabular-nums font-semibold ${group.tone}`}
                       >
-                        {movementLabel(item.rankDelta7d)}
+                        {formatRankMovement(item.rankDelta7d)}
                       </span>
+                      <span className="mt-1 block text-caption tabular-nums text-muted">{formatRankTransition(item) ?? `현재 ${item.rank.toLocaleString("ko-KR")}위`}</span>
+                      <span className="mt-1 block text-caption tabular-nums text-muted">{formatMarketCapMovement(item.marketCapDeltaPct7d)}</span>
+                      {item.historySnapshotDate && item.snapshotDate ? <span className="mt-2 block text-caption text-muted">{item.historySnapshotDate} → {item.snapshotDate}</span> : null}
                     </Link>
                   ))
                 ) : (
                   <p className="text-xs text-muted">
-                    {`이 랭킹에서 순위가 ${group.label}한 단지가 없어요.`}
+                    {`이 공개 랭킹에서 ${group.label}한 단지가 없어요.`}
                   </p>
                 )}
               </div>
             </div>
           ))}
         </div>
+        <p className="ko-copy mt-4 text-caption text-muted">순위는 비교 대상 단지 구성의 영향도 받아요. 시총 변화는 단지 전체의 추정 가치 변화이며, 집 한 채의 가격 변동률과 달라요.</p>
         </> : <details>
-          <summary className="cursor-pointer text-control font-semibold text-ink">이번 주 눈에 띄는 단지 · {state.status === "loading" && !universeUnavailable ? "공개 자료 확인 중" : state.status === "error" || universeUnavailable ? "공개 자료를 불러오지 못했어요" : knownMovement.length ? "순위 변화 없음" : "지난주 비교 자료 준비 중"}</summary>
+          <summary className="cursor-pointer text-control font-semibold text-ink">이번 주 순위가 많이 바뀐 단지 · {state.status === "loading" && !universeUnavailable ? "공개 자료 확인 중" : state.status === "error" || universeUnavailable ? "공개 자료를 불러오지 못했어요" : knownMovement.length ? "순위 변화 없음" : "지난주 비교 자료 준비 중"}</summary>
           <p className="ko-copy mt-3 text-sm text-muted">지난주와 비교할 자료가 있으면 순위가 오른·내린 단지를 보여드려요. 자료가 없는 경우와 순위가 그대로인 경우는 구분합니다. 집값의 상승·하락을 뜻하지 않아요.</p>
         </details>}
       </section>
@@ -397,7 +398,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
         />
         <div className="mt-5 grid grid-cols-3 divide-x divide-slate-200/70 py-3">
           {[
-            { label: "상승 ▲", value: movementCounts.rising, tone: "text-up" },
+            { label: "순위 상승 ▲", value: movementCounts.rising, tone: "text-up" },
             {
               label: "그대로",
               value:
@@ -406,7 +407,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
                 movementCounts.falling,
               tone: "text-muted",
             },
-            { label: "하락 ▼", value: movementCounts.falling, tone: "text-down" },
+            { label: "순위 하락 ▼", value: movementCounts.falling, tone: "text-down" },
           ].map((metric) => (
             <div
               key={metric.label}
@@ -428,8 +429,8 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
         </p>
         {state.status === "ready" && knownMovement.length && !movementCounts.rising && !movementCounts.falling ? <p className="mt-2 text-caption text-muted">비교할 수 있는 단지들의 순위는 지난주와 같아요.</p> : null}
         <div className="mt-4 flex flex-wrap gap-5 text-control font-semibold text-accent">
-          <Link className="ko-text-link" href={`${rankingHref}&movement=up`}>상승 단지 보기 ↗</Link>
-          <Link className="ko-text-link" href={`${rankingHref}&movement=down`}>하락 단지 보기 ↗</Link>
+          <Link className="ko-text-link" href={`${rankingHref}&movement=up`}>순위 상승 단지 보기 ↗</Link>
+          <Link className="ko-text-link" href={`${rankingHref}&movement=down`}>순위 하락 단지 보기 ↗</Link>
           <Link className="ko-text-link" href={rankingHref}>전체 랭킹에서 확인 ↗</Link>
         </div>
         </> : <details>
@@ -484,6 +485,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
         )}
       </section>
       {comparisonOpen ? <ComparisonSheet open items={comparisonItems} onClose={() => setComparisonOpen(false)} onRemoveItem={(item) => { toggleComparison(item as RankingItem); setComparisonOpen(false); }} onClear={() => { setComparisonItems([]); setComparisonOpen(false); }} /> : null}
+      {state.status === "ready" && boardDate && tickerItems.length ? <HomeV2MovementTicker key={universeCode + boardDate} items={tickerItems} snapshotDate={boardDate} universeLabel={universeLabel} universeCode={universeCode} /> : null}
     </Fragment>
   );
 }

@@ -22,6 +22,7 @@ type HomeV2SearchProps = {
 
 type SearchPayload = RegionAliasApiMetadata & {
   ok?: boolean;
+  degraded?: boolean;
   message?: string;
   localItems?: RankingItem[];
   globalItems?: RankingItem[];
@@ -55,18 +56,38 @@ export function HomeV2Search({
 }: HomeV2SearchProps) {
   const isLanding = presentation === "landing";
   const searchRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const requestVersion = useRef(0);
   const [query, setQuery] = useState("");
+  const [composing, setComposing] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const requestQuery = isLanding ? query.trim() : query;
   const [state, setState] = useState<SearchState>(INITIAL_STATE);
-  const [popupLayout, setPopupLayout] = useState({ above: false, maxHeight: 384 });
+  const [popupLayout, setPopupLayout] = useState({ above: false, maxHeight: 384, top: 0, bottom: 0 });
+
+  function changeQuery(value: string) {
+    if (isLanding && value.trim() === query.trim()) {
+      setQuery(value);
+      setDismissed(false);
+      return;
+    }
+    requestVersion.current += 1;
+    setQuery(value);
+    setDismissed(false);
+    setState(value.trim().length >= 2 ? { status: "loading", payload: null, message: null } : INITIAL_STATE);
+  }
 
   useEffect(() => {
-    const normalized = query.trim();
-    if (normalized.length < 2) {
+    const normalized = requestQuery.trim();
+    if (normalized.length < 2 || (isLanding && composing)) {
       return;
     }
 
     const controller = new AbortController();
+    const version = requestVersion.current;
+    const isCurrent = () => active && requestVersion.current === version;
     let active = true;
     const debounce = window.setTimeout(() => {
       setState({ status: "loading", payload: null, message: null });
@@ -76,6 +97,7 @@ export function HomeV2Search({
         universe_code: universeCode,
         limit: "8",
       });
+      if (isLanding) params.set("mode", "autocomplete");
 
       void fetch(`/api/search?${params.toString()}`, {
         cache: "no-store",
@@ -85,7 +107,7 @@ export function HomeV2Search({
           const payload = (await response.json()) as SearchPayload;
           const clarification = readCurrentSearchClarificationResult(response, payload);
           if (clarification) {
-            if (active) {
+            if (isCurrent()) {
               setState({
                 status: "ready",
                 payload: {
@@ -98,12 +120,12 @@ export function HomeV2Search({
             }
             return;
           }
-          if (!response.ok || payload.ok !== true) {
+          if (!response.ok || payload.ok !== true || (isLanding && payload.degraded)) {
             throw new Error(
               "검색을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
             );
           }
-          if (active) {
+          if (isCurrent()) {
             setState({
               status: "ready",
               payload,
@@ -112,12 +134,12 @@ export function HomeV2Search({
           }
         })
         .catch((error: unknown) => {
-          if (active) {
+          if (isCurrent()) {
             setState({
               status: "error",
               payload: null,
               message:
-                error instanceof Error && error.name === "AbortError"
+                isLanding ? "검색 미리보기를 불러오지 못했어요. 다시 시도하거나 검색 버튼·엔터로 계속해 보세요." : error instanceof Error && error.name === "AbortError"
                   ? "검색 응답이 지연되고 있습니다. 다시 검색해 주세요."
                   : "검색을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
             });
@@ -131,7 +153,7 @@ export function HomeV2Search({
       window.clearTimeout(debounce);
       controller.abort();
     };
-  }, [query, universeCode]);
+  }, [requestQuery, universeCode, isLanding, composing, retry]);
 
   const rankedItems = useMemo(() => {
     if (state.status !== "ready") return [];
@@ -152,7 +174,7 @@ export function HomeV2Search({
     state.status === "ready"
       ? (state.payload.discoveryCandidates ?? []).slice(0, 3)
       : [];
-  const showResults = query.trim().length >= 2 && state.status !== "idle";
+  const showResults = query.trim().length >= 2 && state.status !== "idle" && (!isLanding || (!dismissed && !composing));
   const clarificationChoices = state.status === "ready" ? state.payload.clarificationChoices ?? [] : [];
   const fullSearchHref = `/ranking?${new URLSearchParams({ universe: universeCode, q: query.trim() })}`;
 
@@ -162,16 +184,19 @@ export function HomeV2Search({
     const updateLayout = () => {
       if (!searchRef.current) return;
       const bounds = searchRef.current.getBoundingClientRect();
+      const anchor = isLanding && formRef.current ? formRef.current.getBoundingClientRect() : bounds;
       const viewportTop = viewport?.offsetTop ?? 0;
       const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight);
-      const below = Math.max(0, viewportBottom - bounds.bottom - 20);
-      const above = Math.max(0, bounds.top - viewportTop - 20);
+      const below = Math.max(0, viewportBottom - anchor.bottom - 20);
+      const above = Math.max(0, anchor.top - viewportTop - 20);
       const openAbove = below < 160 && above > below;
       const maxHeight = Math.floor(Math.min(384, openAbove ? above : below));
+      const top = anchor.bottom - bounds.top + 8;
+      const bottom = bounds.bottom - anchor.top + 8;
       setPopupLayout((previous) =>
-        previous.above === openAbove && previous.maxHeight === maxHeight
+        previous.above === openAbove && previous.maxHeight === maxHeight && previous.top === top && previous.bottom === bottom
           ? previous
-          : { above: openAbove, maxHeight },
+          : { above: openAbove, maxHeight, top, bottom },
       );
     };
     updateLayout();
@@ -185,38 +210,52 @@ export function HomeV2Search({
       viewport?.removeEventListener("resize", updateLayout);
       viewport?.removeEventListener("scroll", updateLayout);
     };
-  }, [showResults]);
+  }, [showResults, isLanding]);
+
+  useEffect(() => {
+    if (!isLanding || !showResults) return;
+    const dismissOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !searchRef.current?.contains(event.target)) setDismissed(true);
+    };
+    document.addEventListener("pointerdown", dismissOutside);
+    return () => document.removeEventListener("pointerdown", dismissOutside);
+  }, [isLanding, showResults]);
 
   return (
     <div ref={searchRef} data-presentation={isLanding ? "landing" : undefined} className="relative mt-6 max-w-2xl">
       <label htmlFor="home-v2-search" className="mb-2 block text-control font-semibold text-ink">
         우리 단지 찾기
       </label>
-      <form action="/ranking" className="flex items-center gap-2 rounded-xl border border-[var(--ko-border)] bg-surface px-4 py-2 focus-within:border-accent focus-within:ring-1 focus-within:ring-[var(--ko-focus)]">
+      <form ref={formRef} action="/ranking" onSubmit={isLanding ? (event) => {
+        if ((inputRef.current?.value ?? query).trim().length < 2) { event.preventDefault(); inputRef.current?.focus(); }
+      } : undefined} className="flex items-center gap-2 rounded-xl border border-[var(--ko-border)] bg-surface px-4 py-2 focus-within:border-accent focus-within:ring-1 focus-within:ring-[var(--ko-focus)]">
         <input type="hidden" name="universe" value={universeCode} />
         <input
           ref={inputRef}
           id="home-v2-search"
           name="q"
           value={query}
-          onChange={(event) => {
-            const nextQuery = event.target.value;
-            setQuery(nextQuery);
-            setState(nextQuery.trim().length >= 2 ? { status: "loading", payload: null, message: null } : INITIAL_STATE);
-          }}
+          onChange={(event) => changeQuery(event.target.value)}
+          onInput={isLanding ? (event) => changeQuery(event.currentTarget.value) : undefined}
+          onCompositionStart={isLanding ? () => setComposing(true) : undefined}
+          onCompositionEnd={isLanding ? () => setComposing(false) : undefined}
+          onFocus={isLanding ? () => setDismissed(false) : undefined}
+          minLength={isLanding ? 2 : undefined}
+          enterKeyHint={isLanding ? "search" : undefined}
           placeholder="아파트 이름이나 지역을 입력해 보세요"
           autoComplete="off"
           aria-controls="home-v2-search-results"
           aria-busy={state.status === "loading"}
           onKeyDown={(event) => {
+            if (isLanding && event.key === "Enter" && event.nativeEvent.isComposing) event.preventDefault();
             if (event.key === "Escape") {
-              setQuery("");
-              setState(INITIAL_STATE);
+              if (isLanding) setDismissed(true);
+              else changeQuery("");
             }
           }}
           className="min-w-0 flex-1 bg-transparent text-lg text-ink outline-none placeholder:text-muted"
         />
-        {query ? <button type="button" aria-label="검색어 지우기" onClick={() => { setQuery(""); setState(INITIAL_STATE); }} className="ko-icon-button text-sm text-muted">×</button> : null}
+        {query ? <button type="button" aria-label="검색어 지우기" onClick={() => changeQuery("")} className="ko-icon-button text-sm text-muted">×</button> : null}
         <button type="submit" aria-label="전체 랭킹에서 검색" className="shrink-0 rounded-lg bg-[var(--ko-accent-soft)] px-4 text-control font-semibold text-accent">
           검색
         </button>
@@ -232,8 +271,7 @@ export function HomeV2Search({
               key={example.complexId}
               type="button"
               onClick={() => {
-                setQuery(example.name);
-                setState(INITIAL_STATE);
+                changeQuery(example.name);
                 inputRef.current?.focus();
               }}
               className="rounded-full border border-[var(--ko-border)] px-3 py-2 text-control font-semibold text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ko-focus)]"
@@ -252,8 +290,8 @@ export function HomeV2Search({
           aria-live="polite"
           aria-busy={state.status === "loading"}
           style={{
-            top: popupLayout.above ? "auto" : "calc(100% + var(--ko-space-1))",
-            bottom: popupLayout.above ? "calc(100% + 8px)" : "auto",
+            top: popupLayout.above ? "auto" : isLanding ? popupLayout.top : "calc(100% + var(--ko-space-1))",
+            bottom: popupLayout.above ? (isLanding ? popupLayout.bottom : "calc(100% + 8px)") : "auto",
             maxHeight: popupLayout.maxHeight,
           }}
           className="absolute left-0 right-0 z-30 overflow-y-auto overscroll-contain border border-[var(--ko-border)] bg-surface p-3 shadow-[0_18px_45px_rgba(15,23,42,0.13)]"
@@ -262,7 +300,13 @@ export function HomeV2Search({
             <SearchProgress />
           ) : null}
           {state.status === "error" ? (
-            <p className="py-4 text-xs text-down">{state.message}</p>
+            <div className="py-4 text-xs text-down">
+              <p role="status">{state.message}</p>
+              {isLanding ? <div className="mt-3 flex flex-wrap items-center gap-4">
+                <button type="button" className="ko-text-link min-h-11 text-control" onClick={() => { requestVersion.current += 1; setState({ status: "loading", payload: null, message: null }); setRetry((value) => value + 1); }}>미리보기 다시 시도</button>
+                <Link href={fullSearchHref} className="ko-text-link min-h-11 py-2 text-control">전체 랭킹에서 검색 ↗</Link>
+              </div> : null}
+            </div>
           ) : null}
           {state.status === "ready" ? (
             <>
@@ -299,7 +343,7 @@ export function HomeV2Search({
               {clarificationChoices.length ? <p className="ko-copy py-2 text-sm text-muted">{state.message}</p> : null}
               {clarificationChoices.map((choice) => choice.compatibility === "INCOMPATIBLE"
                 ? <Link key={choice.canonicalRegionCode} href={`/ranking?${new URLSearchParams({ universe: "KOREA_ALL", q: choice.replacementQuery })}`} className="block border-b border-[var(--ko-border)] py-3 text-xs text-accent">전국에서 {choice.qualifiedNameKo} 검색 ↗</Link>
-                : <button key={choice.canonicalRegionCode} type="button" onClick={() => { setQuery(choice.replacementQuery); setState(INITIAL_STATE); }} className="block w-full border-b border-[var(--ko-border)] py-3 text-left text-xs text-ink hover:text-accent">{choice.qualifiedNameKo}</button>)}
+                : <button key={choice.canonicalRegionCode} type="button" onClick={() => changeQuery(choice.replacementQuery)} className="block w-full border-b border-[var(--ko-border)] py-3 text-left text-xs text-ink hover:text-accent">{choice.qualifiedNameKo}</button>)}
               {discoveryItems.map((item) => (
                 <div
                   key={item.discoveryId}

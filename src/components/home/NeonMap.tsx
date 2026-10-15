@@ -1,8 +1,10 @@
 "use client";
 
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Map, CustomOverlayMap, useKakaoLoader } from "react-kakao-maps-sdk";
+import { getMapGeocodeQueries, mapChangeLabel } from "../../lib/koaptix/mapPresentation";
+import { Map, CustomOverlayMap, ZoomControl, useKakaoLoader } from "react-kakao-maps-sdk";
 import type { DiscoveryCandidate, RankingItem } from "../../lib/koaptix/types";
 import type {
   RegionAliasApiMetadata,
@@ -26,6 +28,9 @@ type DistrictAggregate = {
   query: string;
   totalMarketCap: number;
   averageDelta: number;
+  marketCapChangePct7d?: number | null;
+  comparableComplexCount?: number;
+  comparisonDate?: string | null;
   count: number;
 
   boardCount?: number;
@@ -51,6 +56,7 @@ type TopNOption = {
 };
 
 type MapApiResponse = {
+  snapshot_date?: string;
   ok?: boolean;
   universeCode?: string;
   requestedUniverseCode?: string;
@@ -87,6 +93,7 @@ type MapSearchResultPayload = {
 };
 
 type MapDeliveryState = {
+  snapshotDate: string | null;
   requestedUniverseCode: string;
   renderedUniverseCode: string;
   mapScopeLabel: string;
@@ -140,87 +147,15 @@ const DEFAULT_KOREA_CENTER: Coord = { lat: 36.35, lng: 127.85 };
 const REGIONAL_MAP_FETCH_TIMEOUT_MS = 7000;
 const KOREA_ALL_MAP_FETCH_TIMEOUT_MS = 10000;
 
-const KOREA_ALL_SCOPE_COORDS: {
-  tokens: string[];
-  center: Coord;
-  spreadLat: number;
-  spreadLng: number;
-}[] = [
-  { tokens: ["서울"], center: { lat: 37.5665, lng: 126.978 }, spreadLat: 0.12, spreadLng: 0.16 },
-  { tokens: ["부산"], center: { lat: 35.1796, lng: 129.0756 }, spreadLat: 0.12, spreadLng: 0.16 },
-  { tokens: ["대구"], center: { lat: 35.8714, lng: 128.6014 }, spreadLat: 0.12, spreadLng: 0.16 },
-  { tokens: ["인천"], center: { lat: 37.4563, lng: 126.7052 }, spreadLat: 0.12, spreadLng: 0.16 },
-  { tokens: ["광주"], center: { lat: 35.1595, lng: 126.8526 }, spreadLat: 0.12, spreadLng: 0.16 },
-  { tokens: ["대전"], center: { lat: 36.3504, lng: 127.3845 }, spreadLat: 0.12, spreadLng: 0.16 },
-  { tokens: ["울산"], center: { lat: 35.5384, lng: 129.3114 }, spreadLat: 0.12, spreadLng: 0.16 },
-  { tokens: ["세종"], center: { lat: 36.4801, lng: 127.289 }, spreadLat: 0.08, spreadLng: 0.1 },
-  { tokens: ["경기"], center: { lat: 37.2751, lng: 127.0095 }, spreadLat: 0.28, spreadLng: 0.34 },
-  { tokens: ["강원"], center: { lat: 37.8854, lng: 127.7298 }, spreadLat: 0.28, spreadLng: 0.36 },
-  { tokens: ["충북", "충청북"], center: { lat: 36.6357, lng: 127.4914 }, spreadLat: 0.22, spreadLng: 0.28 },
-  { tokens: ["충남", "충청남"], center: { lat: 36.6588, lng: 126.6728 }, spreadLat: 0.22, spreadLng: 0.3 },
-  { tokens: ["전북", "전라북"], center: { lat: 35.8204, lng: 127.1088 }, spreadLat: 0.22, spreadLng: 0.28 },
-  { tokens: ["전남", "전라남"], center: { lat: 34.8161, lng: 126.463 }, spreadLat: 0.24, spreadLng: 0.32 },
-  { tokens: ["경북", "경상북"], center: { lat: 36.576, lng: 128.5056 }, spreadLat: 0.28, spreadLng: 0.36 },
-  { tokens: ["경남", "경상남"], center: { lat: 35.2383, lng: 128.6924 }, spreadLat: 0.24, spreadLng: 0.32 },
-  { tokens: ["제주"], center: { lat: 33.4996, lng: 126.5312 }, spreadLat: 0.1, spreadLng: 0.14 },
-];
-
-function stableStringHash(value: string) {
-  let hash = 0;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-
-  return hash;
-}
-
-function spreadAroundScopeCenter(
-  center: Coord,
-  label: string,
-  spreadLat: number,
-  spreadLng: number,
-): Coord {
-  const hash = stableStringHash(label);
-  const angle = ((hash % 360) * Math.PI) / 180;
-  const ring = 0.35 + (((hash >>> 8) % 65) / 100);
-
-  return {
-    lat: Number((center.lat + Math.sin(angle) * spreadLat * ring).toFixed(6)),
-    lng: Number((center.lng + Math.cos(angle) * spreadLng * ring).toFixed(6)),
-  };
-}
-
-function getNationalFallbackCoords(
-  universeCode: string,
-  districtName: string,
-): Coord | null {
-  if (universeCode !== DEFAULT_UNIVERSE_CODE) return null;
-
-  const normalizedName = districtName.replace(/\s+/g, "");
-  const scope = KOREA_ALL_SCOPE_COORDS.find(({ tokens }) =>
-    tokens.some((token) => normalizedName.includes(token)),
-  );
-
-  if (!scope) return null;
-
-  return spreadAroundScopeCenter(
-    scope.center,
-    normalizedName,
-    scope.spreadLat,
-    scope.spreadLng,
-  );
-}
-
 function getFixedDistrictCoords(
   universeCode: string,
   districtName: string,
 ): Coord | null {
   if (universeCode === "SEOUL_ALL") {
-    return SEOUL_DISTRICT_COORDS[districtName] ?? null;
+    return SEOUL_DISTRICT_COORDS[districtName.replace(/^서울\s+/, "")] ?? null;
   }
 
-  if (universeCode === DEFAULT_UNIVERSE_CODE) {
+  if (universeCode === DEFAULT_UNIVERSE_CODE && /^서울\s+/.test(districtName)) {
     const normalizedName = districtName.replace(/^서울\s+/, "").trim();
     return SEOUL_DISTRICT_COORDS[normalizedName] ?? null;
   }
@@ -262,7 +197,7 @@ function getDesiredMapSourceLimit(topN: number, universeCode: string) {
 }
 
 const MAP_API = (universeCode: string, limit: number) =>
-  `/api/map?universe_code=${encodeURIComponent(universeCode)}&limit=${encodeURIComponent(limit)}`;
+  `/api/map?universe_code=${encodeURIComponent(universeCode)}&limit=${encodeURIComponent(limit)}&include_changes=1`;
 
 function formatMarketCapKrw(value: number) {
   if (!Number.isFinite(value) || value <= 0) return "0원";
@@ -459,6 +394,10 @@ function buildUrlWithComplex(item: RankingItem, fallbackUniverseCode: string) {
 }
 
 function pushComplexToUrl(item: RankingItem, fallbackUniverseCode: string) {
+  if (window.location.pathname === "/map") {
+    window.location.assign("/ranking?" + new URLSearchParams({ universe: getRankingItemUniverseCode(item, fallbackUniverseCode), complexId: item.complexId }));
+    return;
+  }
   const nextUrl = buildUrlWithComplex(item, fallbackUniverseCode);
 
   if (`${window.location.pathname}${window.location.search}` !== nextUrl) {
@@ -630,6 +569,7 @@ async function readMapItems(input: string, signal: AbortSignal) {
   return {
     items,
     delivery: {
+      snapshotDate: json.snapshot_date ?? null,
       requestedUniverseCode,
       renderedUniverseCode,
       mapScopeLabel: json.mapScopeLabel ?? getUniverseLabel(renderedUniverseCode),
@@ -666,14 +606,14 @@ function getBubbleSizeRange(universeCode: string, frameWidth: number) {
 
   if (universeCode === DEFAULT_UNIVERSE_CODE) {
     return {
-      min: Math.round(clamp(safeFrameWidth * 0.04, 38, 52)),
-      max: Math.round(clamp(safeFrameWidth * 0.088, 72, 96)),
+      min: Math.round(clamp(safeFrameWidth * 0.08, 92, 108)),
+      max: Math.round(clamp(safeFrameWidth * 0.14, 140, 176)),
     };
   }
 
   return {
-    min: Math.round(clamp(safeFrameWidth * 0.052, 48, 68)),
-    max: Math.round(clamp(safeFrameWidth * 0.135, 96, 138)),
+    min: Math.round(clamp(safeFrameWidth * 0.09, 96, 120)),
+    max: Math.round(clamp(safeFrameWidth * 0.16, 150, 196)),
   };
 }
 
@@ -684,6 +624,7 @@ function buildMapDeliveryState(
   const renderedUniverseCode = overrides.renderedUniverseCode ?? universeCode;
 
   return {
+    snapshotDate: overrides.snapshotDate ?? null,
     requestedUniverseCode: overrides.requestedUniverseCode ?? universeCode,
     renderedUniverseCode,
     mapScopeLabel:
@@ -935,6 +876,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   const [loading, error] = useKakaoLoader({
     appkey: process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY as string,
     libraries: ["services"],
+    retries: 0,
   });
 
   const [mapView, setMapView] = useState<{
@@ -973,7 +915,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   // universe transitions, because region labels can repeat with different map
   // identity.
   const resolvedCoordStorageKey = useMemo(
-    () => `koaptix:neon-map:coords:${currentUniverseCode}`,
+    () => `koaptix:neon-map:coords:v2:${currentUniverseCode}`,
     [currentUniverseCode],
   );
 
@@ -1075,15 +1017,13 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         if (cancelled) return;
         setMapItems(result.items);
         setMapDelivery(result.delivery);
-      } catch (error) {
+      } catch {
         // Unmount abort: return silently, board-seed fallback already rendered.
         if (cancelled || (!timedOut && controller.signal.aborted)) return;
 
         const message = timedOut
-          ? "Map request timed out"
-          : error instanceof Error
-            ? error.message
-            : "맵 데이터 로딩 실패";
+          ? "지도 자료 조회가 지연되고 있어요. 새로고침해 주세요."
+          : "지도 자료를 불러오지 못했어요. 새로고침해 주세요.";
 
         console.warn("[NeonMap] map fetch warn", {
           currentUniverseCode: effectiveUniverseCode,
@@ -1102,9 +1042,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
           }),
         );
 
-        if (!timedOut) {
-          setMapItemsError(message);
-        }
+        setMapItemsError(message);
       } finally {
         clearTimeout(timeoutId);
       }
@@ -1145,7 +1083,6 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       .filter((group) => {
         if (!group.query) return false;
         if (getFixedDistrictCoords(currentUniverseCode, group.name)) return false;
-        if (getNationalFallbackCoords(currentUniverseCode, group.name)) return false;
 
         const coordKey = getCoordCacheKey(currentUniverseCode, group);
         if (resolvedCoordsRef.current[coordKey]) return false;
@@ -1157,7 +1094,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     if (unresolved.length === 0) return;
 
     const geocodeOne = async (group: DistrictAggregate) => {
-      const tryQueries = [group.query, group.name].filter(Boolean);
+      const tryQueries = getMapGeocodeQueries(group);
 
       for (const query of tryQueries) {
         const coord = await new Promise<Coord | null>((resolve) => {
@@ -1221,7 +1158,6 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         const coords =
           getFixedDistrictCoords(currentUniverseCode, group.name) ??
           resolvedCoords[coordKey] ??
-          getNationalFallbackCoords(currentUniverseCode, group.name) ??
           null;
 
         if (!coords) return null;
@@ -1269,14 +1205,14 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     if (selectedDistrictDataFromAll) {
       setMapView({
         center: selectedDistrictDataFromAll.coords,
-        level: 8,
+        level: 7,
       });
       return;
     }
 
     setMapView({
-      center: universeAnchorCenter,
-      level: 13,
+      center: currentUniverseCode === DEFAULT_UNIVERSE_CODE ? DEFAULT_KOREA_CENTER : universeAnchorCenter,
+      level: currentUniverseCode === DEFAULT_UNIVERSE_CODE ? 13 : currentUniverseCode.startsWith("SGG_") ? 7 : /GYEONG|GANGWON|CHUNG|JEON/.test(currentUniverseCode) ? 10 : 8,
     });
   }, [
     currentUniverseCode,
@@ -1347,12 +1283,6 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     return [...visualizedMapData].sort(
       (a, b) => a.totalMarketCap - b.totalMarketCap,
     );
-  }, [visualizedMapData]);
-
-  const actionableCount = useMemo(() => {
-    return visualizedMapData.filter(
-      (item) => item.isBoardBacked && (item.boardCount ?? 0) > 0,
-    ).length;
   }, [visualizedMapData]);
 
   const hasCurrentMapSearchResultScope =
@@ -1602,7 +1532,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   };
 
   const handleDistrictClick = useCallback((data: ResolvedMapItem) => {
-    if (!data.isBoardBacked || (data.boardCount ?? 0) <= 0) {
+    if (!data.primaryComplexId || !data.primaryRank) {
       return;
     }
 
@@ -1662,7 +1592,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                 aria-label={`${choice.qualifiedNameKo} 지역으로 지도 검색어 구체화`}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => handleMapClarificationSelect(choice)}
-                className="rounded-lg border border-amber-300/30 px-2 py-1 text-left text-[11px] disabled:cursor-not-allowed disabled:opacity-45"
+                className="rounded-lg border border-amber-300/30 px-2 py-1 text-left text-[13px] disabled:cursor-not-allowed disabled:opacity-45"
               >
                 {choice.qualifiedNameKo}
               </button>
@@ -1678,7 +1608,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
     return (
       <div>
-        <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-200/80">
+        <p className="px-2 pb-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-200/80">
           랭킹 산정 전 후보
         </p>
         <div className="space-y-1">
@@ -1702,24 +1632,24 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               >
                 <span className="flex min-w-0 items-start justify-between gap-3">
                   <span className="min-w-0">
-                    <span className="mb-1 inline-flex rounded-full border border-amber-300/40 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                    <span className="mb-1 inline-flex rounded-full border border-amber-300/40 px-2 py-0.5 text-xs font-semibold text-amber-200">
                       관측 준비중
                     </span>
                     <span className="block truncate font-semibold text-slate-100">
                       {candidate.displayName}
                     </span>
-                    <span className="block truncate text-[11px] text-slate-500">
+                    <span className="block truncate text-[13px] text-slate-400">
                       {candidate.regionLabel}
                     </span>
                   </span>
                 </span>
-                <span className="mt-2 block text-[11px] leading-relaxed text-amber-100/80">
+                <span className="mt-2 block text-[13px] leading-relaxed text-amber-100/80">
                   {candidate.copy.message}
                 </span>
                 {isSelected && (
-                  <span className="mt-2 block rounded-lg border border-amber-300/20 bg-black/20 px-2 py-2 text-[11px] leading-relaxed text-slate-300">
+                  <span className="mt-2 block rounded-lg border border-amber-300/20 bg-black/20 px-2 py-2 text-[13px] leading-relaxed text-slate-300">
                     {candidate.copy.helperText}
-                    <span className="mt-1 block text-slate-500">
+                    <span className="mt-1 block text-slate-400">
                       랭킹 상세는 아직 열리지 않습니다.
                     </span>
                   </span>
@@ -1804,19 +1734,19 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         data-map-source-rows-used="0"
       >
         <div className="shrink-0 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
-            TACTICAL RADAR
+          <p className="text-[13px] uppercase tracking-[0.24em] text-slate-400">
+            KAKAO NEON MAP
           </p>
           <h2 className="mt-1 text-lg font-semibold text-slate-100">
-            전국 자본 흐름 맵
+            지역별 시가총액 네온맵
           </h2>
-          <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 lg:max-w-xl">
+          <div className="mt-3 grid grid-cols-1 gap-2 text-[13px] sm:grid-cols-2 lg:max-w-xl">
             <div
               className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
               data-testid="neon-map-requested-universe"
               data-universe-code={currentUniverseCode}
             >
-              <span className="block uppercase tracking-[0.16em] text-slate-500">
+              <span className="block uppercase tracking-[0.16em] text-slate-400">
                 Requested
               </span>
               <span className="mt-1 block truncate font-semibold text-slate-300">
@@ -1828,7 +1758,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               data-testid="neon-map-rendered-universe"
               data-universe-code=""
             >
-              <span className="block uppercase tracking-[0.16em] text-slate-500">
+              <span className="block uppercase tracking-[0.16em] text-slate-400">
                 Map scope
               </span>
               <span className="mt-1 block truncate font-semibold text-slate-300">
@@ -1875,13 +1805,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       >
         <div className="shrink-0 flex flex-col gap-4 border-b border-slate-800/80 px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
-              TACTICAL RADAR
-            </p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-100">
-              전국 자본 흐름 맵
-            </h2>
-            <p className="mt-2 text-[11px] text-slate-500">
+            <p className="mt-2 text-[13px] text-slate-400">
               지도 제공자가 잠시 응답하지 않아도 검색은 현재 관측 데이터 기준으로 계속 사용할 수 있어요.
             </p>
 
@@ -1896,7 +1820,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                 지도 검색
               </label>
               <div className="flex min-h-16 w-full min-w-0 items-center gap-3 rounded-2xl border border-cyan-400/35 bg-slate-950/90 px-4 py-3 text-sm shadow-[0_16px_42px_rgba(0,0,0,0.34)] ring-1 ring-cyan-400/10">
-                <span className="shrink-0 rounded-full border border-cyan-400/35 bg-cyan-400/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-100">
+                <span className="shrink-0 rounded-full border border-cyan-400/35 bg-cyan-400/12 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-cyan-100">
                   Map
                 </span>
                 <input
@@ -1925,7 +1849,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                       setMapSearchQuery("");
                       setIsMapSearchOpen(true);
                     }}
-                    className="shrink-0 rounded-full border border-slate-700 bg-slate-900/85 px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-200"
+                    className="shrink-0 rounded-full border border-slate-700 bg-slate-900/85 px-3 py-2 text-[13px] font-semibold text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-200"
                   >
                     지우기
                   </button>
@@ -1943,7 +1867,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                     <div className="space-y-2">
                       {mapSearchSuggestions.complexes.length > 0 && (
                         <div>
-                          <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                          <p className="px-2 pb-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                             단지
                           </p>
                           <div className="space-y-1">
@@ -1961,11 +1885,11 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                                   <span className="block truncate font-semibold text-slate-100">
                                     {suggestion.label}
                                   </span>
-                                  <span className="block truncate text-[11px] text-slate-500">
+                                  <span className="block truncate text-[13px] text-slate-400">
                                     {suggestion.meta}
                                   </span>
                                 </span>
-                                <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-200">
+                                <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-0.5 text-xs font-semibold text-cyan-200">
                                   보기
                                 </span>
                               </button>
@@ -1976,7 +1900,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
                       {mapSearchSuggestions.districts.length > 0 && (
                         <div>
-                          <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                          <p className="px-2 pb-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                             지역
                           </p>
                           <div className="space-y-1">
@@ -1993,11 +1917,11 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                                   <span className="block truncate font-semibold text-slate-100">
                                     {suggestion.label}
                                   </span>
-                                  <span className="block truncate text-[11px] text-slate-500">
+                                  <span className="block truncate text-[13px] text-slate-400">
                                     {suggestion.meta}
                                   </span>
                                 </span>
-                                <span className="shrink-0 rounded-full bg-slate-700/60 px-2 py-0.5 text-[10px] font-semibold text-slate-200">
+                                <span className="shrink-0 rounded-full bg-slate-700/60 px-2 py-0.5 text-xs font-semibold text-slate-200">
                                   지도
                                 </span>
                               </button>
@@ -2017,27 +1941,27 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   {isMapSearchRemotePending && (
                     <p
                       data-testid="neon-map-local-search-remote-pending"
-                      className="mt-2 px-2 text-[10px] leading-relaxed text-cyan-300/70"
+                      className="mt-2 px-2 text-xs leading-relaxed text-cyan-300/70"
                     >
                       TOP1000 search expanding...
                     </p>
                   )}
 
-                  <p className="mt-2 border-t border-slate-800 px-2 pt-2 text-[10px] leading-relaxed text-slate-500">
+                  <p className="mt-2 border-t border-slate-800 px-2 pt-2 text-xs leading-relaxed text-slate-400">
                     공개 랭킹 기준 상위 결과를 보여드려요.
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 lg:max-w-xl">
+            <div className="mt-3 grid grid-cols-1 gap-2 text-[13px] sm:grid-cols-2 lg:max-w-xl">
               <div
                 className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
                 data-testid="neon-map-requested-universe"
                 data-universe-code={displayMapDelivery.requestedUniverseCode}
               >
-                <span className="block uppercase tracking-[0.16em] text-slate-500">
-                  Requested
+                <span className="block uppercase tracking-[0.16em] text-slate-400">
+                  선택 지역
                 </span>
                 <span className="mt-1 block truncate font-semibold text-slate-300">
                   {requestedUniverseLabel}
@@ -2049,8 +1973,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                 data-testid="neon-map-rendered-universe"
                 data-universe-code={displayMapDelivery.renderedUniverseCode}
               >
-                <span className="block uppercase tracking-[0.16em] text-slate-500">
-                  Map scope
+                <span className="block uppercase tracking-[0.16em] text-slate-400">
+                  지도 표시 지역
                 </span>
                 <span className="mt-1 block truncate font-semibold text-slate-300">
                   {renderedUniverseLabel}
@@ -2072,7 +1996,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
   if (loading) {
     return (
       <div
-        className="h-full min-h-[360px] w-full animate-pulse rounded-2xl border border-slate-800 bg-slate-900/50"
+        className="flex min-h-[520px] w-full items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/50"
+        role="status" aria-live="polite"
         data-testid="neon-map"
         data-universe-code={currentUniverseCode}
         data-requested-universe-code={currentUniverseCode}
@@ -2087,7 +2012,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         data-map-aggregation-grain={displayMapDelivery.aggregationGrain}
         data-map-source-row-limit={displayMapDelivery.sourceRowLimit ?? "unknown"}
         data-map-source-rows-used={displayMapDelivery.sourceRowsUsed ?? "unknown"}
-      />
+      ><span className="flex items-center gap-3 text-base text-slate-200"><span aria-hidden="true" className="size-6 animate-spin rounded-full border-2 border-slate-600 border-t-cyan-300 motion-reduce:animate-none" />카카오 지도를 불러오고 있어요…</span></div>
     );
   }
 
@@ -2114,14 +2039,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       <div className="shrink-0 flex flex-col gap-2 border-b border-slate-800/80 px-3 pb-3 pt-2 sm:gap-4 sm:px-5 sm:pb-5 sm:pt-3">
         <div className="flex flex-col justify-between gap-2 sm:gap-4">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
-              TACTICAL RADAR
-            </p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-100">
-              전국 자본 흐름 맵
-            </h2>
-            <p className="mt-2 text-[11px] text-slate-500">
-              원 안 큰 숫자는 {sampledAggregationLabel}을 지역별로 묶은 표시 시총이다. 지역 전체 총액이 아니다.
+            <p className="mt-2 text-[13px] text-slate-400">
+              {sampledAggregationLabel}을 지역별로 묶었어요. 지역 전체의 시총이나 실제 자금 이동을 뜻하지 않아요.
             </p>
 
             <div
@@ -2135,7 +2054,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                 지도 검색
               </label>
               <div className="flex min-h-11 w-full min-w-0 items-center gap-2 rounded-2xl border border-cyan-400/35 bg-slate-950/90 px-3 py-2 text-sm shadow-[0_16px_42px_rgba(0,0,0,0.34)] ring-1 ring-cyan-400/10 sm:min-h-16 sm:gap-3 sm:px-4 sm:py-3">
-                <span className="shrink-0 rounded-full border border-cyan-400/35 bg-cyan-400/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-100">
+                <span className="shrink-0 rounded-full border border-cyan-400/35 bg-cyan-400/12 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-cyan-100">
                   Map
                 </span>
                 <input
@@ -2164,7 +2083,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                       setMapSearchQuery("");
                       setIsMapSearchOpen(true);
                     }}
-                    className="shrink-0 rounded-full border border-slate-700 bg-slate-900/85 px-3 py-2 text-[11px] font-semibold text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-200"
+                    className="shrink-0 rounded-full border border-slate-700 bg-slate-900/85 px-3 py-2 text-[13px] font-semibold text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-200"
                   >
                     지우기
                   </button>
@@ -2182,7 +2101,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                     <div className="space-y-2">
                       {mapSearchSuggestions.complexes.length > 0 && (
                         <div>
-                          <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                          <p className="px-2 pb-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                             단지
                           </p>
                           <div className="space-y-1">
@@ -2200,11 +2119,11 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                                   <span className="block truncate font-semibold text-slate-100">
                                     {suggestion.label}
                                   </span>
-                                  <span className="block truncate text-[11px] text-slate-500">
+                                  <span className="block truncate text-[13px] text-slate-400">
                                     {suggestion.meta}
                                   </span>
                                 </span>
-                                <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-200">
+                                <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-0.5 text-xs font-semibold text-cyan-200">
                                   보기
                                 </span>
                               </button>
@@ -2215,7 +2134,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
 
                       {mapSearchSuggestions.districts.length > 0 && (
                         <div>
-                          <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                          <p className="px-2 pb-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                             지역
                           </p>
                           <div className="space-y-1">
@@ -2232,11 +2151,11 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                                   <span className="block truncate font-semibold text-slate-100">
                                     {suggestion.label}
                                   </span>
-                                  <span className="block truncate text-[11px] text-slate-500">
+                                  <span className="block truncate text-[13px] text-slate-400">
                                     {suggestion.meta}
                                   </span>
                                 </span>
-                                <span className="shrink-0 rounded-full bg-slate-700/60 px-2 py-0.5 text-[10px] font-semibold text-slate-200">
+                                <span className="shrink-0 rounded-full bg-slate-700/60 px-2 py-0.5 text-xs font-semibold text-slate-200">
                                   지도
                                 </span>
                               </button>
@@ -2256,48 +2175,23 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   {isMapSearchRemotePending && (
                     <p
                       data-testid="neon-map-local-search-remote-pending"
-                      className="mt-2 px-2 text-[10px] leading-relaxed text-cyan-300/70"
+                      className="mt-2 px-2 text-xs leading-relaxed text-cyan-300/70"
                     >
                       TOP1000 search expanding...
                     </p>
                   )}
 
-                  <p className="mt-2 border-t border-slate-800 px-2 pt-2 text-[10px] leading-relaxed text-slate-500">
+                  <p className="mt-2 border-t border-slate-800 px-2 pt-2 text-xs leading-relaxed text-slate-400">
                     공개 랭킹 기준 상위 결과를 보여드려요.
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] sm:mt-3 sm:grid-cols-2 lg:max-w-xl">
-              <div
-                className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
-                data-testid="neon-map-requested-universe"
-                data-universe-code={displayMapDelivery.requestedUniverseCode}
-              >
-                <span className="block uppercase tracking-[0.16em] text-slate-500">
-                  Requested
-                </span>
-                <span className="mt-1 block truncate font-semibold text-slate-300">
-                  {requestedUniverseLabel}
-                </span>
-              </div>
-
-              <div
-                className="min-w-0 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2"
-                data-testid="neon-map-rendered-universe"
-                data-universe-code={displayMapDelivery.renderedUniverseCode}
-              >
-                <span className="block uppercase tracking-[0.16em] text-slate-500">
-                  Map scope
-                </span>
-                <span className="mt-1 block truncate font-semibold text-slate-300">
-                  {renderedUniverseLabel}
-                </span>
-              </div>
-            </div>
           </div>
 
+        </div>
+        <details className="text-sm text-slate-300"><summary className="cursor-pointer py-2 font-semibold">표시 설정 · {visualizedMapData.length}개 지역 {showBubbles ? "표시 중" : "숨김"}</summary>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex gap-2">
               {TOP_N_OPTIONS.map((option) => (
@@ -2305,12 +2199,13 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   key={option.value}
                   type="button"
                   onClick={() => setTopN(option.value)}
-                  className={`rounded-full border px-3.5 py-1.5 text-[11px] font-semibold transition ${topN === option.value
+                  aria-pressed={topN === option.value}
+                  className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition ${topN === option.value
                     ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
                     : "border-slate-700 bg-slate-800/30 text-slate-400 hover:text-slate-200"
                     }`}
                 >
-                  TOP {option.label}
+                  최대 {option.label}개 지역
                 </button>
               ))}
             </div>
@@ -2318,7 +2213,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
             <button
               type="button"
               onClick={() => setShowBubbles((prev) => !prev)}
-              className={`rounded-full border px-3.5 py-1.5 text-[11px] font-semibold transition ${showBubbles
+              aria-pressed={showBubbles}
+              className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition ${showBubbles
                 ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
                 : "border-slate-700 bg-slate-800/30 text-slate-400"
                 }`}
@@ -2326,35 +2222,20 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
               표시 {showBubbles ? "ON" : "OFF"}
             </button>
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-          <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-cyan-300">
-            표시 지역 {actionableCount}개
-          </span>
-          <span className="rounded-full border border-slate-700 bg-slate-800/30 px-2.5 py-1 text-slate-400">
-            참고 지역 {Math.max(visualizedMapData.length - actionableCount, 0)}개
-          </span>
-          {mapItemsError && (
-            <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-rose-300">
-              {mapItemsError}
-            </span>
-          )}
-        </div>
-
+        <details className="w-full text-sm text-slate-300"><summary className="cursor-pointer py-2 font-semibold">시가총액 범위로 좁히기</summary>
         <div className="flex w-full flex-col gap-1.5 self-end sm:gap-3 lg:max-w-2xl">
-          <div className="flex items-center justify-between text-[10px] font-medium text-slate-400">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-400">
             <span className="flex flex-col">
-              <span className="text-[9px] text-slate-500">MIN</span>
+              <span className="text-xs text-slate-400">MIN</span>
               <span>{formatRangeLabel(RANGE_MIN_TRILLION)}</span>
             </span>
 
-            <span className="rounded-full bg-slate-800/50 px-2.5 py-1 text-[9px] text-slate-400">
+            <span className="rounded-full bg-slate-800/50 px-2.5 py-1 text-xs text-slate-400">
               💡 숫자 입력창 (1 = 천억, 10 = 1조)
             </span>
 
             <span className="flex flex-col text-right">
-              <span className="text-[9px] text-slate-500">MAX</span>
+              <span className="text-xs text-slate-400">MAX</span>
               <span>{formatRangeLabel(maxMapMarketCapTrillion)}</span>
             </span>
           </div>
@@ -2384,7 +2265,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   onChange={(e) => setEditingMin(e.target.value)}
                   onBlur={handleMinSubmit}
                   onKeyDown={(e) => e.key === "Enter" && handleMinSubmit()}
-                  className="w-[72px] rounded bg-slate-800 px-2 py-1 text-center text-[11px] font-semibold text-white outline-none ring-1 ring-cyan-500"
+                  className="w-[72px] rounded bg-slate-800 px-2 py-1 text-center text-[13px] font-semibold text-white outline-none ring-1 ring-cyan-500"
                 />
               ) : (
                 <button
@@ -2392,7 +2273,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   onClick={() =>
                     setEditingMin(formatEditableInputValue(rangeMinTrillion))
                   }
-                  className="inline-flex whitespace-nowrap items-center justify-center rounded bg-cyan-500/90 px-2 py-1 text-[11px] font-semibold leading-none text-white shadow hover:bg-cyan-400"
+                  className="inline-flex whitespace-nowrap items-center justify-center rounded bg-cyan-500/90 px-2 py-1 text-[13px] font-semibold leading-none text-white shadow hover:bg-cyan-400"
                 >
                   {formatSliderChipLabel(rangeMinTrillion)}
                 </button>
@@ -2414,7 +2295,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   onChange={(e) => setEditingMax(e.target.value)}
                   onBlur={handleMaxSubmit}
                   onKeyDown={(e) => e.key === "Enter" && handleMaxSubmit()}
-                  className="w-[72px] rounded bg-slate-800 px-2 py-1 text-center text-[11px] font-semibold text-white outline-none ring-1 ring-cyan-500"
+                  className="w-[72px] rounded bg-slate-800 px-2 py-1 text-center text-[13px] font-semibold text-white outline-none ring-1 ring-cyan-500"
                 />
               ) : (
                 <button
@@ -2422,7 +2303,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                   onClick={() =>
                     setEditingMax(formatEditableInputValue(rangeMaxTrillion))
                   }
-                  className="inline-flex whitespace-nowrap items-center justify-center rounded bg-cyan-500/90 px-2 py-1 text-[11px] font-semibold leading-none text-white shadow hover:bg-cyan-400"
+                  className="inline-flex whitespace-nowrap items-center justify-center rounded bg-cyan-500/90 px-2 py-1 text-[13px] font-semibold leading-none text-white shadow hover:bg-cyan-400"
                 >
                   {formatSliderChipLabel(rangeMaxTrillion)}
                 </button>
@@ -2443,7 +2324,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                 );
                 setRangeMinTrillion(next);
               }}
-              className="range-slider pointer-events-none absolute left-0 top-[12px] z-20 w-full"
+              aria-label="표시 시총 최솟값" className="range-slider pointer-events-none absolute left-0 top-[12px] z-20 w-full"
             />
 
             <input
@@ -2460,19 +2341,33 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                 );
                 setRangeMaxTrillion(next);
               }}
-              className="range-slider pointer-events-none absolute left-0 top-[12px] z-20 w-full"
+              aria-label="표시 시총 최댓값" className="range-slider pointer-events-none absolute left-0 top-[12px] z-20 w-full"
             />
           </div>
         </div>
+        </details>
+        </details>
+        {displayMapDelivery.source === "home-board-seed" && displayMapDelivery.fallbackMode === "client-board-seed" ? <p role="status" className="text-sm text-cyan-300">공개 시총 자료를 불러오고 있어요…</p> : null}
+        {mapItemsError ? <p role="alert" className="text-sm text-rose-300">{mapItemsError}</p> : null}
       </div>
 
-      <div ref={mapFrameRef} className="relative min-h-0 flex-1 bg-[#0b1118]">
+      <div className="border-y border-slate-700 px-4 py-4 text-sm leading-relaxed text-slate-300" data-testid="neon-map-legend">
+        <p className="font-semibold text-slate-100">{mapScopeLabel} · {displayMapDelivery.snapshotDate ? `${displayMapDelivery.snapshotDate} 기준` : "공개 자료 조회 중"}</p>
+        <p className="mt-2">원 크기: 공개 단지 시총 합계 · 색: 7일 시총 증감</p>
+        <details className="mt-2"><summary className="cursor-pointer underline underline-offset-4">지도 읽는 법 · 위치 확인 {baseMapData.length}/{mapItems.length}개 지역</summary>
+        <p><span style={{ color: "#6ee7b7" }}>▲ 증가</span>{" · "}<span style={{ color: "#fda4af" }}>▼ 감소</span>{" · "}회색: 변동 없음 또는 비교 자료 없음</p>
+          <p className="mt-2">같은 단지의 7일 전 값이 있는 경우만 비교해요. 원의 위치는 지역 대표 위치이며, 단지의 정확한 주소가 아닙니다. 가까운 지역의 원은 겹칠 수 있어요. 지도를 확대해 보세요.</p>
+          <p>크기는 읽기 쉽게 로그 비율로 조정했어요. 위치를 확인하지 못한 지역은 지도에 표시하지 않아요.</p>
+        </details>
+        {currentDistrict ? <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-cyan-500/40 p-3">
+          <strong>{currentDistrict}</strong>
+          <Link className="ko-text-link" href={"/ranking?" + new URLSearchParams({ universe: currentUniverseCode, district: currentDistrict })}>이 지역 랭킹 보기 ↗</Link>
+          {selectedDistrictDataFromAll?.primaryComplexId ? <Link className="ko-text-link" href={"/ranking?" + new URLSearchParams({ universe: currentUniverseCode, complexId: selectedDistrictDataFromAll.primaryComplexId })}>{selectedDistrictDataFromAll.primaryComplexName} 상세 ↗</Link> : null}
+        </div> : <p className="mt-2 font-semibold text-cyan-300">원을 누르면 해당 지역의 랭킹과 대표 단지를 확인할 수 있어요.</p>}
+      </div>
+      <div ref={mapFrameRef} className="relative min-h-[520px] flex-1 bg-[#0b1118] sm:min-h-[620px]">
         <div
-          className="absolute inset-0 z-0 [&>div]:h-full [&>div]:w-full opacity-80"
-          style={{
-            filter:
-              "invert(100%) hue-rotate(180deg) brightness(80%) contrast(110%) grayscale(30%)",
-          }}
+          className="neon-map-tiles absolute inset-0 z-0 [&>div]:h-full [&>div]:w-full"
         >
           <Map
             center={mapView.center}
@@ -2480,72 +2375,19 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
             level={mapView.level}
             disableDoubleClickZoom={true}
           >
+            <ZoomControl position="RIGHT" />
             {showBubbles &&
               renderOrderMapData.map((data) => {
-                const isRising = data.averageDelta >= 0;
+                const change = data.marketCapChangePct7d;
+                const known = typeof change === "number" && Number.isFinite(change);
                 const isSelected = data.name === currentDistrict;
-                const isActionable =
-                  !!data.isBoardBacked && (data.boardCount ?? 0) > 0;
-                const isTopTier = data.visualRank <= 5;
-
-                let ringColor = isRising
-                  ? "border-rose-500/70"
-                  : "border-blue-500/70";
-                let glowColor = isRising
-                  ? "rgba(244,63,94,0.32)"
-                  : "rgba(59,130,246,0.32)";
-                let bgColor = isRising
-                  ? "bg-rose-500/12"
-                  : "bg-blue-500/12";
-                let capColor = "text-white";
-                let deltaBadgeColor = isRising
-                  ? "bg-rose-500/20 text-rose-200"
-                  : "bg-blue-500/20 text-blue-200";
-
-                if (!isActionable && !isSelected) {
-                  ringColor = isRising
-                    ? "border-rose-500/18"
-                    : "border-blue-500/18";
-                  glowColor = isRising
-                    ? "rgba(244,63,94,0.08)"
-                    : "rgba(59,130,246,0.08)";
-                  bgColor = "bg-slate-700/20";
-                  capColor = "text-slate-300";
-                  deltaBadgeColor = "bg-slate-700/50 text-slate-300";
-                }
-
-                if (isTopTier && !isSelected) {
-                  ringColor = isRising
-                    ? "border-rose-400/90"
-                    : "border-blue-400/90";
-                  glowColor = isRising
-                    ? "rgba(244,63,94,0.44)"
-                    : "rgba(59,130,246,0.44)";
-                }
-
-                if (isSelected) {
-                  ringColor = "border-cyan-300";
-                  glowColor = "rgba(34,211,238,0.55)";
-                  bgColor = "bg-cyan-500/20";
-                  capColor = "text-cyan-50";
-                  deltaBadgeColor = "bg-cyan-500/20 text-cyan-100";
-                }
-
-                const finalBoxShadow = `${isSelected ? "0 0 0 2px rgba(255,255,255,0.75), " : ""
-                  }0 0 18px ${glowColor}, inset 0 0 10px ${glowColor}`;
-
-                const titleParts = [
-                  data.name,
-                  `표시 시총 ${formatMarketCapKrw(data.totalMarketCap)}`,
-                  `집계 표본 ${data.count}행`,
-                  isRising
-                    ? `표본 평균 주간 흐름 ▲${Math.abs(data.averageDelta).toFixed(1)}`
-                    : `표본 평균 주간 흐름 ▼${Math.abs(data.averageDelta).toFixed(1)}`,
-                  data.primaryComplexName ? `대표 ${data.primaryComplexName}` : "",
-                  isActionable
-                    ? `클릭 가능 보드 표본 ${data.boardCount ?? 0}행`
-                    : "참고 지역",
-                ].filter(Boolean);
+                const isActionable = Boolean(data.primaryComplexId && data.primaryRank);
+                const tone = known && change > 0 ? "#6ee7b7" : known && change < 0 ? "#fda4af" : "#cbd5e1";
+                const ring = isSelected ? "#67e8f9" : tone;
+                const comparisonLabel = mapChangeLabel(change);
+                const titleParts = [data.name, "공개 시총 " + formatMarketCapKrw(data.totalMarketCap) + " · " + data.count + "개 단지", comparisonLabel,
+                  "비교 가능 " + (data.comparableComplexCount ?? 0) + "/" + data.count + "개", data.comparisonDate ? data.comparisonDate + " 대비" : "7일 비교 자료 없음",
+                  data.primaryComplexName ? "대표 단지 " + data.primaryComplexName : ""].filter(Boolean);
 
                 return (
                   <CustomOverlayMap
@@ -2555,45 +2397,21 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
                     xAnchor={0.5}
                     zIndex={isSelected ? 999 : 100 + (100 - data.visualRank)}
                   >
-                    <div
+                    <button type="button" disabled={!isActionable}
                       onClick={() => handleDistrictClick(data)}
-                      className={`group relative flex flex-col items-center justify-center rounded-full border transition-all duration-300 ${isActionable
-                        ? "cursor-pointer hover:scale-110 hover:border-cyan-300/80"
-                        : "cursor-default opacity-75"
-                        } ${ringColor} ${bgColor} ${isSelected ? "scale-110" : ""}`}
-                      style={{
-                        width: `${data.bubbleSize}px`,
-                        height: `${data.bubbleSize}px`,
-                        boxShadow: finalBoxShadow,
-                        filter: "invert(100%) hue-rotate(180deg)",
-                      }}
-                      title={titleParts.join(" · ")}
-                    >
-                      <div className="absolute inset-0 z-0 overflow-hidden rounded-full backdrop-blur-md" />
-
-                      {isTopTier && (
-                        <div className="pointer-events-none absolute -top-2 z-20 rounded-full border border-amber-300/40 bg-amber-300/10 px-1.5 py-0.5 text-[8px] font-bold text-amber-200">
-                          TOP {data.visualRank}
-                        </div>
-                      )}
-
-                      <span className="pointer-events-none relative z-10 max-w-[92%] truncate text-[12px] font-bold text-slate-100 drop-shadow-md">
-                        {data.name}
-                      </span>
-
-                      <span
-                        className={`pointer-events-none relative z-10 mt-0.5 text-[15px] font-black tracking-tight ${capColor} drop-shadow-md`}
-                      >
-                        {formatCompactCap(data.totalMarketCap)}
-                      </span>
-
-                      <span
-                        className={`pointer-events-none relative z-10 mt-1 rounded-full px-1.5 py-[2px] text-[9px] font-semibold ${deltaBadgeColor}`}
-                      >
-                        {isRising ? "▲" : "▼"}
-                        {Math.abs(data.averageDelta).toFixed(1)}
-                      </span>
-                    </div>
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onTouchStart={(event) => event.stopPropagation()}
+                      aria-label={titleParts.join(" · ") + " · 지역 선택"}
+                      aria-pressed={isSelected}
+                      className="neon-map-bubble relative flex flex-col items-center justify-center rounded-full border-2 p-2 transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-default"
+                      style={{ width: data.bubbleSize, height: data.bubbleSize, borderColor: ring,
+                        background: "rgba(6,16,25,0.94)", color: "#f1f5f9", boxShadow: "0 0 " + (isSelected ? 28 : 16) + "px " + ring + "66" }}
+                      title={titleParts.join(" · ")}>
+                      <span className="max-w-full truncate text-[13px] font-semibold">{data.name}</span>
+                      <span className="font-mono text-xl font-bold tabular-nums">{formatCompactCap(data.totalMarketCap)}</span>
+                      <span className="whitespace-nowrap text-xs font-semibold" style={{ color: tone }}>{known ? comparisonLabel : "시총 비교 없음"}</span>
+                      <span className="text-xs" style={{ color: "#cbd5e1" }}>비교 {data.comparableComplexCount ?? 0}/{data.count}개</span>
+                    </button>
                   </CustomOverlayMap>
                 );
               })}
@@ -2604,6 +2422,8 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
       </div>
 
       <style jsx>{`
+        :global([data-theme="night"]) .neon-map-tiles { filter: invert(100%) hue-rotate(180deg); }
+        :global([data-theme="night"] .neon-map-bubble) { filter: invert(100%) hue-rotate(180deg); }
         .range-slider {
           appearance: none;
           background: transparent;

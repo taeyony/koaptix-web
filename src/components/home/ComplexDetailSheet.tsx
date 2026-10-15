@@ -3,6 +3,7 @@ import { SearchProgress } from "./SearchProgress";
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
+import { buildComplexSharePath } from "../../lib/koaptix/complexShare";
 // 🚨 react-dom에서 createPortal을 가져옵니다!!
 import { createPortal } from "react-dom";
 import { RecoveryGauge } from "./RecoveryGauge";
@@ -320,10 +321,12 @@ export function ComplexDetailSheet({
     return () => controller.abort();
   }, [open, chartComplexId, chartPeriod, chartSource]);
 
-  async function handleShare() {
+  async function handleShare(copyOnly = false) {
     if (!activeComplexId || typeof window === "undefined") return;
     const shareTitle = detail?.name ?? item?.name ?? "KOAPTIX 단지 정보";
-    const shareUrl = window.location.href;
+    const selectedUniverse = new URLSearchParams(window.location.search).get("universe") ?? item?.universeCode ?? item?.universe_code;
+    const sharePath = buildComplexSharePath(activeComplexId, selectedUniverse);
+    const shareUrl = sharePath ? new URL(sharePath, window.location.origin).toString() : null;
 
     if (!shareUrl) {
       showToast("공유 링크를 만들지 못했다.", "error");
@@ -332,9 +335,9 @@ export function ComplexDetailSheet({
 
     setSharePending(true);
     try {
-      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      if (!copyOnly && typeof navigator !== "undefined" && typeof navigator.share === "function") {
         try {
-          await navigator.share({ title: shareTitle, url: shareUrl });
+          await navigator.share({ title: `${shareTitle} | KOAPTIX`, text: "단지 전체의 추정 시가총액과 공개 순위를 확인해 보세요.", url: shareUrl });
           return;
         } catch (shareError) {
           if (shareError instanceof DOMException && shareError.name === "AbortError") return;
@@ -496,9 +499,20 @@ export function ComplexDetailSheet({
               <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => void handleShare(true)}
+                  disabled={sharePending}
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 text-sm text-cyan-100 disabled:opacity-60"
+                  aria-label="단지 링크 복사"
+                  title="단지 링크 복사"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></svg>
+                  <span className="hidden sm:inline">링크 복사</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => void handleShare()}
                   disabled={sharePending}
-                  className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-not-allowed disabled:opacity-60"
                   aria-label="공유하기"
                 >
                   <ShareIcon />

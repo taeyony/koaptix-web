@@ -15,10 +15,13 @@ export async function generateMetadata({
 
 export default async function ComplexSharePage({
   params,
+  searchParams,
 }: {
   params: RouteParams;
+  searchParams: Promise<{ universe?: string }>;
 }) {
   const resolvedParams = await params;
+  const query = await searchParams;
 
-  return <ComplexShareRedirect complexId={resolvedParams.id} />;
+  return <ComplexShareRedirect complexId={resolvedParams.id} universeCode={query.universe} />;
 }

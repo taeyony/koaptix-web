@@ -19,6 +19,10 @@ import {
   type KoaptixPublicationSelectionIdentity,
 } from "../../../lib/koaptix/currentness";
 
+import { getExactWeeklyMarketCapComparisonMap } from "../../../lib/koaptix/queries";
+import type { DbLatestRankBoardRow } from "../../../lib/koaptix/types";
+import { summarizeMapComparison } from "../../../lib/koaptix/mapPresentation";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -112,6 +116,9 @@ type MapDistrictItem = {
   query: string;
   totalMarketCap: number;
   averageDelta: number;
+  marketCapChangePct7d?: number | null;
+  comparableComplexCount?: number;
+  comparisonDate?: string | null;
   count: number;
 
   boardCount: number;
@@ -547,8 +554,13 @@ async function rowsToMapPayload(
     requestedLimit: number;
     renderedLimit: number;
     source: "live_latest";
+    includeChanges: boolean;
   },
 ): Promise<MapPayload> {
+  const comparisonsPromise = options.includeChanges
+    ? getExactWeeklyMarketCapComparisonMap(identity.snapshot_date, rows as DbLatestRankBoardRow[])
+    : Promise.resolve(new Map());
+  const membersByGroup = new Map<string, typeof rows>();
   const complexIds = extractComplexIds(rows);
   const scopeMetaMap =
     universeCode === DEFAULT_UNIVERSE_CODE
@@ -587,6 +599,9 @@ async function rowsToMapPayload(
     );
 
     if (!groupKey || !displayName) continue;
+    const members = membersByGroup.get(groupKey) ?? [];
+    members.push(row);
+    membersByGroup.set(groupKey, members);
 
     const rankAll = toNullableNumber(row.rank_all);
     const marketCap = toNumber(row.market_cap_krw);
@@ -696,6 +711,7 @@ async function rowsToMapPayload(
       }
     }
 
+    membersByGroup.set(fallbackIdentity.groupKey, rows);
     grouped.set(fallbackIdentity.groupKey, {
       name: fallbackIdentity.displayName,
       query: fallbackIdentity.query,
@@ -711,8 +727,10 @@ async function rowsToMapPayload(
     });
   }
 
-  const items: MapDistrictItem[] = Array.from(grouped.values())
-    .map((group) => ({
+  const comparisons = await comparisonsPromise;
+  const items: MapDistrictItem[] = Array.from(grouped.entries())
+    .map(([key, group]) => ({
+      ...(options.includeChanges ? summarizeMapComparison(membersByGroup.get(key) ?? [], comparisons, identity.snapshot_date) : {}),
       name: group.name,
       query: group.query,
       totalMarketCap: group.totalMarketCap,
@@ -755,6 +773,7 @@ async function fetchMapPayloadFromLatestBoard(
   supabase: ReturnType<typeof createServerSupabase>,
   universeCode: string,
   requestedLimit: number,
+  includeChanges: boolean,
 ): Promise<MapPayload> {
   const retryLimits = getRetryLimits(requestedLimit);
   let lastError: unknown = new Error("MAP_FAILED");
@@ -808,6 +827,7 @@ async function fetchMapPayloadFromLatestBoard(
         requestedLimit,
         renderedLimit: attemptLimit,
         source: "live_latest",
+        includeChanges,
       });
     } catch (error) {
       lastError = error;
@@ -834,11 +854,13 @@ async function fetchMapPayload(
   supabase: ReturnType<typeof createServerSupabase>,
   universeCode: string,
   requestedLimit: number,
+  includeChanges: boolean,
 ): Promise<MapPayload> {
   return fetchMapPayloadFromLatestBoard(
     supabase,
     universeCode,
     requestedLimit,
+    includeChanges,
   );
 }
 
@@ -883,7 +905,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = createServerSupabase();
-    const payload = await fetchMapPayload(supabase, universeCode, limit);
+    const payload = await fetchMapPayload(supabase, universeCode, limit, searchParams.get("include_changes") === "1");
 
     return NextResponse.json(
       {

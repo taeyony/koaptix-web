@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { mapComplexDetailRow } from "./mappers";
-import { getComplexDetailById } from "./queries";
+import { getLatestRankBoard } from "./queries";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://koaptix.com";
 const METADATA_BASE = new URL(SITE_URL);
@@ -24,18 +23,6 @@ function formatMarketCapKrw(value: number): string {
   }
 
   return `${new Intl.NumberFormat("ko-KR").format(value)}원`;
-}
-
-function formatWeeklyRankDelta(delta: number): string {
-  if (delta > 0) return `순위 상승 +${delta}`;
-  if (delta < 0) return `순위 하락 ${delta}`;
-  return "순위 보합 0";
-}
-
-function formatMomentumW(value: number): string {
-  if (value > 0) return `주간 시가총액 변화 +${value.toFixed(2)}%`;
-  if (value < 0) return `주간 시가총액 변화 ${value.toFixed(2)}%`;
-  return "주간 시가총액 변화 0.00%";
 }
 
 function getDefaultMetadata(): Metadata {
@@ -71,26 +58,24 @@ export async function buildComplexMetadata(
   }
 
   try {
-    const row = await getComplexDetailById(complexId);
+    const [row] = await getLatestRankBoard("KOREA_ALL", 1, { complexId });
     if (!row) {
       return getDefaultMetadata();
     }
 
-    const detail = mapComplexDetailRow(row);
-
-    const title = `${detail.name} | KOAPTIX`;
+    const title = `${row.apt_name_ko} | KOAPTIX 아파트 시가총액 랭킹`;
     const description = [
-      `현재 #${detail.rank}`,
-      `추정 시가총액 ${formatMarketCapKrw(detail.marketCapKrw)}`,
-      detail.locationLabel,
-      `최근 7일 기준 ${formatWeeklyRankDelta(detail.rankDelta7d)}`,
-      formatMomentumW(detail.marketCapDeltaPct7d),
+      `${row.snapshot_date} 기준`,
+      `전국 공개 랭킹 ${row.rank_all}위`,
+      `단지 전체 추정 시가총액 ${formatMarketCapKrw(Number(row.market_cap_krw))}`,
+      [row.sigungu_name, row.legal_dong_name].filter(Boolean).join(" "),
+      "실거래가와 세대수로 추정한 참고 정보입니다.",
     ]
       .filter(Boolean)
       .join(" · ");
 
-    const sharePath = `/complex/${encodeURIComponent(detail.complexId)}`;
-    const ogImagePath = `${sharePath}/opengraph-image`;
+    const sharePath = `/complex/${encodeURIComponent(String(row.complex_id))}`;
+    const ogImagePath = `${sharePath}/opengraph-image?v=2`;
 
     return {
       metadataBase: METADATA_BASE,
@@ -111,7 +96,7 @@ export async function buildComplexMetadata(
             url: ogImagePath,
             width: 1200,
             height: 630,
-            alt: `${detail.name} KOAPTIX 주간 순위 공유 카드`,
+            alt: `${row.apt_name_ko} · ${row.snapshot_date} 기준 전국 공개 랭킹 · KOAPTIX`,
           },
         ],
       },

@@ -21,6 +21,12 @@ body {
   color: var(--ko-ink);
 }
 
+.ko-index-select,
+.ko-index-select option {
+  background-color: var(--ko-surface);
+  color: var(--ko-ink);
+}
+
 :root[data-theme="night"] .home-v2 {
   color-scheme: dark;
 }

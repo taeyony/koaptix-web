@@ -179,20 +179,23 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
                 opacity={enabled ? 1 : 0.45}
                 vectorEffect="non-scaling-stroke"
               ><title>{`${label}${enabled ? " 지역 분포 보기" : " · 랭킹 공개 준비 중"}`}</title></path>;
-              return enabled ? <a key={location.id} href={`/?universe=${encodeURIComponent(code)}#capital-map`}
-                className="ko-map-region-link" aria-label={`${label} 지역 분포 보기`} aria-current={selected ? "true" : undefined}>{path}</a>
+              return enabled ? <a key={location.id} href={`/map?universe=${encodeURIComponent(code)}`}
+                className="ko-map-region-link" aria-label={`${label} 카카오 상세 지도 보기`} aria-current={selected ? "true" : undefined}>{path}</a>
                 : <g key={location.id} aria-label={`${label} · 랭킹 공개 준비 중`}>{path}</g>;
             })}
           </svg>
           <figcaption className="text-center text-caption tracking-label text-muted">
             <p>{universeLabel} · 지역 분포 개요</p>
-            <p className="mt-1">
-              지도: <a className="ko-text-link" href="https://mapsvg.com/maps/south-korea">MapSVG</a>
-              {" · "}<a className="ko-text-link" href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>
-              {" · 색상·표시 조정"}
-            </p>
+            <details className="mt-2" data-testid="map-attribution">
+              <summary className="cursor-pointer underline decoration-dotted underline-offset-4">지도 출처</summary>
+              <p className="mt-2">
+                도형 제작: <a className="ko-text-link" href="https://mapsvg.com/maps/south-korea">MapSVG</a>
+                {" · "}<a className="ko-text-link" href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>
+                {" · 색상과 표시 방식 변경"}
+              </p>
+            </details>
           </figcaption>
-          <p className="text-center text-control font-semibold text-accent">지역을 눌러 공개 랭킹 보기 ↗</p>
+          <Link href={`/map?universe=${encodeURIComponent(universeCode)}`} prefetch={false} className="ko-text-link text-center text-control font-semibold">카카오 네온맵에서 자세히 보기 ↗</Link>
           <p className="text-center text-caption text-muted">윤곽에 커서를 올리면 지역명이 표시됩니다. 아직 랭킹이 공개되지 않은 지역은 옅게 표시해요.</p>
         </figure>
 

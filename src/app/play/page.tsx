@@ -68,6 +68,7 @@ export default async function PlayPage() {
           <p className={styles.eyebrow}><span className={styles.liveDot} aria-hidden="true" /> 전국 아파트 순위 찾기</p>
           <h1 id="play-title" className={styles.title}>우리 아파트,<br />전국에서 <span className={styles.titleAccent}>몇 등일까?</span></h1>
           <p className={styles.subtitle}>집값은 알아도, 우리 단지 순위는 모르잖아.</p>
+          <p className={styles.scopeNote} data-testid="play-ranking-date">{date ? <>공개 랭킹 기준일 <time dateTime={date}>{date}</time></> : "공개 랭킹 기준일 확인 중"} · 단지별 검색 결과에도 적용 날짜를 표시해요.</p>
           <div className={styles.searchArea}>
             <HomeV2Search universeCode="KOREA_ALL" presentation="landing" examples={examples} />
           </div>

@@ -2,14 +2,18 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { resolveUniverseRequest } from "../../../lib/koaptix/universes";
 
 export function ComplexShareRedirect({
   complexId,
+  universeCode,
 }: {
   complexId: string;
+  universeCode?: string;
 }) {
   const router = useRouter();
-  const targetUrl = `/ranking?universe=KOREA_ALL&complexId=${encodeURIComponent(complexId)}`;
+  const resolution = resolveUniverseRequest(universeCode ?? null, { capability: "ranking" });
+  const targetUrl = `/ranking?${new URLSearchParams({ universe: resolution.requestedUniverseCode, complexId })}`;
 
   useEffect(() => {
     router.replace(targetUrl);
@@ -19,10 +23,10 @@ export function ComplexShareRedirect({
     <main className="flex min-h-screen items-center justify-center bg-[#05070b] px-4 text-[#eaf2ff]">
       <div className="w-full max-w-md rounded-3xl border border-cyan-400/15 bg-[#0b1118] p-6 text-center shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
         <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/70">
-          KOAPTIX SHARE LINK
+          KOAPTIX · 단지 공유
         </p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-          단지 보드로 이동 중
+          단지 상세 정보를 열고 있어요
         </h1>
         <p className="mt-3 text-sm leading-6 text-white/55">
           잠시 후 랭킹 화면에서 해당 단지의 상세 정보가 열립니다.

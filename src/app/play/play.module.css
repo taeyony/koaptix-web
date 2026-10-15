@@ -247,6 +247,10 @@
   line-height: 1.6;
 }
 
+.hero > .scopeNote {
+  margin-inline: auto;
+}
+
 .noteDot {
   color: var(--ko-accent);
 }
@@ -646,6 +650,29 @@
 }
 
 @media (max-width: 600px) {
+  .searchArea :global([data-result-kind="ranked"]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+
+  .searchArea :global([data-result-kind="ranked"] > span:first-child > span) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .searchArea :global([data-search-metrics]) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.75rem;
+    text-align: left;
+  }
+
+  .searchArea :global([data-search-metrics] > span:first-child) {
+    display: none;
+  }
+
   .shell {
     width: calc(100% - 2rem);
   }
