@@ -57,9 +57,9 @@ type ChartState = {
 };
 
 const CHART_PERIODS: Array<{ value: ComplexChartPeriod; label: string; description: string }> = [
-  { value: "weekly", label: "주", description: "각 주의 마지막 저장값" },
-  { value: "monthly", label: "월", description: "각 월의 마지막 저장값" },
-  { value: "yearly", label: "년", description: "각 연도의 마지막 저장값" },
+  { value: "weekly", label: "주", description: "각 주의 마지막 확인 값" },
+  { value: "monthly", label: "월", description: "각 월의 마지막 확인 값" },
+  { value: "yearly", label: "년", description: "각 연도의 마지막 확인 값" },
 ];
 
 function formatMarketCapKrw(value: number): string {
@@ -92,7 +92,7 @@ function formatPercent(value: number): string {
 }
 
 function formatDeltaUnavailable(): string {
-  return "기준 없음";
+  return "비교 자료 없음";
 }
 
 function formatRankDelta(delta: number): string {
@@ -322,7 +322,7 @@ export function ComplexDetailSheet({
 
   async function handleShare() {
     if (!activeComplexId || typeof window === "undefined") return;
-    const shareTitle = detail?.name ?? item?.name ?? "KOAPTIX detail";
+    const shareTitle = detail?.name ?? item?.name ?? "KOAPTIX 단지 정보";
     const shareUrl = window.location.href;
 
     if (!shareUrl) {
@@ -381,10 +381,10 @@ export function ComplexDetailSheet({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-caption uppercase tracking-label text-cyan-300/70 sm:text-xs">
-                    COMPLEX DETAIL
+                    단지 상세 정보
                   </p>
                   <h3 id="complex-detail-title" className="mt-1 truncate text-xl font-semibold tracking-heading sm:text-2xl">
-                    {error ? "Detail unavailable" : "Loading detail"}
+                    {error ? "상세 정보를 불러오지 못했어요" : "단지 정보를 불러오고 있어요"}
                   </h3>
                 </div>
 
@@ -394,7 +394,7 @@ export function ComplexDetailSheet({
                   data-testid="complex-detail-close"
                   className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white/70 transition hover:bg-white/[0.06]"
                 >
-                  Close
+                  닫기
                 </button>
               </div>
             </div>
@@ -421,7 +421,7 @@ export function ComplexDetailSheet({
     return createPortal(emptyContent, document.body);
   }
 
-  const title = detail?.name ?? item?.name ?? "Complex detail";
+  const title = detail?.name ?? item?.name ?? "단지 상세 정보";
   const location = (detail?.locationLabel ?? item?.locationLabel) || "위치 정보 없음";
   const rank = detail?.rank ?? item?.rank ?? null;
   const marketCap = detail?.marketCapKrw ?? item?.marketCapKrw ?? 0;
@@ -474,7 +474,7 @@ export function ComplexDetailSheet({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-caption uppercase tracking-label text-cyan-300/70 sm:text-xs">
-                  COMPLEX DETAIL
+                  단지 상세 정보
                 </p>
                 <h3 id="complex-detail-title" className="mt-1 truncate text-xl font-semibold tracking-heading sm:text-2xl">
                   {title}
@@ -482,7 +482,7 @@ export function ComplexDetailSheet({
                 <p className="mt-1 truncate text-sm text-white/50 sm:text-control">
                   {location}
                 </p>
-                {item?.snapshotDate ? <p className="mt-1 text-caption text-muted">{getUniverseLabel(item.universeCode || "KOREA_ALL")} 공표 순위 · {item.snapshotDate} 기준</p> : null}
+                {item?.snapshotDate ? <p className="mt-1 text-caption text-muted">{getUniverseLabel(item.universeCode || "KOREA_ALL")} 공개 순위 · {item.snapshotDate} 기준</p> : null}
 
                 {tierBadges.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -520,7 +520,7 @@ export function ComplexDetailSheet({
           <div className="min-h-0 overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
             {error ? (
               <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
-                {item ? "추가 상세 정보는 아직 제공되지 않습니다. 아래는 공표된 랭킹 정보입니다." : error}
+                {item ? "추가 상세 정보는 아직 제공되지 않습니다. 아래에서 공개된 순위를 확인해 주세요." : error}
               </div>
             ) : null}
 
@@ -529,9 +529,9 @@ export function ComplexDetailSheet({
                 label="현재 순위"
                 value={rank != null ? `#${formatPlainNumber(rank)}` : "-"}
               />
-              <Metric label="시가총액" value={formatMarketCapKrw(marketCap)} />
+              <Metric label="추정 시가총액" value={formatMarketCapKrw(marketCap)} />
               <Metric
-                label="주간 순위 변동"
+                label="이번 주 순위 변화"
                 value={
                   displayRankDelta7d != null
                     ? formatRankDelta(displayRankDelta7d)
@@ -544,7 +544,7 @@ export function ComplexDetailSheet({
                 }
               />
               <Metric
-                label="주간 시총 변화율"
+                label="이번 주 시가총액 변화"
                 value={
                   displayMarketCapDeltaPct7d != null
                     ? formatPercent(displayMarketCapDeltaPct7d)
@@ -558,13 +558,13 @@ export function ComplexDetailSheet({
               />
             </div>
 
-            <section aria-label={chartRange?.basis === "reference" ? "참고 재계산 시총 이력" : chartRange?.basis === "restored-local-review" ? "시총 재구성 검토" : "공개 시총 이력"} className="mt-4 overflow-hidden rounded-2xl border border-[var(--ko-border)] bg-surface">
+            <section aria-label={chartRange?.basis === "reference" ? "다시 계산한 과거 시가총액" : chartRange?.basis === "restored-local-review" ? "시총 재구성 검토" : "공개 시총 이력"} className="mt-4 overflow-hidden rounded-2xl border border-[var(--ko-border)] bg-surface">
               <div className="px-4 pb-3 pt-4 sm:px-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1 basis-80">
-                    <p className="text-caption font-semibold uppercase tracking-label text-accent">CAP FLOW HISTORY</p>
-                    <h4 className="mt-1 text-xl font-bold text-ink">시가총액 변화 추이</h4>
-                    <p className="mt-2 text-sm text-muted">{CHART_PERIODS.find((entry) => entry.value === chartPeriod)?.description}을 표시합니다. 점은 거래 건수가 아니라 시총의 기준일입니다.</p>
+                    <p className="text-caption font-semibold uppercase tracking-label text-accent">단지 전체의 추정 가치</p>
+                    <h4 className="mt-1 text-xl font-bold text-ink">시가총액, 얼마나 달라졌을까?</h4>
+                    <p className="mt-2 text-sm text-muted">{CHART_PERIODS.find((entry) => entry.value === chartPeriod)?.description}을 보여드려요. 점 하나는 거래 한 건이 아니라 해당 날짜의 시가총액이에요.</p>
                   </div>
                   <div role="group" aria-label="시총 차트 표시 단위" className="inline-flex shrink-0 gap-1 rounded-xl border border-[var(--ko-border)] p-1">
                     {CHART_PERIODS.map((entry) => (
@@ -580,27 +580,27 @@ export function ComplexDetailSheet({
                   </div>
                 </div>
                 <div role="group" aria-label="시총 이력 기준" className="mt-4 flex flex-wrap gap-2">
-                  {([{ value: "reference", label: "참고 재계산 이력" }, { value: "published", label: "기존 공표 기록" }] as const).map((entry) => (
+                  {([{ value: "reference", label: "다시 계산한 과거 추이" }, { value: "published", label: "당시 공개된 기록" }] as const).map((entry) => (
                     <button key={entry.value} type="button" aria-pressed={chartSource === entry.value} onClick={() => setChartSource(entry.value)}
                       className={`min-h-11 rounded-lg border border-[var(--ko-border)] px-3 py-2 text-control font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ko-accent)] ${chartSource === entry.value ? "bg-[var(--ko-accent-soft)] text-accent" : "text-muted hover:bg-[var(--ko-accent-soft)]"}`}>{entry.label}</button>
                   ))}
                 </div>
-                <p className="mt-2 text-caption text-muted">요청 범위: {KOAPTIX_OFFICIAL_BASE_DATE} 이후 · {chartLoading ? "이력을 확인하고 있습니다." : chartRange?.basis === "reference" ? "가용 거래로 다시 계산한 참고 이력입니다." : chartRange?.basis === "restored-local-review" ? "로컬 복구 검토 · 실사이트 미반영" : "실제 저장된 공개 이력만 표시합니다."}</p>
-                {chartRange?.referenceUnavailable ? <p role="status" className="mt-3 text-caption text-[var(--ko-warning)]">이 단지는 참고 이력의 검증 조건을 충족하지 않아 기존 공표 기록을 표시합니다.</p> : null}
+                <p className="mt-2 text-caption text-muted">조회 시작: {KOAPTIX_OFFICIAL_BASE_DATE} 이후 · {chartLoading ? "이력을 확인하고 있습니다." : chartRange?.basis === "reference" ? "확인된 거래로 다시 계산한 참고 자료예요." : chartRange?.basis === "restored-local-review" ? "로컬 복구 검토 · 실사이트 미반영" : "당시에 저장해 공개한 값만 보여드려요."}</p>
+                {chartRange?.referenceUnavailable ? <p role="status" className="mt-3 text-caption text-[var(--ko-warning)]">과거 값을 다시 계산하는 데 필요한 확인이 끝나지 않아, 당시 공개된 기록을 보여드려요.</p> : null}
                 {chartRange?.basis === "restored-local-review" || chartRange?.basis === "reference" ? (
                   <div role="status" className="mt-3 rounded-xl border border-[var(--ko-border)] bg-[var(--ko-accent-soft)] px-3 py-3 text-caption text-muted">
-                    <p className="font-semibold text-ink">{chartRange.basis === "reference" ? "참고 이력의 계산 기준" : "과거 시총 재구성 검토"}</p>
+                    <p className="font-semibold text-ink">{chartRange.basis === "reference" ? "과거 추이는 이렇게 계산했어요" : "과거 시총 재구성 검토"}</p>
                     <p className="mt-1">{chartRange.sourceNote}</p>
-                    <p className="mt-1">원천 확인일: {chartRange.sourceObservedAt?.slice(0, 10)} · 최초 기준일과 월말 계산값을 선택한 단위로 묶습니다. 주간 계산점을 새로 만들지 않습니다.</p>
-                    {(chartRange.excludedPointCount ?? 0) > 0 ? <p className="mt-1 text-[var(--ko-warning)]">검증값이 없는 {chartRange.excludedPointCount}개 기준일은 비워 두며, 빈 구간을 연결하지 않습니다.</p> : null}
-                    {chartRange.reviewBlockedReasons?.length ? <p className="mt-1 text-[var(--ko-warning)]">이 단지는 원천·세대수 또는 현재 공표값 대조 조건을 충족하지 않아 재구성값을 표시하지 않습니다. 기존 공개 이력은 보존되어 있습니다.</p> : null}
+                    <p className="mt-1">거래·세대수 자료 확인일: {chartRange.sourceObservedAt?.slice(0, 10)} · 시작일과 월말에 계산한 값을 주·월·년 단위로 묶어 보여드려요. 주를 선택해도 계산하지 않은 날짜의 값이 새로 생기지는 않아요.</p>
+                    {(chartRange.excludedPointCount ?? 0) > 0 ? <p className="mt-1 text-[var(--ko-warning)]">계산 결과를 확인할 수 없는 {chartRange.excludedPointCount}개 날짜는 비워 두고, 그 사이를 선으로 잇지 않아요.</p> : null}
+                    {chartRange.reviewBlockedReasons?.length ? <p className="mt-1 text-[var(--ko-warning)]">거래·세대수 자료나 현재 공개된 값과의 확인이 끝나지 않아, 다시 계산한 값은 보여드리지 않아요. 기존에 공개한 기록은 그대로 남아 있어요.</p> : null}
                   </div>
                 ) : null}
                 {chartRange?.availableFrom && chartRange.availableTo ? (
                   <div className="mt-3 rounded-xl border border-[var(--ko-border)] px-3 py-2 text-caption text-muted">
-                    <p className="font-semibold text-ink">실제 표시 가능: {chartRange.availableFrom} ~ {chartRange.availableTo}</p>
+                    <p className="font-semibold text-ink">확인할 수 있는 기간: {chartRange.availableFrom} ~ {chartRange.availableTo}</p>
                     {chartRange.availableFrom > chartRange.requestedStartDate ? (
-                      <p className="mt-1 text-[var(--ko-warning)]">{KOAPTIX_OFFICIAL_BASE_DATE}부터 첫 이력 전까지는 검증된 과거 계산값이 없어 표시하지 않습니다. 조회 기간을 바꿔도 없는 값은 채워지지 않습니다.</p>
+                      <p className="mt-1 text-[var(--ko-warning)]">{KOAPTIX_OFFICIAL_BASE_DATE}부터 첫 기록 전까지는 확인된 계산값이 없어 비워 두었어요. 조회 단위를 바꿔도 이 구간의 값은 표시되지 않아요.</p>
                     ) : null}
                   </div>
                 ) : null}
@@ -623,8 +623,8 @@ export function ComplexDetailSheet({
                 <div className="border-b border-white/5 px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-caption uppercase tracking-label text-cyan-300/70">회복 관측 지표</p>
-                      <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">52주 최고 시총 대비 회복률</h4>
+                      <p className="text-caption uppercase tracking-label text-cyan-300/70">최근 1년 최고치와 비교</p>
+                      <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">최근 1년 최고 시가총액 대비 현재 수준</h4>
                       <p className="mt-1 text-xs text-white/45">이전 고점과 현재 추정치 사이의 거리를 보여주는 참고 지표입니다.</p>
                     </div>
                     <span className={`shrink-0 text-xs font-semibold tabular-nums ${recoveryTone(recoveryRate52w)}`}>
@@ -636,13 +636,13 @@ export function ComplexDetailSheet({
                 <div className="grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:px-4">
                   <RecoveryGauge recoveryRate={recoveryRate52w} />
                   <div className="grid grid-cols-1 gap-3">
-                    <Metric label="52주 최고 시총" value={highMarketCap52w != null ? formatMarketCapKrw(highMarketCap52w) : "-"} />
-                    <Metric label="현재-고점 갭" value={formatRecoveryGap(recoveryRate52w)} tone={recoveryTone(recoveryRate52w)} />
+                    <Metric label="최근 1년 최고 시가총액" value={highMarketCap52w != null ? formatMarketCapKrw(highMarketCap52w) : "-"} />
+                    <Metric label="최고치와의 차이" value={formatRecoveryGap(recoveryRate52w)} tone={recoveryTone(recoveryRate52w)} />
                   </div>
                 </div>
               </div>
             ) : (
-              <p className="mt-4 text-caption text-muted">52주 회복률은 비교할 공개 이력이 준비되면 표시합니다.</p>
+              <p className="mt-4 text-caption text-muted">최근 1년 최고치와의 비교는 공개된 기록이 더 쌓이면 보여드릴게요.</p>
             )}
 
             <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-2">
@@ -660,12 +660,12 @@ export function ComplexDetailSheet({
                     value={
                       displayMarketCapDelta7d != null
                         ? `${formatSignedNumber(displayMarketCapDelta7d)}원`
-                        : "비교 기준 데이터 없음"
+                        : "비교할 자료가 없어요"
                     }
                   />
                   <DetailRow
-                    label="비교 기준 스냅샷"
-                    value={historySnapshotDate ?? "비교 기준 데이터 없음"}
+                    label="비교한 이전 날짜"
+                    value={historySnapshotDate ?? "비교할 자료가 없어요"}
                   />
                   {householdCount != null ? (
                     <DetailRow label="세대수" value={formatCount(householdCount)} />
@@ -674,7 +674,7 @@ export function ComplexDetailSheet({
                     <DetailRow label="준공연도" value={formatYear(approvalYear)} />
                   ) : null}
                   {ageYears != null ? (
-                    <DetailRow label="연식" value={`${ageYears}년차`} />
+                    <DetailRow label="준공 후 지난 기간" value={`${ageYears}년차`} />
                   ) : null}
                   {chartData.length > 0 ? (
                     <DetailRow label={chartRange?.basis === "reference" ? "참고 이력 최종 기준일" : chartRange?.basis === "restored-local-review" ? "재구성 검토 최종 기준일" : "공개 시총 이력 최종 기준일"} value={chartData[chartData.length - 1].snapshotDate} />

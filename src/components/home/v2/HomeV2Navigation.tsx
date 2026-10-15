@@ -6,9 +6,9 @@ import { useBookmarks } from "../../../hooks/useBookmarks";
 import { ThemeToggle } from "../ThemeToggle";
 
 const sections = [
-  { id: "index", label: "지수" },
-  { id: "capital-map", label: "캐피탈맵" },
-  { id: "insights", label: "인사이트" },
+  { id: "index", label: "시장 지수" },
+  { id: "capital-map", label: "지역별 지도" },
+  { id: "insights", label: "순위 변화 요약" },
   { id: "watchlist", label: "관심목록" },
 ];
 
@@ -40,7 +40,7 @@ export function HomeV2Navigation({ universeCode }: { universeCode: string }) {
             </a>
           ))}
         </div>
-        <span className="hidden shrink-0 text-caption font-semibold text-accent lg:block">SOFT PUBLIC BETA</span>
+        <span className="hidden shrink-0 text-caption font-semibold text-accent lg:block">공개 테스트 중</span>
         <div className="ml-auto shrink-0"><ThemeToggle /></div>
       </div>
     </nav>

@@ -150,8 +150,8 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
       className="ko-capital-map order-2 min-h-[260px] border-b border-[var(--ko-border)] py-8 lg:order-2 lg:border-b-0 lg:pr-8"
     >
       <HomeV2SectionHeading
-        title="Capital Map"
-        note={`${universeLabel} · 공개 표본 분포`}
+        title="지역별 시가총액"
+        note={`${universeLabel} · 공개 단지의 지역별 합계`}
       />
       <div className="ko-capital-map-content mt-6">
         <figure className="ko-capital-map-figure text-ink">
@@ -178,10 +178,10 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
                 strokeWidth="1.1"
                 opacity={enabled ? 1 : 0.45}
                 vectorEffect="non-scaling-stroke"
-              ><title>{`${label}${enabled ? " 지역 분포 보기" : " · 공개 랭킹 공표 준비 중"}`}</title></path>;
+              ><title>{`${label}${enabled ? " 지역 분포 보기" : " · 랭킹 공개 준비 중"}`}</title></path>;
               return enabled ? <a key={location.id} href={`/?universe=${encodeURIComponent(code)}#capital-map`}
                 className="ko-map-region-link" aria-label={`${label} 지역 분포 보기`} aria-current={selected ? "true" : undefined}>{path}</a>
-                : <g key={location.id} aria-label={`${label} · 공개 랭킹 공표 준비 중`}>{path}</g>;
+                : <g key={location.id} aria-label={`${label} · 랭킹 공개 준비 중`}>{path}</g>;
             })}
           </svg>
           <figcaption className="text-center text-caption tracking-label text-muted">
@@ -193,7 +193,7 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
             </p>
           </figcaption>
           <p className="text-center text-control font-semibold text-accent">지역을 눌러 공개 랭킹 보기 ↗</p>
-          <p className="text-center text-caption text-muted">윤곽에 커서를 올리면 지역명이 표시됩니다. 공표 준비 중인 지역은 옅게 표시합니다.</p>
+          <p className="text-center text-caption text-muted">윤곽에 커서를 올리면 지역명이 표시됩니다. 아직 랭킹이 공개되지 않은 지역은 옅게 표시해요.</p>
         </figure>
 
         <div className="ko-capital-map-regions space-y-3.5">
@@ -255,7 +255,7 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
       </div>
       {state.status === "ready" ? (
         <p className="mt-5 text-caption leading-copy text-muted">
-          공개 랭킹 표본 {state.payload.renderedLimit ?? "—"}개를 묶은 분포입니다. 지역 전체 총액이 아닙니다.
+          공개 랭킹 단지 {state.payload.renderedLimit ?? "—"}개의 시가총액을 지역별로 더했어요. 지역 전체 아파트의 합계는 아닙니다.
           {state.payload.snapshot_date
             ? ` · ${state.payload.snapshot_date} 기준`
             : ""}

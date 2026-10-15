@@ -676,7 +676,7 @@ export default function UniverseSelector({
 
             {!query && contextualSggOptions.length === 0 && (
               <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-4 text-sm text-slate-400">
-                {currentRegionLabel}은 아직 시군구 보드가 열리지 않았습니다.
+                {currentRegionLabel}은 아직 시·군·구별 랭킹이 준비되지 않았어요.
               </div>
             )}
 

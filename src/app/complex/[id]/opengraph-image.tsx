@@ -122,7 +122,7 @@ export default async function OpenGraphImage({
   }
 
   const title = detail?.name ?? "KOAPTIX";
-  const location = detail?.locationLabel ?? "서울 아파트 주간 모멘텀 보드";
+  const location = detail?.locationLabel ?? "아파트 시가총액 순위";
   const rankLabel = detail ? `#${detail.rank}` : "LIVE";
   const marketCapLabel = detail
     ? formatMarketCapKrw(detail.marketCapKrw)
@@ -212,14 +212,14 @@ export default async function OpenGraphImage({
             }}
           >
             <Metric label="현재 순위" value={rankLabel} />
-            <Metric label="시가총액" value={marketCapLabel} />
+            <Metric label="추정 시가총액" value={marketCapLabel} />
             <Metric
-              label="주간 순위 변동"
+              label="이번 주 순위 변화"
               value={weeklyRankDeltaLabel}
               color={weeklyRankDeltaTone}
             />
             <Metric
-              label="Momentum (W)"
+              label="주간 시가총액 변화"
               value={momentumLabel}
               color={momentumTone}
             />
@@ -240,7 +240,7 @@ export default async function OpenGraphImage({
                 color: "rgba(234,242,255,0.48)",
               }}
             >
-              최근 7일 기준 모멘텀 분석 · koaptix.com
+              최근 7일 시가총액·순위 변화 · koaptix.com
             </div>
 
             <div
@@ -256,7 +256,7 @@ export default async function OpenGraphImage({
                 textTransform: "uppercase",
               }}
             >
-              Weekly Share
+              주간 순위 공유
             </div>
           </div>
         </div>

@@ -106,10 +106,10 @@ export default async function RankingPage({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 max-w-full flex-1 basis-64">
                 <p className="text-caption uppercase tracking-label text-slate-400">
-                  KOAPTIX RANKING BOARD
+                  아파트 시가총액 랭킹
                 </p>
                 <h1 className="ko-section-title mt-1 break-words text-section font-bold tracking-heading text-white [overflow-wrap:break-word] sm:text-xl lg:text-2xl">
-                  KOAPTIX TOP1000
+                  전체 아파트 순위
                 </h1>
 
                 {/* 🚨 지차장 지시 C: 헤더 설명에 현재 유니버스 배지 추가 */}
@@ -127,10 +127,10 @@ export default async function RankingPage({
                   data-testid="ranking-weekly-movement-hero"
                 >
                   <span className="text-caption font-bold uppercase tracking-label text-cyan-300">
-                    Weekly Rank Movement
+                    이번 주 순위 변화
                   </span>
                   <span className="font-medium text-slate-200 sm:text-sm">
-                    대한민국 아파트 추정 시가총액 순위의 주간 이동
+                    지난주보다 순위가 얼마나 달라졌는지 확인해 보세요
                   </span>
                 </div>
 
@@ -159,10 +159,10 @@ export default async function RankingPage({
             <RankingBoardClient
               items={items}
               initialUniverseCode={universeCode}
-              title="WEEKLY RANK MOVEMENT"
+              title="이번 주 순위 변화"
               apiBasePath="/api/ranking"
               boardLimit={1000}
-              emptyMessage="현재 선택한 유니버스의 공개 TOP1000 보드에는 표시할 단지가 없습니다."
+              emptyMessage="선택한 지역에는 아직 공개된 랭킹이 없어요. 다른 지역도 찾아보세요."
               enableTierFilters={true}
               useInternalScroll={false}
               presentation="weekly-movement-full-board"

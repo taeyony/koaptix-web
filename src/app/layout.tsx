@@ -1,15 +1,15 @@
 import type { ReactNode } from "react";
 import "./globals.css";
 
-const siteTitle = "KOAPTIX | 전국 아파트 자본 흐름 랭킹";
+const siteTitle = "KOAPTIX | 우리 아파트 순위 찾기";
 
 export const metadata = {
   metadataBase: new URL('https://www.koaptix.com'),
   title: siteTitle,
-  description: "KOAPTIX는 단지별 추정 시가총액과 순위 변화를 기준으로 전국·지역·시군구 아파트 흐름을 관측하는 랭킹 터미널입니다. 투자 추천이나 공식 가격지수가 아닙니다.",
+  description: "우리 아파트는 몇 등일까요? 실제 거래와 세대수로 추정한 단지 전체의 가치와 전국·지역별 순위를 확인해 보세요. 공식 가격지수나 투자 추천이 아닙니다.",
   openGraph: {
     title: siteTitle,
-    description: "관측자 Y가 전국 아파트 자본 흐름을 기록합니다. KOAPTIX는 추천하지 않고, 추정 시가총액과 순위 변화를 관측하고 비교합니다.",
+    description: "우리 아파트는 몇 등일까요? KOAPTIX에서 단지 전체의 추정 가치와 전국·지역별 순위를 찾아보세요. 투자 추천이 아닌 참고 정보입니다.",
     url: "https://www.koaptix.com", // 의장님의 본섭 주소!
     siteName: "KOAPTIX",
     locale: "ko_KR",

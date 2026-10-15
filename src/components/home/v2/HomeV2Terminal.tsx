@@ -52,8 +52,8 @@ export function HomeV2Terminal({
 }: HomeV2TerminalProps) {
   const hasAggregateScope = Boolean(currentnessDate && aggregateComplexCount && Number.isSafeInteger(aggregateComplexCount) && aggregateComplexCount > 0);
   const scopeSummary = hasAggregateScope
-    ? `대표 합계는 ${currentnessDate} 전국 별도 집계 ${aggregateComplexCount!.toLocaleString("ko-KR")}개 단지의 참고 합계입니다. 아래 랭킹·지도 표본을 합산한 값이 아닙니다.`
-    : "대표 합계의 기준일·집계 범위를 확인하지 못했습니다. 공표 랭킹과 지도는 각 영역의 기준일과 표시 범위를 확인해 주세요.";
+    ? `이 합계는 ${currentnessDate} 기준, 전국에서 별도로 집계한 ${aggregateComplexCount!.toLocaleString("ko-KR")}개 단지의 추정 가치를 더한 참고 값이에요. 아래 랭킹·지도에 나온 단지의 합계와는 다릅니다.`
+    : "합계의 기준 날짜와 포함된 단지를 확인하지 못했어요. 랭킹과 지도는 각 영역에 적힌 날짜와 범위를 확인해 주세요.";
   return (
     <main className="home-v2 min-h-screen bg-[var(--ko-bg)] text-ink antialiased" data-universe-code={universeCode} data-universe-unavailable={universeUnavailable ? "true" : "false"}>
       <a href="#koaptix-500" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-surface focus:p-3 focus:text-ink">랭킹으로 바로가기</a>
@@ -65,17 +65,17 @@ export function HomeV2Terminal({
         <div className="relative z-10 mx-auto flex max-w-home flex-col">
           <div className="py-4 sm:py-6">
             <p className="text-caption font-semibold uppercase tracking-label text-muted sm:text-caption">
-              Korea Apartment Capital Market
+              우리 아파트의 가치를 한눈에
             </p>
             <div className="mt-2 flex flex-wrap items-end gap-x-7 gap-y-2">
               <h1 className="text-[length:var(--ko-size-heading)] font-semibold leading-heading tracking-heading text-ink">
                 아파트 시가총액 랭킹
               </h1>
               <div className="pb-1 text-caption leading-copy tracking-label text-muted">
-                <p>{universeLabel} · 공개 베타</p>
+                <p>{universeLabel} · 공개 테스트 중</p>
               </div>
             </div>
-            <p className="mt-3 ko-copy max-w-copy text-sm leading-copy text-muted">단지의 공표 순위와 주간 순위 변화를 확인하세요.</p>
+            <p className="mt-3 ko-copy max-w-copy text-sm leading-copy text-muted">단지 전체의 추정 가치를 기준으로, 우리 아파트 순위와 이번 주 변화를 확인해 보세요.</p>
             <Link href="/play" prefetch={false} data-testid="home-play-entry" className="mt-5 flex max-w-2xl flex-col justify-between gap-3 rounded-2xl border border-accent bg-[var(--ko-accent-soft)] p-4 transition hover:border-[var(--ko-ink)] sm:flex-row sm:items-center">
               <span>
                 <strong className="block text-xl font-bold leading-heading text-ink">우리 아파트, 전국 몇 등?</strong>
@@ -85,14 +85,14 @@ export function HomeV2Terminal({
             </Link>
             <HomeV2Search key={universeCode} universeCode={universeCode} />
             <div className="mt-6 flex flex-wrap items-baseline gap-x-5 gap-y-2">
-              <p className="text-caption font-semibold text-muted">전국 별도 집계 참고 합계</p>
+              <p className="text-caption font-semibold text-muted">전국 집계 단지의 추정 가치 합계</p>
               <p className="break-words font-mono tabular-nums text-4xl font-medium tracking-number text-ink">
                 {hasAggregateScope ? totalMarketCapLabel ?? "—" : "—"}
               </p>
             </div>
-            <p className="mt-2 text-sm leading-copy text-muted" data-testid="aggregate-scope">{hasAggregateScope ? `${currentnessDate} 기준 · 전국 별도 집계 ${aggregateComplexCount!.toLocaleString("ko-KR")}개 단지 · 랭킹·지도와 별도 범위` : scopeSummary} · 대한민국 전체 주택의 총액이 아닙니다.</p>
+            <p className="mt-2 text-sm leading-copy text-muted" data-testid="aggregate-scope">{hasAggregateScope ? `${currentnessDate} 기준 · 별도로 집계한 ${aggregateComplexCount!.toLocaleString("ko-KR")}개 단지 · 아래 랭킹·지도와 포함 범위가 달라요` : scopeSummary} · 대한민국 전체 주택의 총액이 아닙니다.</p>
             <div className="mt-5 flex flex-wrap items-center gap-4">
-              <FormulaExplainer title="합계와 랭킹의 산출 기준" triggerLabel="산출 기준 보기" className="text-ink" scopeSummary={scopeSummary} />
+              <FormulaExplainer title="합계와 순위, 어떻게 계산하나요?" triggerLabel="계산 방법 보기" className="text-ink" scopeSummary={scopeSummary} />
               <p className="ko-caption max-w-copy text-caption leading-copy text-muted">{LAUNCH_COPY.compactBeta}</p>
             </div>
           </div>
@@ -103,7 +103,7 @@ export function HomeV2Terminal({
       <div className="mx-auto max-w-home px-5 sm:px-8 lg:px-12">
         {!dataAvailable ? (
           <div className="border-b border-[var(--ko-border)] py-3 text-center text-caption text-muted">
-            별도 합계·지수 정보를 확인하지 못했습니다. 공표 랭킹과 지역 분포는 아래에서 확인할 수 있습니다.
+            합계와 지수를 불러오지 못했어요. 공개된 랭킹과 지역별 지도는 아래에서 확인해 주세요.
           </div>
         ) : null}
         <div className="grid grid-cols-1 lg:grid-cols-[40fr_38fr_22fr]">
@@ -117,7 +117,7 @@ export function HomeV2Terminal({
 
       <footer className="border-t border-[var(--ko-border)] px-5 py-6 sm:px-8 lg:px-12">
         <div className="mx-auto flex max-w-home flex-col justify-between gap-3 text-caption uppercase tracking-label text-muted sm:flex-row">
-          <span>KOAPTIX / Apartment Capital Market Terminal</span>
+          <span>KOAPTIX / 우리 아파트 순위 찾기</span>
           <span>{LAUNCH_COPY.representativeMetric}</span>
         </div>
       </footer>

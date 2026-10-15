@@ -204,7 +204,7 @@ export function HomeV2Search({
             setQuery(nextQuery);
             setState(nextQuery.trim().length >= 2 ? { status: "loading", payload: null, message: null } : INITIAL_STATE);
           }}
-          placeholder="단지명 또는 시군구를 입력하세요"
+          placeholder="아파트 이름이나 지역을 입력해 보세요"
           autoComplete="off"
           aria-controls="home-v2-search-results"
           aria-busy={state.status === "loading"}
@@ -222,7 +222,7 @@ export function HomeV2Search({
         </button>
       </form>
       <p className="mt-2 text-caption leading-copy text-muted">
-        2자 이상 · 공개 랭킹과 관측 준비 후보를 구분해 표시합니다.
+        두 글자 이상 입력해 주세요. 순위가 없는 단지는 ‘순위 준비 중’으로 표시해요.
       </p>
       {isLanding && examples.length > 0 ? (
         <div data-search-examples role="group" aria-label="공개 단지 검색 예시" className="mt-3 flex flex-wrap items-center gap-2">
@@ -283,7 +283,7 @@ export function HomeV2Search({
                   </span>
                   {isLanding ? (
                     <span data-search-metrics className="shrink-0 text-right tabular-nums">
-                      <span className="block text-caption text-muted">추정 시총</span>
+                      <span className="block text-caption text-muted">추정 시가총액</span>
                       <strong className="block text-lg font-bold text-ink">{formatKrwCompact(item.marketCapKrw)}</strong>
                       <span className="block text-control font-semibold text-accent">{getUniverseLabel(item.universeCode || "KOREA_ALL")} · {item.rank.toLocaleString("ko-KR")}위</span>
                       {item.snapshotDate ? <span className="block text-caption text-muted">{item.snapshotDate} 기준</span> : null}
@@ -315,7 +315,7 @@ export function HomeV2Search({
                     </span>
                   </span>
                   <span className="shrink-0 bg-[var(--ko-selected-neutral)] px-2 py-1 text-caption font-semibold text-muted">
-                    관측 준비중
+                    순위 준비 중
                   </span>
                 </div>
               ))}

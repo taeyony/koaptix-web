@@ -156,21 +156,21 @@ const TIER_FILTER_OPTIONS: Array<{
   label: string;
 }> = [
     { key: "ALL", label: "전체" },
-    { key: "S", label: "S 1-10" },
-    { key: "A", label: "A 11-50" },
-    { key: "B", label: "B 51-100" },
-    { key: "C", label: "C 101-300" },
-    { key: "D", label: "D 301-1000" },
+    { key: "S", label: "1~10위" },
+    { key: "A", label: "11~50위" },
+    { key: "B", label: "51~100위" },
+    { key: "C", label: "101~300위" },
+    { key: "D", label: "301~1,000위" },
   ];
 
 const MOVEMENT_FILTER_OPTIONS: Array<{
   key: MovementFilterKey;
   label: string;
 }> = [
-  { key: "ALL", label: "All" },
-  { key: "UP", label: "Rising" },
-  { key: "DOWN", label: "Falling" },
-  { key: "NEW", label: "NEW" },
+  { key: "ALL", label: "전체" },
+  { key: "UP", label: "▲ 상승" },
+  { key: "DOWN", label: "▼ 하락" },
+  { key: "NEW", label: "새로 진입" },
 ];
 
 const SIDO_ALIAS_ENTRIES: ReadonlyArray<
@@ -1001,8 +1001,8 @@ export function RankingBoardClient({
         setDiscoverySearchError({
           scopeKey: cacheKey,
           message: timedOut
-            ? "관측 후보 검색 응답이 지연되고 있습니다. 잠시 후 다시 검색해 주세요."
-            : "관측 후보를 불러오지 못했습니다. 잠시 후 다시 검색해 주세요.",
+            ? "단지를 찾는 데 시간이 걸리고 있어요. 잠시 후 다시 검색해 주세요."
+            : "단지를 불러오지 못했어요. 잠시 후 다시 검색해 주세요.",
         });
         setDiscoveryCandidates([]);
         setRankedNameMatches(null);
@@ -1222,7 +1222,7 @@ export function RankingBoardClient({
           ? "Ranking request timed out"
           : error instanceof Error
             ? error.message
-            : "보드 로딩 실패";
+            : "랭킹을 불러오지 못했어요";
 
         setBoardItems((prev) => (prev.length > 0 ? prev : []));
         setBoardDeliveryMeta((prev) => ({
@@ -1504,7 +1504,7 @@ export function RankingBoardClient({
     }
 
     if (searchQuery.trim()) {
-      return "현재 선택한 보드 안에서는 일치하는 단지가 없습니다.";
+      return "선택한 지역의 랭킹에서는 일치하는 단지를 찾지 못했어요.";
     }
 
     const hasMovementFilter =
@@ -1622,8 +1622,8 @@ export function RankingBoardClient({
         className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-3 text-left sm:px-4"
       >
         <div className="mb-3 flex items-center justify-between gap-3 text-caption uppercase tracking-label text-amber-200/80">
-          <span>랭킹 산정 전 후보</span>
-          <span>{visibleDiscoveryCandidates.length} ITEMS</span>
+          <span>순위 확인 중인 단지</span>
+          <span>{visibleDiscoveryCandidates.length}개 단지</span>
         </div>
 
         <div className="space-y-2">
@@ -1646,7 +1646,7 @@ export function RankingBoardClient({
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-caption font-semibold text-amber-200">
-                    관측 준비중
+                    순위 준비 중
                   </span>
                   <span className="min-w-0 truncate text-sm font-semibold text-slate-100">
                     {candidate.displayName}
@@ -1680,7 +1680,7 @@ export function RankingBoardClient({
 
         {isDiscoverySearchPending && (
           <p className="mt-3 text-caption text-amber-100/60">
-            관측 후보를 확인하는 중입니다.
+            추가로 찾은 단지를 확인하고 있어요.
           </p>
         )}
       </div>
@@ -1777,7 +1777,7 @@ export function RankingBoardClient({
 
               {isWeeklyMovementFullBoard && (
                 <p className="mt-1 text-caption font-semibold uppercase tracking-label text-cyan-300">
-                  Authoritative weekly universe-rank movement
+                  공개된 순위를 지난주와 비교해요
                 </p>
               )}
 
@@ -1788,7 +1788,7 @@ export function RankingBoardClient({
                   }`}
                 >
                   {isHomeFlagship
-                    ? "단지별 추정 시가총액 순위와 공표된 주간 순위 이동을 함께 읽는 전술 보드입니다."
+                    ? "단지 전체의 추정 가치 순위와 지난주보다 얼마나 달라졌는지 함께 확인해 보세요."
                     : LAUNCH_COPY.boardIntro}
                 </p>
               )}
@@ -1800,7 +1800,7 @@ export function RankingBoardClient({
                   className="w-fit rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-caption font-semibold uppercase tracking-label text-slate-300"
                   data-testid="ranking-freshness"
                 >
-                  Updated {formattedLatestBoardDate}
+                  기준일 {formattedLatestBoardDate}
                 </span>
               )}
               {isHomeFlagship && formattedLatestBoardDate && (
@@ -1808,12 +1808,12 @@ export function RankingBoardClient({
                   className="w-fit rounded-full border border-slate-700 bg-slate-950/80 px-2.5 py-1 font-mono tabular-nums text-caption font-semibold uppercase tracking-label text-slate-300"
                   data-testid="home-ranking-freshness"
                 >
-                  Snapshot {formattedLatestBoardDate}
+                  기준일 {formattedLatestBoardDate}
                 </span>
               )}
               {isBoardLoading && (
                 <span className="w-fit rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-caption font-semibold uppercase tracking-label text-cyan-300">
-                  보드 새로고침 중
+                  랭킹 불러오는 중
                 </span>
               )}
             </div>
@@ -1845,10 +1845,10 @@ export function RankingBoardClient({
             >
               <div className="mb-2 flex items-center justify-between gap-3">
                 <span className="text-caption font-semibold uppercase tracking-label text-cyan-300">
-                  Weekly Rank Movement
+                  이번 주 순위 변화
                 </span>
                 <span className="text-caption text-slate-500">
-                  Published state
+                  공개된 자료 기준
                 </span>
               </div>
               <div className="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap">
@@ -1949,8 +1949,8 @@ export function RankingBoardClient({
             >
               <input
                 type="text"
-                placeholder="보드 안에서 단지·지역 찾기"
-                aria-label="보드 안에서 단지·지역 찾기"
+                placeholder="아파트 이름·지역 검색"
+                aria-label="아파트 이름·지역 검색"
                 aria-busy={isDiscoverySearchPending}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -1977,8 +1977,8 @@ export function RankingBoardClient({
               data-board-degraded={boardDeliveryMeta.degraded ? "true" : "false"}
               data-board-stale-universe-code={staleBoardUniverseCode ?? ""}
             >
-              {getUniverseLabel(boardUniverseCode)} 보드를 다시 확인하는 중입니다.
-              다른 유니버스의 이전 행은 새 관측값이 도착할 때까지 숨깁니다.
+              {getUniverseLabel(boardUniverseCode)} 랭킹을 다시 불러오고 있어요.
+              선택한 지역의 자료가 준비되면 표시할게요.
             </div>
           )}
 
@@ -1993,7 +1993,7 @@ export function RankingBoardClient({
 
                 {enableTierFilters && selectedTierFilter !== "ALL" && (
                   <div className="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-caption font-semibold text-cyan-300">
-                    <span>🏷 {selectedTierFilter}</span>
+                    <span>🏷 {TIER_FILTER_OPTIONS.find((option) => option.key === selectedTierFilter)?.label}</span>
                     <button
                       onClick={() => setSelectedTierFilter("ALL")}
                       className="ml-1 flex h-4 w-4 items-center justify-center rounded-full text-cyan-300/70 transition-all hover:bg-cyan-500/20 hover:text-cyan-200"
@@ -2006,10 +2006,10 @@ export function RankingBoardClient({
                 {isWeeklyMovementFullBoard &&
                   selectedMovementFilter !== "ALL" && (
                     <div className="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-caption font-semibold text-cyan-200">
-                      <span>Weekly {selectedMovementFilter}</span>
+                      <span>{MOVEMENT_FILTER_OPTIONS.find((option) => option.key === selectedMovementFilter)?.label}</span>
                       <button
                         type="button"
-                        aria-label="Clear weekly movement filter"
+                        aria-label="순위 변화 조건 지우기"
                         onClick={() => setSelectedMovementFilter("ALL")}
                         className="ml-1 flex h-4 w-4 items-center justify-center rounded-full text-cyan-300/70 transition-all hover:bg-cyan-500/20 hover:text-cyan-100"
                       >
@@ -2072,7 +2072,7 @@ export function RankingBoardClient({
                 data-testid="ranking-board-error-state"
               >
                 <span className="text-2xl opacity-60">!</span>
-                <p className="text-sm">요청한 유니버스 보드를 표시할 수 없습니다.</p>
+                <p className="text-sm">선택한 지역의 랭킹을 불러오지 못했어요.</p>
               </div>
             ) : isDiscoverySearchPending ? (
               <div aria-busy="true" className="flex h-32 items-center justify-center"><SearchProgress /></div>
@@ -2107,7 +2107,7 @@ export function RankingBoardClient({
                 {otherRegionSearchItems.length > 0 ? (
                   <section aria-label="다른 지역의 공개 검색 결과" className="rounded-xl border border-[var(--ko-border)] bg-surface p-4">
                     <h3 className="text-control font-semibold text-ink">다른 지역의 공개 결과에서 찾았어요</h3>
-                    <p className="mt-1 text-caption text-muted">전국 순위와 구분되는 해당 지역의 공표 순위입니다.</p>
+                    <p className="mt-1 text-caption text-muted">전국 순위가 아니라, 해당 지역 안에서의 순위예요.</p>
                     {otherRegionSearchItems.map(item => (
                       <Link key={`${item.universeCode}:${item.complexId}`} href={`/ranking?${new URLSearchParams({ universe: item.universeCode!, complexId: item.complexId })}`}
                         className="mt-3 flex min-h-11 items-center justify-between gap-4 rounded-lg border border-[var(--ko-border)] px-4 py-3 hover:bg-[var(--ko-accent-soft)] focus-visible:outline-2 focus-visible:outline-[var(--ko-focus)]">
@@ -2123,11 +2123,11 @@ export function RankingBoardClient({
               <div className="flex flex-col gap-3 pb-2">
                 <div className="rounded-2xl border border-slate-800 bg-black/20 px-4 py-4 text-sm leading-copy text-slate-400">
                   <p className="font-semibold text-slate-200">
-                    현재 공개 랭킹 보드에는 일치하는 행이 없습니다.
+                    현재 공개된 랭킹에서는 일치하는 단지를 찾지 못했어요.
                   </p>
                   <p className="mt-2">
-                    단지 이름과 지역 정보가 확인된 관측 준비 후보만 별도로
-                    표시합니다. 랭킹 편입, 시가총액, 상세 차트는 아직 열리지
+                    이름과 위치가 확인된 단지를 아래에 따로
+                    보여드려요. 순위·시가총액·상세 차트는 아직 제공하지
                     않습니다.
                   </p>
                 </div>

@@ -33,15 +33,15 @@ function formatWeeklyRankDelta(delta: number): string {
 }
 
 function formatMomentumW(value: number): string {
-  if (value > 0) return `Momentum (W) +${value.toFixed(2)}%`;
-  if (value < 0) return `Momentum (W) ${value.toFixed(2)}%`;
-  return "Momentum (W) 0.00%";
+  if (value > 0) return `주간 시가총액 변화 +${value.toFixed(2)}%`;
+  if (value < 0) return `주간 시가총액 변화 ${value.toFixed(2)}%`;
+  return "주간 시가총액 변화 0.00%";
 }
 
 function getDefaultMetadata(): Metadata {
-  const title = "KOAPTIX | 전국 아파트 자본 흐름 랭킹 터미널";
+  const title = "KOAPTIX | 우리 아파트 순위 찾기";
   const description =
-    "KOAPTIX는 단지별 추정 시가총액과 주간 변화를 기준으로 전국·지역·시군구 아파트 흐름을 보여주는 랭킹 터미널입니다.";
+    "실제 거래와 세대수로 추정한 단지 전체의 가치와 전국·지역별 순위를 확인해 보세요. 공식 가격지수나 투자 추천이 아닌 참고 정보입니다.";
 
   return {
     metadataBase: METADATA_BASE,
@@ -81,7 +81,7 @@ export async function buildComplexMetadata(
     const title = `${detail.name} | KOAPTIX`;
     const description = [
       `현재 #${detail.rank}`,
-      `시가총액 ${formatMarketCapKrw(detail.marketCapKrw)}`,
+      `추정 시가총액 ${formatMarketCapKrw(detail.marketCapKrw)}`,
       detail.locationLabel,
       `최근 7일 기준 ${formatWeeklyRankDelta(detail.rankDelta7d)}`,
       formatMomentumW(detail.marketCapDeltaPct7d),
@@ -111,7 +111,7 @@ export async function buildComplexMetadata(
             url: ogImagePath,
             width: 1200,
             height: 630,
-            alt: `${detail.name} KOAPTIX weekly share card`,
+            alt: `${detail.name} KOAPTIX 주간 순위 공유 카드`,
           },
         ],
       },

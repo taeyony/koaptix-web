@@ -65,21 +65,21 @@ export default async function PlayPage() {
         </header>
 
         <section className={styles.hero} aria-labelledby="play-title">
-          <p className={styles.eyebrow}><span className={styles.liveDot} aria-hidden="true" /> APARTMENT RANKING · KOREA</p>
+          <p className={styles.eyebrow}><span className={styles.liveDot} aria-hidden="true" /> 전국 아파트 순위 찾기</p>
           <h1 id="play-title" className={styles.title}>우리 아파트,<br />전국에서 <span className={styles.titleAccent}>몇 등일까?</span></h1>
           <p className={styles.subtitle}>집값은 알아도, 우리 단지 순위는 모르잖아.</p>
           <div className={styles.searchArea}>
             <HomeV2Search universeCode="KOREA_ALL" presentation="landing" examples={examples} />
           </div>
-          <p className={styles.heroFoot}><span className={styles.noteDot} aria-hidden="true" /> 실거래 기반 대표가격 × 세대수로 보는 단지 전체의 추정 시총</p>
+          <p className={styles.heroFoot}><span className={styles.noteDot} aria-hidden="true" /> 실제 거래와 세대수를 바탕으로, 단지 전체의 가치를 추정해요</p>
         </section>
 
         <section className={styles.section} aria-labelledby="play-top-title">
           <div className={styles.sectionHeading}>
             <div>
-              <p className={styles.kicker}>THE LEADERBOARD</p>
+              <p className={styles.kicker}>전국 상위 단지 미리보기</p>
               <h2 id="play-top-title" className={styles.sectionTitle}>이 단지들, 어디까지 알고 있어?</h2>
-              <p className={styles.scopeNote}>전국 공표 랭킹 TOP 5{date ? <> · <time dateTime={date}>{date}</time> 기준</> : " · 기준일 확인 중"}</p>
+              <p className={styles.scopeNote}>전국 공개 랭킹 상위 5개 단지{date ? <> · <time dateTime={date}>{date}</time> 기준</> : " · 기준일 확인 중"}</p>
             </div>
             <Link className={styles.textLink} href="/ranking?universe=KOREA_ALL">전체 랭킹 보기 <span aria-hidden="true">↗</span></Link>
           </div>
@@ -89,7 +89,7 @@ export default async function PlayPage() {
                 <Link href={`/complex/${champion.complex_id}`} className={styles.champion} prefetch={false}>
                   <div className={styles.championTop}>
                     <span className={styles.rankNumber}>#{champion.rank_all}</span>
-                    <span className={styles.rankTag}>공표 랭킹 1위</span>
+                    <span className={styles.rankTag}>전국 공개 랭킹 1위</span>
                   </div>
                   <h3 className={styles.complexName}>{champion.apt_name_ko}</h3>
                   <p className={styles.location}>{location(champion)}</p>
@@ -98,7 +98,7 @@ export default async function PlayPage() {
                   <span className={styles.cardArrow}>단지 자세히 보기 <span aria-hidden="true">↗</span></span>
                 </Link>
               ) : null}
-              <ol className={styles.rankList} aria-label="공표 순위와 추정 시가총액">
+              <ol className={styles.rankList} aria-label="공개 순위와 추정 시가총액">
                 {remaining.map((row) => (
                   <li key={String(row.complex_id)}>
                     <Link href={`/complex/${row.complex_id}`} className={styles.rankRow} prefetch={false}>
@@ -120,7 +120,7 @@ export default async function PlayPage() {
         <section className={styles.section} aria-labelledby="play-region-title">
           <div className={styles.sectionHeading}>
             <div>
-              <p className={styles.kicker}>YOUR NEIGHBORHOOD</p>
+              <p className={styles.kicker}>지역별 순위 찾기</p>
               <h2 id="play-region-title" className={styles.sectionTitle}>우리 동네 대장은, 정말 그 아파트?</h2>
               <p className={styles.scopeNote}>지역을 고르면 해당 지역의 공개 랭킹으로 이동합니다.</p>
             </div>
@@ -141,11 +141,11 @@ export default async function PlayPage() {
             <h2 id="play-explain-title" className={styles.explainerTitle}>비싼 한 채와, 큰 단지의 순위는 다르니까.</h2>
             <p className={styles.explainerCopy}>KOAPTIX는 면적별 대표가격과 세대수를 합쳐 단지 전체의 가치를 추정합니다. 집값이 높아도, 단지 시총 1위는 아닐 수 있어요.</p>
           </div>
-          <FormulaExplainer title="단지 시총과 랭킹의 산출 기준" triggerLabel="산출 기준 보기" className={styles.textLink} scopeSummary="현재 공개 대상 단지의 추정 시가총액 순위이며, 전국 모든 아파트를 포함하지 않습니다." />
+          <FormulaExplainer title="시가총액과 순위, 어떻게 계산하나요?" triggerLabel="계산 방법 보기" className={styles.textLink} scopeSummary="현재 공개 대상 단지의 추정 시가총액 순위이며, 전국 모든 아파트를 포함하지 않습니다." />
         </aside>
 
         <section className={styles.finalCta}>
-          <p className={styles.kicker}>NEXT UP: YOUR APARTMENT</p>
+          <p className={styles.kicker}>우리 아파트도 찾아볼까요?</p>
           <h2 className={styles.finalTitle}>이제, 우리 아파트 차례.</h2>
           <a className={styles.primaryLink} href="#home-v2-search">우리 아파트 찾아보기 <span aria-hidden="true">↑</span></a>
           <p className={styles.scopeNote}>찾은 단지는 상세 화면의 공유 버튼으로 함께 볼 수 있어요.</p>
@@ -153,8 +153,8 @@ export default async function PlayPage() {
 
         <footer className={styles.footer}>
           <Link href="/" className={styles.brand}>KOAPTIX</Link>
-          <p>공개 베타 · 추정 시총은 참고 정보이며 공식 가격지수나 투자 추천이 아닙니다.</p>
-          <Link href="/ranking?universe=KOREA_ALL">랭킹 터미널 <span aria-hidden="true">↗</span></Link>
+          <p>공개 테스트 중 · 추정 시가총액은 참고 정보이며, 공식 가격지수나 투자 추천이 아닙니다.</p>
+          <Link href="/ranking?universe=KOREA_ALL">전체 랭킹 보기 <span aria-hidden="true">↗</span></Link>
         </footer>
       </div>
     </main>

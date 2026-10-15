@@ -820,11 +820,11 @@ export function CommandPalette({
       currentRegionResolution?.state === "UNIVERSE_CONFLICT");
 
   const getDiscoveryWarningLabel = (warning: DiscoveryWarning) => {
-    if (warning === "SOURCE_IDENTITY_AMBIGUOUS") return "원천 연결 추가 확인";
-    if (warning === "AREA_HOUSEHOLD_GAP") return "세대수 연결 확인 중";
-    if (warning === "TRADE_CLEAN_GAP") return "실거래 정제 대기";
-    if (warning === "MARKET_CAP_SOURCE_GAP") return "시총 산정 전";
-    if (warning === "ELIGIBILITY_OR_RANK_GAP") return "랭킹 산정 대기";
+    if (warning === "SOURCE_IDENTITY_AMBIGUOUS") return "자료 출처 확인 중";
+    if (warning === "AREA_HOUSEHOLD_GAP") return "세대수 확인 중";
+    if (warning === "TRADE_CLEAN_GAP") return "거래 자료 확인 중";
+    if (warning === "MARKET_CAP_SOURCE_GAP") return "시가총액 계산 전";
+    if (warning === "ELIGIBILITY_OR_RANK_GAP") return "순위 확인 중";
     return warning;
   };
 
@@ -839,7 +839,7 @@ export function CommandPalette({
           ? "지역 확인"
           : null,
       candidate.evidenceFlags.hasAlias ? "별칭 확인" : null,
-      candidate.evidenceFlags.hasExternalId ? "외부 ID 확인" : null,
+      candidate.evidenceFlags.hasExternalId ? "연결된 단지번호 확인" : null,
     ].filter((label): label is string => Boolean(label));
 
     return (
@@ -873,7 +873,7 @@ export function CommandPalette({
             </p>
           </div>
           <div className="shrink-0 text-right text-caption font-semibold uppercase tracking-label text-amber-200/80">
-            OBSERVE
+            확인 중
           </div>
         </div>
 
@@ -929,14 +929,14 @@ export function CommandPalette({
         <p className="mt-2 truncate text-sm text-slate-400">
           {item.locationLabel || `${item.sigunguName ?? ""} ${item.legalDongName ?? ""}`}
           {" · "}
-          ID {item.complexId}
+          단지번호 {item.complexId}
         </p>
         {item.snapshotDate ? <p className="mt-1 text-caption text-slate-400">{item.universeName || item.universeCode} · {item.snapshotDate} 기준</p> : null}
       </div>
 
       <div className="shrink-0 text-right">
         <p className="text-caption uppercase tracking-label text-slate-500">
-          MARKET CAP
+          추정 시가총액
         </p>
         <p className="mt-1 text-3xl font-semibold text-slate-100">
           {typeof item.marketCapTrillionKrw === "number" && item.marketCapTrillionKrw > 0
@@ -959,7 +959,7 @@ export function CommandPalette({
       <div className="min-w-0 pr-4">
         <div className="flex items-center gap-2">
           <span className="rounded-full border border-emerald-400/30 px-2 py-0.5 text-caption font-semibold uppercase tracking-label text-emerald-300">
-            REGION
+            지역
           </span>
           <span className="truncate text-section font-semibold leading-none text-white">
             {result.displayLabel}
@@ -967,14 +967,14 @@ export function CommandPalette({
         </div>
 
         <p className="mt-2 truncate text-sm text-emerald-100/70">
-          {result.code}
+          지역별 랭킹
           {result.displayLabel !== result.label ? ` - ${result.label}` : ""}
-          {" - TOP1000 지역 보드로 이동"}
+          {" - 지역별 랭킹 보기"}
         </p>
       </div>
 
       <div className="shrink-0 text-right text-caption font-semibold uppercase tracking-label text-emerald-300/80">
-        OPEN
+        보기 ↗
       </div>
     </button>
   );
@@ -1004,7 +1004,7 @@ export function CommandPalette({
           <div className="mx-auto mt-24 w-[92%] max-w-[820px] rounded-[28px] border border-cyan-500/20 bg-[#0b1118]/95 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_24px_80px_rgba(0,0,0,0.55)]">
             <div className="border-b border-slate-800/80 px-6 py-5">
               <p className="text-caption uppercase tracking-label text-cyan-300/80">
-                KOAPTIX 관측 검색
+                우리 아파트 찾기
               </p>
 
               <div className="mt-4 flex items-center gap-3">
@@ -1028,7 +1028,7 @@ export function CommandPalette({
                   disabled={!rankingSearchHref}
                   className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs uppercase tracking-label text-cyan-300 transition hover:border-cyan-400/50 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-900/60 disabled:text-slate-500"
                 >
-                  TOP1000
+                  전체 랭킹
                 </button>
 
                 <button
@@ -1044,7 +1044,7 @@ export function CommandPalette({
             <div className="px-6 py-4">
               {(query.trim().length < 2) && (
                 <div className="mb-4 rounded-2xl border border-slate-800 bg-black/20 px-4 py-3 text-sm text-slate-400">
-                  두 글자 이상 입력하면 현재 공개 보드에서 먼저 찾고, 필요하면 전국 공개 결과까지 이어서 확인합니다.
+                  두 글자 이상 입력하면 선택한 지역에서 먼저 찾고, 다른 지역의 공개 결과도 함께 찾아드려요.
                 </div>
               )}
 
@@ -1055,7 +1055,7 @@ export function CommandPalette({
                 <div className="mb-4">
                   <div className="mb-3 flex items-center justify-between text-caption uppercase tracking-label text-emerald-300/80">
                     <span>지역 바로가기</span>
-                    <span>{regionSearchResults.length} ITEMS</span>
+                    <span>{regionSearchResults.length}개</span>
                   </div>
                   <div className="space-y-3">
                     {regionSearchResults.map(renderRegionResultCard)}
@@ -1114,8 +1114,8 @@ export function CommandPalette({
                   {visibleLocalItems.length > 0 ? (
                     <>
                       <div className="mb-2 flex items-center justify-between text-caption uppercase tracking-label text-slate-500">
-                        <span>현재 보드 미리보기</span>
-                        <span>{visibleLocalItems.length} ITEMS</span>
+                        <span>선택한 지역의 랭킹 미리보기</span>
+                        <span>{visibleLocalItems.length}개</span>
                       </div>
                       <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
                         {visibleLocalItems.map(renderResultCard)}
@@ -1123,7 +1123,7 @@ export function CommandPalette({
                     </>
                   ) : (
                     <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
-                      아파트명이나 지역명을 두 글자 이상 입력해 관측 기록을 찾아보세요.
+                      아파트 이름이나 지역을 두 글자 이상 입력해 보세요.
                     </div>
                   )}
                 </div>
@@ -1131,15 +1131,15 @@ export function CommandPalette({
                 <div className="max-h-[520px] space-y-5 overflow-y-auto pr-1">
                   {!hasRankedSearchResults && hasDiscoveryCandidates && (
                     <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/85">
-                      랭킹 결과는 아직 없지만, 관측 준비중인 후보가 있어요.
+                      단지는 찾았어요. 순위를 보여드리기 위한 자료를 확인 중이에요.
                     </div>
                   )}
 
                   {visibleLocalItems.length > 0 && (
                     <div>
                       <div className="mb-3 flex items-center justify-between text-caption uppercase tracking-label text-cyan-300/80">
-                        <span>현재 유니버스 결과</span>
-                        <span>{visibleLocalItems.length} ITEMS</span>
+                        <span>선택한 지역에서 찾았어요</span>
+                        <span>{visibleLocalItems.length}개</span>
                       </div>
                       <div className="space-y-3">
                         {visibleLocalItems.map(renderResultCard)}
@@ -1151,7 +1151,7 @@ export function CommandPalette({
                     <div>
                       <div className="mb-3 flex items-center justify-between text-caption uppercase tracking-label text-slate-400">
                         <span>전국 결과</span>
-                        <span>{visibleGlobalItems.length} ITEMS</span>
+                        <span>{visibleGlobalItems.length}개</span>
                       </div>
                       <div className="space-y-3">
                         {visibleGlobalItems.map(renderResultCard)}
@@ -1162,8 +1162,8 @@ export function CommandPalette({
                   {visibleDiscoveryCandidates.length > 0 && (
                     <div>
                       <div className="mb-3 flex items-center justify-between text-caption uppercase tracking-label text-amber-200/80">
-                        <span>랭킹 산정 전 후보</span>
-                        <span>{visibleDiscoveryCandidates.length} ITEMS</span>
+                        <span>순위 확인 중인 단지</span>
+                        <span>{visibleDiscoveryCandidates.length}개</span>
                       </div>
                       <div className="space-y-3">
                         {visibleDiscoveryCandidates.map(renderDiscoveryCandidateCard)}
@@ -1181,7 +1181,7 @@ export function CommandPalette({
                             {selectedDiscoveryCandidate.copy.helperText}
                           </p>
                           <p className="mt-3 text-caption text-slate-500">
-                            아직 공개 랭킹 보드의 단지 상세로 열지 않습니다.
+                            아직 상세 정보는 제공하지 않아요.
                           </p>
                         </div>
                       )}
@@ -1192,10 +1192,10 @@ export function CommandPalette({
                 null
               ) : (
                 <div className="space-y-2 rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
-                  <p>현재 공개 랭킹/지역 보드에서는 검색 결과가 없습니다.</p>
+                  <p>현재 공개된 랭킹에서는 단지를 찾지 못했어요.</p>
                   <p>
-                    단지가 존재하더라도 KOAPTIX 산정 조건 또는 공개 검증 상태에
-                    따라 아직 표시되지 않을 수 있습니다.
+                    실제 있는 단지라도 계산에 필요한 자료가 부족하거나 확인 중이라면
+                    아직 표시되지 않을 수 있어요.
                   </p>
                   <p>단지명, 구, 동 이름을 바꿔 다시 검색해보세요.</p>
                 </div>
@@ -1205,7 +1205,7 @@ export function CommandPalette({
             <div className="border-t border-slate-800/80 px-6 py-3">
               <BetaDisclosure variant="search" />
               <p className="mt-3 break-words text-caption uppercase tracking-label text-slate-500 [overflow-wrap:break-word] sm:text-caption">
-                ↑ ↓ NAVIGATE · ENTER OPEN DETAIL · ESC CLOSE · CMD/CTRL + K REOPEN
+                ↑ ↓ 이동 · Enter 상세 보기 · Esc 닫기 · Ctrl/⌘ + K 검색 열기
               </p>
             </div>
           </div>

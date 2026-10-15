@@ -3,17 +3,17 @@
 import { createPortal } from "react-dom";
 import { useEffect, useId, useRef, useState } from "react";
 
-const formulaTitle = "KOAPTIX 지수 산식";
+const formulaTitle = "시가총액과 지수, 어떻게 계산하나요?";
 const formulaLead =
-  "KOAPTIX 지수는 선택 범위의 적격 단지 추정 시가총액을 기준일 1000으로 환산한 숫자입니다.";
+  "시가총액은 단지 전체의 추정 가치예요. 지수는 계산 대상 단지들의 가치를 합쳐, 기준일을 1,000으로 놓고 얼마나 달라졌는지 보여줍니다.";
 const formulaBullets = [
-  "단지 추정 시가총액 = 면적군별 대표가격 × 해당 면적군 세대수의 합",
-  "대표가격은 같은 단지와 같은 면적군의 최근 12개월 유효 거래 중 최근 3건 평균을 사용합니다.",
-  "KOAPTIX Index = 1000 × 현재 총 추정 시가총액 / 기준일 총 추정 시가총액",
-  "최근 거래 1건이나 대표 세대 1개만으로 산출하지 않습니다.",
+  "단지 추정 시가총액 = 면적별 대표가격 × 해당 면적의 세대수를 모두 더한 값",
+  "대표가격은 같은 단지·비슷한 전용면적의 최근 12개월 유효 거래 중 마지막 3건의 평균이에요.",
+  "KOAPTIX 지수 = 1,000 × 현재 추정 시가총액 합계 ÷ 기준일 추정 시가총액 합계",
+  "거래 한 건이나 집 한 채의 가격만으로 계산하지 않아요.",
 ];
 const formulaFootnote =
-  "랭킹은 개별 단지의 추정 시가총액 순위이고, 지수는 선택 범위 전체의 흐름을 보여줍니다.";
+  "랭킹은 단지별 순위, 지수는 계산 대상 전체의 변화를 보여줘요.";
 
 type FormulaExplainerProps = {
   title?: string;
@@ -24,7 +24,7 @@ type FormulaExplainerProps = {
 
 export default function FormulaExplainer({
   title = formulaTitle,
-  triggerLabel = "산식 보기",
+  triggerLabel = "계산 방법 보기",
   className,
   scopeSummary,
 }: FormulaExplainerProps) {

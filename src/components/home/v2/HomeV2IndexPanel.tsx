@@ -37,10 +37,10 @@ export function HomeV2IndexPanel({ index }: { index: HomeIndexChartPayload }) {
     return (
       <section id="index" tabIndex={-1} className="order-3 border-b border-[var(--ko-border)] py-6 lg:order-3 lg:border-b-0 lg:border-l lg:px-8">
         <details>
-          <summary className="cursor-pointer text-control font-semibold text-ink">KOAPTIX Index · 공개 이력 준비 중</summary>
-          <p className="ko-copy mt-3 text-sm text-muted">검증과 공표가 완료된 지수 이력만 표시합니다. 공개 일정은 아직 정해지지 않았습니다.</p>
+          <summary className="cursor-pointer text-control font-semibold text-ink">KOAPTIX 시장 지수 · 공개할 자료를 준비하고 있어요</summary>
+          <p className="ko-copy mt-3 text-sm text-muted">시장 지수는 계산 대상 아파트들의 추정 가치가 기준일보다 얼마나 달라졌는지 보여주는 숫자예요. 확인이 끝난 자료만 공개하며, 공개 날짜는 아직 정해지지 않았어요.</p>
           {regionSelector}
-          <a href="#koaptix-500" className="ko-text-link mt-3 inline-block text-control font-semibold">공표된 랭킹 확인 ↗</a>
+          <a href="#koaptix-500" className="ko-text-link mt-3 inline-block text-control font-semibold">공개된 랭킹 보기 ↗</a>
         </details>
       </section>
     );
@@ -49,7 +49,7 @@ export function HomeV2IndexPanel({ index }: { index: HomeIndexChartPayload }) {
 
   return (
     <section id="index" tabIndex={-1} className="order-3 min-h-[260px] border-b border-[var(--ko-border)] py-8 lg:order-3 lg:border-b-0 lg:border-l lg:px-8">
-      <HomeV2SectionHeading title="KOAPTIX Index" note={`${index.renderedUniverseLabel} · ${rows.length ? "공개 서비스 지수" : "공표 준비 중"}`} />
+      <HomeV2SectionHeading title="KOAPTIX 시장 지수" note={`${index.renderedUniverseLabel} · ${rows.length ? "공개 서비스 지수" : "공개 준비 중"}`} />
       {regionSelector}
       <div className="mt-5 flex items-end justify-between gap-4">
         <div>
@@ -86,7 +86,7 @@ export function HomeV2IndexPanel({ index }: { index: HomeIndexChartPayload }) {
       </div>
       <p id="index-point-value" aria-live="polite" className="mt-3 font-mono tabular-nums text-caption text-muted">{selected ? `${selected.snapshotDate} · ${numberFormat.format(selected.value)}` : "공개된 지수값이 없어 숫자와 차트를 표시하지 않습니다."}</p>
       <div className="mt-3 flex justify-between text-caption text-muted"><span>{rows[0]?.snapshotDate ?? "—"}</span><span>{index.latestSnapshotDate ?? "—"}</span></div>
-      <p className="mt-3 text-caption leading-copy text-muted">{rows.length ? `공개 서비스 기준일 ${index.baseDate} = ${index.baseValue.toLocaleString("ko-KR")}.` : "미공표 값은 공개 지수로 표시하지 않습니다."} 공식 지수 공표는 보류 중입니다.</p>
+      <p className="mt-3 text-caption leading-copy text-muted">{rows.length ? `공개 서비스 기준일 ${index.baseDate} = ${index.baseValue.toLocaleString("ko-KR")}.` : "아직 공개하지 않은 값은 표시하지 않아요."} 공식 지수는 아직 공개하지 않습니다.</p>
       {!rows.length ? <a href="#koaptix-500" className="ko-text-link mt-4 inline-block text-control font-semibold text-accent">현재 공개 랭킹 확인 ↘</a> : null}
     </section>
   );

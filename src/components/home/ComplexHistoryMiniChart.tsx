@@ -38,14 +38,14 @@ const PERIOD_LABELS: Record<ComplexChartPeriod, string> = {
 };
 const HISTORY_COPY = {
   published: {
-    label: "공개 시총",
-    empty: "조회 기간에 공개된 시총 이력이 없습니다.",
-    caption: "공개 시총 이력의 날짜별 저장 값",
+    label: "공개 시가총액",
+    empty: "이 기간에는 공개된 시가총액 기록이 없어요.",
+    caption: "공개 시가총액 이력의 날짜별 기록",
   },
   reference: {
-    label: "참고 재계산 시총",
-    empty: "조회 기간에 검증 조건을 충족하는 참고 재계산 시총 이력이 없습니다.",
-    caption: "참고 재계산 시총 이력의 날짜별 값 · 당시 공표 기록과 별도",
+    label: "다시 계산한 시가총액",
+    empty: "이 기간에는 확인된 과거 계산값이 없어요.",
+    caption: "다시 계산한 시가총액 이력의 날짜별 값 · 당시 공개한 값과 다를 수 있어요",
   },
   "restored-local-review": {
     label: "검토용 시총",
@@ -216,7 +216,7 @@ export function ComplexHistoryMiniChart({
   if (normalizedSeries.length === 0 || mergedData.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-copy text-white/55">
-        {historyCopy.empty} 현재 시총만으로 과거 추이를 만들 수 없습니다.
+        {historyCopy.empty} 현재 값만으로 과거 변화를 알 수는 없어요.
       </div>
     );
   }
@@ -387,7 +387,7 @@ export function ComplexHistoryMiniChart({
       ) : null}
       <details className="border-t border-[var(--ko-border)] px-3 py-3 sm:px-4">
         <summary className="cursor-pointer text-control font-semibold text-accent underline underline-offset-4">
-          날짜별 시총 값 보기
+          날짜별 시가총액 보기
         </summary>
         <div className="mt-3 max-h-64 overflow-auto" tabIndex={0} role="region" aria-label={`날짜별 ${historyLabel} 값`}>
           <table className="w-full text-left text-sm tabular-nums">

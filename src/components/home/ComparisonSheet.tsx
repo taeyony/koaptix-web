@@ -153,7 +153,7 @@ function buildMetricRows(leftItem: unknown, rightItem: unknown): MetricDefinitio
 
   return [
     {
-      label: "시가총액",
+      label: "추정 시가총액",
       leftValue: leftMarketCap,
       rightValue: rightMarketCap,
       displayLeft: formatTrillion(leftMarketCap),
@@ -161,7 +161,7 @@ function buildMetricRows(leftItem: unknown, rightItem: unknown): MetricDefinitio
       compare: "higher",
     },
     {
-      label: "주간 모멘텀",
+      label: "이번 주 시가총액 변화",
       leftValue: leftMomentum,
       rightValue: rightMomentum,
       displayLeft: formatSigned(leftMomentum),
@@ -169,7 +169,7 @@ function buildMetricRows(leftItem: unknown, rightItem: unknown): MetricDefinitio
       compare: "higher",
     },
     {
-      label: "52주 회복률",
+      label: "1년 최고치 대비 현재 수준",
       leftValue: leftRecovery,
       rightValue: rightRecovery,
       displayLeft: formatPercent(leftRecovery),
@@ -185,7 +185,7 @@ function buildMetricRows(leftItem: unknown, rightItem: unknown): MetricDefinitio
       compare: "higher",
     },
     {
-      label: "연식",
+      label: "준공 후 지난 기간",
       leftValue: leftAge,
       rightValue: rightAge,
       displayLeft: formatAge(leftAge),
@@ -260,9 +260,9 @@ export default function ComparisonSheet({ open, items, onClose, onRemoveItem, on
           <div className="border-b border-slate-800/80 px-6 py-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-caption font-medium uppercase tracking-label text-slate-500">Comparison Sheet</p>
-                <h2 id="comparison-sheet-title" className="ko-section-title mt-2 text-section font-bold text-slate-100">1:1 스펙 비교</h2>
-                <p className="ko-copy mt-1 text-sm text-slate-500">에메랄드 포인트는 해당 항목의 우위를 의미합니다.</p>
+                <p className="text-caption font-medium uppercase tracking-label text-slate-500">두 단지 한눈에 비교</p>
+                <h2 id="comparison-sheet-title" className="ko-section-title mt-2 text-section font-bold text-slate-100">우리 아파트와 비교해 볼까요?</h2>
+                <p className="ko-copy mt-1 text-sm text-slate-500">초록색은 시가총액·세대수 등이 더 크거나, 준공 후 기간이 짧은 쪽을 표시해요. 투자 가치를 평가한 것은 아닙니다.</p>
               </div>
               <div className="flex items-center gap-2">
                 {onClear ? <button type="button" onClick={onClear} className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-cyan-400/30 hover:text-cyan-300">초기화</button> : null}
@@ -275,7 +275,7 @@ export default function ComparisonSheet({ open, items, onClose, onRemoveItem, on
               <div className="flex min-h-[280px] items-center justify-center px-6 py-8">
                 <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/60 px-6 py-8 text-center">
                   <p className="text-sm font-medium text-slate-200">비교 대상 2개를 담으면 여기서 바로 대조됩니다.</p>
-                  <p className="ko-copy mt-2 text-sm text-slate-500">랭킹 카드의 VS 버튼으로 두 단지를 선택하세요.</p>
+                  <p className="ko-copy mt-2 text-sm text-slate-500">랭킹 카드의 ‘비교’ 버튼으로 두 단지를 선택하세요.</p>
                 </div>
               </div>
             ) : (
@@ -284,7 +284,7 @@ export default function ComparisonSheet({ open, items, onClose, onRemoveItem, on
                   <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
                     <div className="ko-comparison-summary flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-caption uppercase tracking-label text-slate-500">LEFT</p>
+                        <p className="text-caption uppercase tracking-label text-slate-500">첫 번째 단지</p>
                         <h3 className="mt-2 break-words text-base font-semibold text-slate-50">{getComplexName(leftItem)}</h3>
                         <p className="mt-2 text-sm text-slate-400">{getLocationText(leftItem)}</p>
                         {getRankText(leftItem) ? <p className="mt-1 text-xs text-slate-500">현재 순위 {getRankText(leftItem)}</p> : null}
@@ -293,13 +293,13 @@ export default function ComparisonSheet({ open, items, onClose, onRemoveItem, on
                     </div>
                   </article>
                   <div className="flex items-center justify-center">
-                    <div className="rounded-full border border-slate-800 bg-slate-900/80 px-3 py-2 text-caption font-medium tracking-label text-slate-300">VS</div>
+                    <div className="rounded-full border border-slate-800 bg-slate-900/80 px-3 py-2 text-caption font-medium tracking-label text-slate-300">비교</div>
                   </div>
                   <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
                     <div className="ko-comparison-summary flex items-start justify-between gap-3">
                       {onRemoveItem ? <button type="button" onClick={() => onRemoveItem(rightItem)} className="shrink-0 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1.5 text-caption font-medium text-slate-400 transition hover:border-cyan-400/30 hover:text-cyan-300">제거</button> : null}
                       <div className="min-w-0 text-right">
-                        <p className="text-caption uppercase tracking-label text-slate-500">RIGHT</p>
+                        <p className="text-caption uppercase tracking-label text-slate-500">두 번째 단지</p>
                         <h3 className="mt-2 break-words text-base font-semibold text-slate-50">{getComplexName(rightItem)}</h3>
                         <p className="mt-2 text-sm text-slate-400">{getLocationText(rightItem)}</p>
                         {getRankText(rightItem) ? <p className="mt-1 text-xs text-slate-500">현재 순위 {getRankText(rightItem)}</p> : null}

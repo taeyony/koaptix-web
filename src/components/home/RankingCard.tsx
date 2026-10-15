@@ -50,9 +50,9 @@ function isExactWeeklyWindow(
 }
 
 function formatSignedWeeklyPercent(value: number) {
-  if (value > 0) return `+${value.toFixed(1)}% W`;
-  if (value < 0) return `${value.toFixed(1)}% W`;
-  return "0.0% W";
+  if (value > 0) return `+${value.toFixed(1)}% · 1주`;
+  if (value < 0) return `${value.toFixed(1)}% · 1주`;
+  return "0.0% · 1주";
 }
 
 export function RankingCard({
@@ -73,7 +73,7 @@ export function RankingCard({
   const isNew = weeklyMeta.rankMovement === "NEW" && !hasWeeklyDelta;
 
   const momentumText = isNew
-    ? "NEW"
+    ? "새로 진입"
     : isUp
       ? `▲ ${item.rankDelta7d ?? 0}`
       : isDown
@@ -90,7 +90,7 @@ export function RankingCard({
 
   const weeklyHint =
     isNew || (!hasWeeklyDelta && weeklyMeta.previousRankAll == null)
-      ? "최근 7일 비교 기준 데이터 없음"
+      ? "지난주와 비교할 자료가 없어요"
       : null;
 
   const locationText =
@@ -113,24 +113,24 @@ export function RankingCard({
           : null;
     const movementContext =
       movement === "NEW"
-        ? `Current #${item.rank}`
+        ? `현재 ${item.rank}위`
         : previousRank !== null
-          ? `Previous #${previousRank} → Current #${item.rank}`
-          : `Current #${item.rank}`;
+          ? `이전 ${previousRank}위 → 현재 ${item.rank}위`
+          : `현재 ${item.rank}위`;
     const movementLabel =
       movement === "NEW"
-        ? "NEW"
+        ? "새로 진입"
         : movement === "SAME"
-          ? "SAME"
+          ? "순위 그대로"
           : movement === "UP"
             ? rankDelta !== null && rankDelta > 0
-              ? `▲ +${rankDelta}`
-              : "▲ UP"
+              ? `▲ ${rankDelta}계단 상승`
+              : "▲ 순위 상승"
             : movement === "DOWN"
               ? rankDelta !== null && rankDelta < 0
-                ? `▼ ${rankDelta}`
-                : "▼ DOWN"
-              : "UNAVAILABLE";
+                ? `▼ ${Math.abs(rankDelta)}계단 하락`
+                : "▼ 순위 하락"
+              : "비교 자료 없음";
     const movementTone =
       movement === "NEW"
         ? "border-cyan-400/35 bg-cyan-500/10 text-cyan-200"
@@ -208,14 +208,14 @@ export function RankingCard({
               aria-label={`${item.name} 비교 선택`}
               aria-pressed={isCompared}
             >
-              VS
+              비교
             </button>
           )}
 
           <div className="col-span-2 col-start-2 row-start-2 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:col-span-1 lg:col-start-3 lg:row-start-1">
             <div className="rounded-lg border border-slate-800 bg-black/20 px-3 py-2">
               <p className="text-caption font-semibold uppercase tracking-label text-slate-500">
-                Estimated market cap
+                추정 시가총액
               </p>
               <p className="mt-1 text-sm font-semibold tabular-nums text-slate-100 sm:text-base">
                 {formatMarketCapKrw(item.marketCapKrw)}
@@ -242,7 +242,7 @@ export function RankingCard({
               data-testid="ranking-weekly-rank-movement"
             >
               <p className="text-caption font-semibold uppercase tracking-label opacity-70">
-                Weekly rank movement
+                이번 주 순위 변화
               </p>
               <p className="mt-1 truncate text-caption font-medium tabular-nums opacity-80 sm:text-xs">
                 {movementContext}
@@ -261,7 +261,7 @@ export function RankingCard({
         {item.recoveryRate52w != null && (
           <div className="mt-3 flex items-center gap-2 border-t border-slate-800/60 pt-2 opacity-60 transition-opacity group-hover:opacity-90">
             <span className="text-caption uppercase tracking-label text-slate-500">
-              52W Rec
+              1년 최고 대비
             </span>
             <div className="h-0.5 flex-1 overflow-hidden rounded-full bg-slate-800">
               <div
@@ -353,7 +353,7 @@ export function RankingCard({
               aria-label={`${item.name} 비교 선택`}
               aria-pressed={isCompared}
             >
-              VS
+              비교
             </button>
           </div>
         )}
@@ -361,7 +361,7 @@ export function RankingCard({
 
       {item.recoveryRate52w != null && (
         <div className="mt-3 flex items-center gap-2 px-1 opacity-70 transition-opacity group-hover:opacity-100">
-          <span className="text-caption uppercase tracking-label text-slate-500">52W Rec</span>
+          <span className="text-caption uppercase tracking-label text-slate-500">1년 최고 대비</span>
           <div className="h-0.5 flex-1 overflow-hidden rounded-full bg-slate-800">
             <div
               className="h-full bg-emerald-500/60 transition-all"

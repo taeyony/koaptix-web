@@ -50,7 +50,7 @@ function locationLabel(item: RankingItem): string {
 }
 
 function movementLabel(delta: number | null): string {
-  if (delta === null) return "관측 없음";
+  if (delta === null) return "비교 자료 없음";
   if (delta > 0) return `↑ ${delta}`;
   if (delta < 0) return `↓ ${Math.abs(delta)}`;
   return "— 0";
@@ -216,10 +216,10 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
               KOAPTIX
             </p>
             <h2 className="ko-section-title mt-1 text-section font-bold tracking-heading text-ink">
-              KOAPTIX 500
+              아파트 시가총액 순위
             </h2>
             <p className="mt-2 text-caption leading-copy text-muted">
-              {universeLabel} · 홈 미리보기 상위 8개 / 전체 랭킹 최대 1,000개
+              {universeLabel} · 상위 8개 미리보기 · 전체 랭킹은 최대 1,000개
             </p>
           </div>
           <Link
@@ -231,14 +231,14 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
         </div>
 
         <p className="mt-3 text-caption leading-copy text-muted" data-testid="home-ranking-scope">
-          {state.status === "ready" ? `랭킹 기준일 ${state.metadata.latestBoardDate ?? state.metadata.snapshot_date ?? "확인 중"} · 공표 보드 ${items.length.toLocaleString("ko-KR")}개 중 상위 ${Math.min(8, items.length)}개 표시` : universeUnavailable ? "선택한 지역의 공표 랭킹을 아직 제공하지 않습니다." : "공표된 랭킹의 기준일과 표시 범위를 확인하고 있습니다."}
-          {" · 대표 합계와 별도 범위입니다."}
+          {state.status === "ready" ? `랭킹 기준일 ${state.metadata.latestBoardDate ?? state.metadata.snapshot_date ?? "확인 중"} · 공개된 ${items.length.toLocaleString("ko-KR")}개 단지 중 상위 ${Math.min(8, items.length)}개 표시` : universeUnavailable ? "선택한 지역의 랭킹은 아직 공개되지 않았어요." : "랭킹의 기준 날짜와 포함된 단지를 확인하고 있어요."}
+          {" · 위 합계와 포함된 단지가 달라요."}
         </p>
 
         <div className="home-v2-region-selector mt-6">
           <UniverseSelector value={universeCode} options={universeOptions} density="compact" onChange={(code) => router.push(`/?universe=${encodeURIComponent(code)}#koaptix-500`)} />
         </div>
-        {universeUnavailable ? <p className="py-6 text-sm text-muted">이 지역의 공개 보드는 아직 제공되지 않습니다. 선택한 지역을 유지합니다.</p> : null}
+        {universeUnavailable ? <p className="py-6 text-sm text-muted">이 지역의 랭킹은 아직 준비 중이에요. 다른 지역도 찾아보세요.</p> : null}
         {comparisonItems.length ? <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted">
           <span>비교 선택 {comparisonItems.length}/2 · {comparisonItems.map((item) => item.name).join(" · ")}</span>
           <button type="button" disabled={comparisonItems.length !== 2} onClick={() => setComparisonOpen(true)} className="border-b border-accent pb-1 font-semibold text-accent disabled:cursor-not-allowed disabled:opacity-40">두 단지 비교</button>
@@ -247,11 +247,11 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
 
         <div className="ko-table-scroll mt-8 border-t border-[var(--ko-border)]">
           <div className="ko-table-head hidden items-center gap-4 border-b border-[var(--ko-border)] py-3 text-caption font-semibold uppercase tracking-label text-muted md:grid">
-            <span>Rank</span>
-            <span>Complex</span>
-            <span>Region</span>
-            <span className="text-right">Est. market cap</span>
-            <span className="text-right">7D rank</span>
+            <span>순위</span>
+            <span>아파트</span>
+            <span>지역</span>
+            <span className="text-right">추정 시가총액</span>
+            <span className="text-right">주간 순위 변화</span>
             <span />
             <span>비교</span>
           </div>
@@ -278,7 +278,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
           ) : null}
           {state.status === "ready" && !visibleItems.length ? (
             <div className="border-b border-[var(--ko-border)] py-12 text-center text-sm text-muted">
-              현재 공개된 {universeLabel} 랭킹 행이 없습니다.
+              현재 공개된 {universeLabel} 랭킹에 표시할 단지가 없어요.
             </div>
           ) : null}
           {visibleItems.map((item) => {
@@ -324,7 +324,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
                 >
                   {bookmarked ? "◆" : "◇"}
                 </button>
-                <button type="button" onClick={() => toggleComparison(item)} aria-label={`${item.name} 비교 선택`} aria-pressed={comparisonItems.some((row) => row.complexId === item.complexId)} className="ko-icon-button text-control font-semibold text-accent">VS</button>
+                <button type="button" onClick={() => toggleComparison(item)} aria-label={`${item.name} 비교 선택`} aria-pressed={comparisonItems.some((row) => row.complexId === item.complexId)} className="ko-icon-button text-control font-semibold text-accent">비교</button>
               </div>
             );
           })}
@@ -339,8 +339,8 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
       <section className="order-4 border-b border-[var(--ko-border)] py-8 lg:order-4 lg:border-b-0 lg:border-l lg:pl-7">
         {rising.length || falling.length ? <>
         <HomeV2SectionHeading
-          title="Capital Movers"
-          note="TOP1000 내 주간 순위 변화 · 가격 등락 아님"
+          title="이번 주 눈에 띄는 단지"
+          note="공개 랭킹 안에서 순위가 오른·내린 단지"
         />
         <div className="mt-6 grid grid-cols-2 gap-5 lg:grid-cols-1 lg:gap-6">
           {[
@@ -372,7 +372,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
                   ))
                 ) : (
                   <p className="text-xs text-muted">
-                    {`이 공개 보드에서 ${group.label}한 단지가 없습니다.`}
+                    {`이 랭킹에서 순위가 ${group.label}한 단지가 없어요.`}
                   </p>
                 )}
               </div>
@@ -380,8 +380,8 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
           ))}
         </div>
         </> : <details>
-          <summary className="cursor-pointer text-control font-semibold text-ink">Capital Movers · {state.status === "loading" && !universeUnavailable ? "공표 내역 확인 중" : state.status === "error" || universeUnavailable ? "공표 내역 확인 불가" : knownMovement.length ? "관측된 순위 이동 없음" : "비교 이력 준비 중"}</summary>
-          <p className="ko-copy mt-3 text-sm text-muted">검증된 주간 순위 비교가 있을 때 상승·하락 단지를 표시합니다. 비교 불가와 순위 보합은 구분하며, 가격 등락을 뜻하지 않습니다.</p>
+          <summary className="cursor-pointer text-control font-semibold text-ink">이번 주 눈에 띄는 단지 · {state.status === "loading" && !universeUnavailable ? "공개 자료 확인 중" : state.status === "error" || universeUnavailable ? "공개 자료를 불러오지 못했어요" : knownMovement.length ? "순위 변화 없음" : "지난주 비교 자료 준비 중"}</summary>
+          <p className="ko-copy mt-3 text-sm text-muted">지난주와 비교할 자료가 있으면 순위가 오른·내린 단지를 보여드려요. 자료가 없는 경우와 순위가 그대로인 경우는 구분합니다. 집값의 상승·하락을 뜻하지 않아요.</p>
         </details>}
       </section>
 
@@ -392,14 +392,14 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
       >
         {knownMovement.length ? <>
         <HomeV2SectionHeading
-          title="Market Momentum"
-          note={`${universeLabel} · 공개 TOP1000 기준`}
+          title="이번 주 순위 변화 요약"
+          note={`${universeLabel} · 공개 랭킹 최대 1,000개 기준`}
         />
         <div className="mt-5 grid grid-cols-3 divide-x divide-slate-200/70 py-3">
           {[
             { label: "상승 ▲", value: movementCounts.rising, tone: "text-up" },
             {
-              label: "보합",
+              label: "그대로",
               value:
                 knownMovement.length -
                 movementCounts.rising -
@@ -424,17 +424,17 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
           ))}
         </div>
         <p className="mt-3 text-caption leading-copy text-muted">
-          {state.status === "ready" ? `${state.metadata.latestBoardDate ?? state.metadata.snapshot_date ?? "기준일 확인 중"} 기준 · ${universeLabel} 공개 표본 ${items.length}개 중 주간 비교 가능 ${knownMovement.length}개입니다.` : universeUnavailable ? "이 지역의 랭킹이 아직 공표되지 않았습니다." : state.status === "error" ? "공개 랭킹을 불러오지 못해 인사이트를 표시할 수 없습니다." : "공개 랭킹의 주간 변화를 확인하고 있습니다."} 지역 전체 시장의 가격 등락률이 아닙니다.
+          {state.status === "ready" ? `${state.metadata.latestBoardDate ?? state.metadata.snapshot_date ?? "기준일 확인 중"} 기준 · ${universeLabel} 공개 단지 ${items.length}개 중 주간 비교 가능 ${knownMovement.length}개입니다.` : universeUnavailable ? "이 지역의 랭킹은 아직 공개되지 않았어요." : state.status === "error" ? "랭킹을 불러오지 못해 순위 변화를 보여드릴 수 없어요." : "공개 랭킹의 주간 변화를 확인하고 있습니다."} 지역 전체의 집값 변화를 뜻하지 않아요.
         </p>
-        {state.status === "ready" && knownMovement.length && !movementCounts.rising && !movementCounts.falling ? <p className="mt-2 text-caption text-muted">비교 가능한 공개 표본의 주간 순위 이동이 없습니다.</p> : null}
+        {state.status === "ready" && knownMovement.length && !movementCounts.rising && !movementCounts.falling ? <p className="mt-2 text-caption text-muted">비교할 수 있는 단지들의 순위는 지난주와 같아요.</p> : null}
         <div className="mt-4 flex flex-wrap gap-5 text-control font-semibold text-accent">
           <Link className="ko-text-link" href={`${rankingHref}&movement=up`}>상승 단지 보기 ↗</Link>
           <Link className="ko-text-link" href={`${rankingHref}&movement=down`}>하락 단지 보기 ↗</Link>
           <Link className="ko-text-link" href={rankingHref}>전체 랭킹에서 확인 ↗</Link>
         </div>
         </> : <details>
-          <summary className="cursor-pointer text-control font-semibold text-ink">Market Momentum · {state.status === "loading" && !universeUnavailable ? "공표 내역 확인 중" : state.status === "error" || universeUnavailable ? "공표 내역 확인 불가" : "검증된 비교 이력 준비 중"}</summary>
-          <p className="ko-copy mt-3 text-sm text-muted">비교 가능한 공표 단지가 있을 때 순위 상승·보합·하락의 개수를 표시합니다. 비교 이력이 없는 단지는 보합으로 세지 않습니다.</p>
+          <summary className="cursor-pointer text-control font-semibold text-ink">이번 주 순위 변화 요약 · {state.status === "loading" && !universeUnavailable ? "공개 자료 확인 중" : state.status === "error" || universeUnavailable ? "공개 자료를 불러오지 못했어요" : "지난주 비교 자료 준비 중"}</summary>
+          <p className="ko-copy mt-3 text-sm text-muted">지난주와 비교할 수 있는 단지만, 순위가 오른·그대로인·내린 단지로 나눠 보여드려요. 비교 자료가 없는 단지는 ‘그대로’로 세지 않습니다.</p>
         </details>}
       </section>
 
@@ -478,7 +478,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
               아직 저장한 단지가 없습니다.
             </p>
             <p className="ko-copy mt-1 max-w-copy text-sm leading-copy text-muted">
-              KOAPTIX 500의 ◇를 선택하면 이 브라우저에 저장됩니다.
+              아파트 시가총액 순위의 ◇를 선택하면 이 브라우저에 저장됩니다.
             </p>
           </div>
         )}

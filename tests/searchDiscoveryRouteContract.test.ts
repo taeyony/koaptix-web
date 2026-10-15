@@ -326,7 +326,7 @@ test("discovery copy is truthful for every area and trade evidence state", () =>
         hasTradeClean: false,
       },
       expected:
-        "평형별 세대수와 실거래 연결을 확인하고 있습니다. 가격·시가총액·랭킹 반영을 준비 중입니다.",
+        "면적별 세대수와 실제 거래를 확인 중이에요. 확인이 끝나면 시가총액과 순위를 계산할 수 있어요.",
     },
     {
       name: "area present and trade absent",
@@ -336,7 +336,7 @@ test("discovery copy is truthful for every area and trade evidence state", () =>
         hasTradeClean: false,
       },
       expected:
-        "평형별 세대수는 확인됐습니다. 실거래 연결과 가격·시가총액·랭킹 반영을 준비 중입니다.",
+        "면적별 세대수는 확인했어요. 실제 거래와 시가총액·순위 자료는 아직 확인 중이에요.",
     },
     {
       name: "area absent and trade present",
@@ -346,7 +346,7 @@ test("discovery copy is truthful for every area and trade evidence state", () =>
         hasTradeClean: true,
       },
       expected:
-        "실거래는 확인됐습니다. 평형별 세대수 연결과 가격·시가총액·랭킹 반영을 준비 중입니다.",
+        "실제 거래는 확인했어요. 면적별 세대수와 시가총액·순위 자료는 아직 확인 중이에요.",
     },
     {
       name: "area present and trade present",
@@ -356,15 +356,15 @@ test("discovery copy is truthful for every area and trade evidence state", () =>
         hasTradeClean: true,
       },
       expected:
-        "실거래와 평형별 세대수는 확인됐습니다. 가격·시가총액·랭킹 반영을 준비 중입니다.",
+        "실제 거래와 면적별 세대수는 확인했어요. 시가총액과 순위를 공개하기 위한 나머지 확인이 필요해요.",
     },
   ];
 
   for (const fixture of cases) {
     const copy = buildDiscoveryCopy(fixture.input);
-    assert.equal(copy.badge, "관측 준비중", fixture.name);
+    assert.equal(copy.badge, "순위 준비 중", fixture.name);
     assert.equal(copy.message, fixture.expected, fixture.name);
-    assert.match(copy.message, /랭킹 반영을 준비 중입니다\.$/, fixture.name);
+    assert.match(copy.message, /(?:확인 중|확인이 필요)/, fixture.name);
     assert.equal(copy.message.includes("랭킹 반영이 완료"), false, fixture.name);
   }
 });
@@ -384,11 +384,11 @@ test("discovery copy preserves the source-ambiguity helper contract", () => {
 
   assert.equal(
     standard.helperText,
-    "랭킹 보드에 올리기 전 원천 연결과 공개 검증 상태를 더 확인하고 있습니다.",
+    "순위를 공개하기 전에 거래·세대수 자료가 이 단지의 자료인지, 공개 조건을 충족하는지 확인하고 있어요.",
   );
   assert.equal(
     ambiguous.helperText,
-    "랭킹 보드에 올리기 전 원천 연결과 공개 검증 상태를 더 확인하고 있습니다. 일부 원천 연결은 추가 확인이 필요합니다.",
+    "순위를 공개하기 전에 거래·세대수 자료가 이 단지의 자료인지, 공개 조건을 충족하는지 확인하고 있어요. 일부 자료는 출처를 더 확인해야 해요.",
   );
 });
 

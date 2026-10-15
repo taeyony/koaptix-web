@@ -14,7 +14,7 @@ function formatRate(value: number | null | undefined): string {
 }
 
 function formatGap(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "N/A";
+  if (value == null || !Number.isFinite(value)) return "자료 없음";
   if (value > 100) return `+${(value - 100).toFixed(1)}%`;
   if (value < 100) return `-${(100 - value).toFixed(1)}%`;
   return "0.0%";
@@ -23,8 +23,8 @@ function formatGap(value: number | null | undefined): string {
 function getRecoveryState(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) {
     return {
-      signal: "NO DATA",
-      hint: "52주 고점 데이터 대기",
+      signal: "비교 자료 없음",
+      hint: "최근 1년 최고치 자료를 준비하고 있어요",
       shellClass: "border-white/10 bg-white/[0.03]",
       accentClass: "text-white/55",
       fillClass: "from-white/30 to-white/20",
@@ -35,8 +35,8 @@ function getRecoveryState(value: number | null | undefined) {
 
   if (value >= 100) {
     return {
-      signal: "ALL-TIME HIGH",
-      hint: `${formatGap(value)} breakout`,
+      signal: "1년 최고치 이상",
+      hint: `1년 최고치 대비 ${formatGap(value)}`,
       shellClass:
         "border-amber-300/20 bg-gradient-to-r from-cyan-300/[0.08] via-cyan-300/[0.04] to-amber-300/[0.10]",
       accentClass: "text-amber-100",
@@ -48,8 +48,8 @@ function getRecoveryState(value: number | null | undefined) {
 
   if (value >= 80) {
     return {
-      signal: "RECOVERING",
-      hint: `${formatGap(value)} to high`,
+      signal: "최고치의 80% 이상",
+      hint: `1년 최고치와의 차이 ${formatGap(value)}`,
       shellClass:
         "border-emerald-300/18 bg-emerald-300/[0.07]",
       accentClass: "text-emerald-100",
@@ -60,8 +60,8 @@ function getRecoveryState(value: number | null | undefined) {
   }
 
   return {
-    signal: "DISCOUNTED",
-    hint: `${formatGap(value)} to high`,
+    signal: "최고치의 80% 미만",
+    hint: `1년 최고치와의 차이 ${formatGap(value)}`,
     shellClass:
       "border-fuchsia-400/18 bg-fuchsia-400/[0.08]",
     accentClass: "text-fuchsia-100",
@@ -89,7 +89,7 @@ export function RecoveryGauge({
       >
         <div className="flex items-center justify-between gap-3">
           <span className="text-caption uppercase tracking-label text-white/42">
-            52W Recovery
+            1년 최고치 대비
           </span>
           <span
             className={`text-caption font-semibold uppercase tracking-label ${state.accentClass}`}
@@ -131,7 +131,7 @@ export function RecoveryGauge({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <p className="text-caption uppercase tracking-label text-white/42">
-            52-Week Recovery Rate
+            1년 최고치 대비 현재 수준
           </p>
 
           <div className="mt-2 flex items-end gap-3">
