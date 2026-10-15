@@ -592,7 +592,7 @@ export function ComplexDetailSheet({
                     <p className="font-semibold text-ink">{chartRange.basis === "reference" ? "과거 추이는 이렇게 계산했어요" : "과거 시총 재구성 검토"}</p>
                     <p className="mt-1">{chartRange.sourceNote}</p>
                     <p className="mt-1">거래·세대수 자료 확인일: {chartRange.sourceObservedAt?.slice(0, 10)} · 시작일과 월말에 계산한 값을 주·월·년 단위로 묶어 보여드려요. 주를 선택해도 계산하지 않은 날짜의 값이 새로 생기지는 않아요.</p>
-                    {(chartRange.excludedPointCount ?? 0) > 0 ? <p className="mt-1 text-[var(--ko-warning)]">계산 결과를 확인할 수 없는 {chartRange.excludedPointCount}개 날짜는 비워 두고, 그 사이를 선으로 잇지 않아요.</p> : null}
+                    {(chartRange.excludedPointCount ?? 0) > 0 ? <p className="mt-1 text-[var(--ko-warning)]">계산 결과를 확인할 수 없는 {chartRange.excludedPointCount}개 날짜는 비워 두고, 그 사이를 선으로 잇지 않아요. 면적별 최근 12개월 거래가 3건 이상 있어야 가격을 계산하며, 가격을 계산할 수 있는 세대가 전체의 95%에 못 미치는 날짜 등은 표시하지 않아요.</p> : null}
                     {chartRange.reviewBlockedReasons?.length ? <p className="mt-1 text-[var(--ko-warning)]">거래·세대수 자료나 현재 공개된 값과의 확인이 끝나지 않아, 다시 계산한 값은 보여드리지 않아요. 기존에 공개한 기록은 그대로 남아 있어요.</p> : null}
                   </div>
                 ) : null}

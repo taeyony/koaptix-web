@@ -61,16 +61,13 @@ test("all packaged references preserve every date, exact amount and null gap", (
       else positive++;
     }
   }
-  assert.equal(positive, 28453);
-  assert.equal(empty, 75761);
+  assert.equal(positive, 41181);
+  assert.equal(empty, 63033);
   assert.equal(selected.source.expectedPointCount, 33);
   assert.equal(selected.source.sourceNote, "현재 확인된 세대수와 가용 거래를 기준으로 재계산한 참고 이력이며, 당시 공표값이나 전국의 완전한 과거 이력이 아닙니다.");
 });
 
-test("the approved reconnection adds only the two historical segments and preserves all other complexes", () => {
-  const unchanged = Object.fromEntries(Object.entries(data.series).filter(([id]) => !["168421", "168423"].includes(id)));
-  assert.equal(crypto.createHash("sha256").update(JSON.stringify(unchanged)).digest("hex").toUpperCase(),
-    "1479B9FBF9ED99751C08E27E56BA7D1ACE79CC81445F3E39AD7FA1F34AE30CFA");
+test("the previously committed two-complex restoration and its gaps remain intact", () => {
   assert.equal(data.series["168421"][0], 414155333074);
   assert.equal(data.series["168423"][0], 1258598332865);
   assert.equal(data.series["168421"].at(-1), 358398666926);
@@ -85,6 +82,43 @@ test("the approved reconnection adds only the two historical segments and preser
   const selected = load()([168421, 168423], { 168421: anchor("168421"), 168423: anchor("168423") });
   assert.equal(selected.metadataById[168421].availableFrom, "2024-01-01");
   assert.equal(selected.metadataById[168423].availableFrom, "2024-01-01");
+});
+
+test("the full restoration preserves every current anchor and every date after November 2024", () => {
+  const hash = value => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex").toUpperCase();
+  const proof = data.provenance.committedHistoryRecovery;
+  assert.equal(proof.approvalScopeDigest, "77BEBF1C5AFC6E46379CB003C9FCB0A61B6FC60941677A82F73B81E96FB18EAD");
+  assert.equal(proof.committedTrades, 55383);
+  assert.equal(proof.targetComplexes, 2457);
+  assert.equal(Object.keys(proof.committedInputSha256).length, 16);
+  assert.equal(proof.addedPoints, 12728);
+  assert.equal(proof.recalculatedExistingReferencePoints, 12);
+  assert.equal(proof.currentAnchorChanges, 0);
+  assert.equal(proof.changedOutsideTargetComplexes, 0);
+  assert.equal(proof.historicalPublicationAmended, false);
+  assert.equal(proof.officialIndexGenesisHoldPreserved, true);
+  const changed = new Set(proof.changedComplexIds.map(String));
+  assert.equal(changed.size, 1742);
+  const unchanged = Object.fromEntries(Object.entries(data.series).filter(([id]) => !changed.has(id)));
+  assert.equal(hash(unchanged), "8469742F55C072CD4BD04E09E553234AFFAFAFB7C43FC4515CA36D67BFBFF603");
+  assert.equal(hash(unchanged), proof.unchangedSeriesSha256);
+  // These hashes were independently checked against the deployed parent.
+  assert.equal(hash(Object.fromEntries(Object.entries(data.series).map(([id, values]) => [id, values.at(-1)]))),
+    "864FCEA39282D9194CC362D34EBA4E4A18234946D398509C897B24797D36EFE4");
+  assert.equal(hash(Object.fromEntries(Object.entries(data.series).map(([id, values]) => [id, values.slice(12)]))),
+    "06A926FAC03A5F0AC614272C14A15CC10FB9B9DC8287032FBE34DCCB3C9E4927");
+  assert.equal(Object.values(data.series).filter(values => values[0] !== null).length, 1787);
+});
+
+test("newly supported history is visible while unsupported intervals stay empty", () => {
+  const selected = load()([5262, 2765], { 5262: anchor("5262"), 2765: anchor("2765") });
+  assert.equal(selected.metadataById[5262].availableFrom, "2024-05-31");
+  assert.equal(selected.rowsById[5262][5].market_cap_krw, 2707470000030);
+  assert.equal(selected.rowsById[5262][6].market_cap_krw, 2728284999951);
+  assert.ok(selected.rowsById[5262].slice(0, 5).every(row => row.market_cap_krw === null));
+  assert.ok(selected.rowsById[5262].slice(17, 21).every(row => row.market_cap_krw === null));
+  assert.equal(selected.metadataById[2765].availableFrom, "2024-01-01");
+  assert.equal(selected.rowsById[2765][0].market_cap_krw, 3240298333389);
 });
 
 test("a fresh current publication anchor is required for each exact ID", () => {

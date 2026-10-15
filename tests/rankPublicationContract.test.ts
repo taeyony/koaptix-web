@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
+import { ModuleKind, transpileModule } from "typescript";
+import * as indexContract from "../src/types/koaptix";
 
 import {
   requirePublicationIdentity,
@@ -230,8 +233,8 @@ test("TOP1000 V1 preserves authoritative weekly movement and exact-date cap sema
   const queries = readSource("src/lib/koaptix/queries.ts");
   const types = readSource("src/lib/koaptix/types.ts");
 
-  assert.match(page, /KOAPTIX TOP1000/);
-  assert.match(page, /Weekly Rank Movement/i);
+  assert.match(page, /전체 아파트 순위/);
+  assert.match(page, /이번 주 순위 변화/);
   assert.match(page, /presentation="weekly-movement-full-board"/);
 
   assert.match(
@@ -274,7 +277,7 @@ test("TOP1000 V1 preserves authoritative weekly movement and exact-date cap sema
   assert.match(client, /normalizeRankMovement\(item\) === selectedMovementFilter/);
   assert.match(client, /params\.set\("movement", selectedMovementFilter\.toLowerCase\(\)\)/);
   assert.match(client, /json\.latestBoardDate \?\? null/);
-  assert.match(client, /Updated \{formattedLatestBoardDate\}/);
+  assert.match(client, /기준일 \{formattedLatestBoardDate\}/);
   assert.match(client, /const presentationBoardItems = useMemo/);
   assert.match(client, /containsMismatchedUniverse \? \[\] : boardItems/);
   assert.match(client, /response\.status === 409/);
@@ -303,11 +306,19 @@ test("rank routes have private no-store and no cross-request rank caches", () =>
     const source = readSource(routePath);
     assert.match(source, /private, no-store, max-age=0/, `${routePath} header`);
     assert.doesNotMatch(source, forbiddenCacheState, `${routePath} memory cache`);
-    assert.equal(
-      countMatches(source, /\bok:\s*true,/g),
-      1,
-      `${routePath} must have exactly one identity-bearing ok:true response`,
-    );
+    const successResponses = countMatches(source, /\bok:\s*true,/g);
+    if (routePath === "src/app/api/search/route.ts") {
+      // Existing search degradation returns no ranking rows or financial values.
+      const degraded = sourceBetween(source, '// Search keeps the requested universe identity', '...getKoaptixDeploymentHeaders()');
+      assert.match(degraded, /localItems:\s*\[\]/);
+      assert.match(degraded, /globalItems:\s*\[\]/);
+      assert.doesNotMatch(degraded, /marketCapKrw:|rank:/);
+      assert.equal(countMatches(degraded, /source:\s*"empty_degraded"/g), 1);
+      assert.equal(countMatches(source, /ok:\s*true,\s*generation_id:/g), 1);
+      assert.equal(successResponses, 2, "one published result plus one empty degraded response");
+    } else {
+      assert.equal(successResponses, 1, `${routePath} must have exactly one ok:true response`);
+    }
   }
 });
 
@@ -342,6 +353,89 @@ test("Home reads only the published wrapper and rejects identity-less selection"
   ]) {
     assert.match(types, new RegExp(`${field}:`));
   }
+});
+
+function loadIndexHistoryFixture() {
+  const chart = Array.from({ length: 80 }, (_, i) => ({
+    snapshot_date: new Date(Date.UTC(2024, 6, 31 + i * 7)).toISOString().slice(0, 10),
+    universe_code: "KOREA_ALL", index_code: "KOAPTIX_KOREA", index_name: "KOAPTIX KOREA",
+    base_date: "2024-07-31", base_value: 1000, index_value: 1000 + i,
+    component_complex_count: i === 0 ? 386 : 1000, total_market_cap_krw: 10000 + i,
+  }));
+  const filters: Array<[string, unknown]> = [];
+  const client = {
+    from(name: string) {
+      assert.equal(name, "v_koaptix_index_timeseries");
+      return {
+        select() { return this; },
+        eq(column: string, value: unknown) { filters.push([column, value]); return this; },
+        order() { return this; },
+        async limit(limit: number) { assert.equal(limit, 200); return { data: [...chart].reverse(), error: null }; },
+      };
+    },
+  };
+  const moduleRef = { exports: {} as {
+    getIndexChartPayload(code: string): Promise<import("../src/lib/koaptix/queries").HomeIndexChartPayload>;
+  } };
+  // Exercise the actual reader and existing baseline guards with no credentials.
+  runInNewContext(transpileModule(readSource("src/lib/koaptix/queries.ts"), {
+    compilerOptions: { module: ModuleKind.CommonJS },
+  }).outputText, {
+    module: moduleRef, exports: moduleRef.exports,
+    process: { env: { NEXT_PUBLIC_SUPABASE_URL: "https://test.invalid", NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-only" } },
+    require(name: string) {
+      if (name === "@supabase/supabase-js") return { createClient: () => client };
+      if (name === "./universes") return { DEFAULT_UNIVERSE_CODE: "KOREA_ALL", resolveServiceUniverseCode: (code: string) => code, getUniverseLabel: () => "대한민국 전체" };
+      if (name === "./currentness") return {};
+      if (name === "../../types/koaptix") return indexContract;
+      throw new Error("Unexpected history dependency: " + name);
+    },
+  });
+  return { api: moduleRef.exports, filters, chart };
+}
+
+test("existing public index reader retains all 80 approved service points", async () => {
+  const fixture = loadIndexHistoryFixture();
+  const history = await fixture.api.getIndexChartPayload("KOREA_ALL");
+  assert.equal(history.rows.length, 80);
+  assert.equal(history.rows[0].snapshotDate, "2024-07-31");
+  assert.equal(history.rows.at(-1)?.value, 1079);
+  assert.equal(history.rows[0].componentComplexCount, 386);
+  assert.equal(history.publicExposureStatus, "blocked");
+  assert.equal(history.changePct1m, null, "legacy lag is not a verified monthly return");
+  assert.deepEqual(fixture.filters, [
+    ["universe_code", "KOREA_ALL"], ["index_code", "KOAPTIX_KOREA"], ["base_date", "2024-07-31"],
+  ]);
+});
+
+test("index reader still blocks official genesis and unapproved baselines", async () => {
+  for (const baseDate of ["2024-01-01", "2024-08-31"]) {
+    const fixture = loadIndexHistoryFixture();
+    fixture.chart.at(-1)!.base_date = baseDate;
+    const history = await fixture.api.getIndexChartPayload("KOREA_ALL");
+    assert.equal(history.rows.length, 0);
+    assert.equal(history.indexValue, null);
+    assert.equal(history.publicExposureStatus, "blocked");
+  }
+});
+
+test("mixed official chart points are excluded without changing service values", async () => {
+  const fixture = loadIndexHistoryFixture();
+  fixture.chart[0].base_date = "2024-01-01";
+  const history = await fixture.api.getIndexChartPayload("KOREA_ALL");
+  assert.equal(history.rows.length, 79);
+  assert.ok(history.rows.every(point => point.baseDate === "2024-07-31"));
+  assert.equal(history.rows.at(-1)?.value, 1079);
+  assert.equal(history.mixedBaselineGuard, "filtered_mixed_rows");
+});
+
+test("other-universe rows cannot appear as national index points", async () => {
+  const fixture = loadIndexHistoryFixture();
+  fixture.chart.forEach(point => { point.universe_code = "SEOUL_ALL"; });
+  const history = await fixture.api.getIndexChartPayload("KOREA_ALL");
+  assert.equal(history.rows.length, 0);
+  assert.equal(history.indexValue, null);
+  assert.equal(history.renderedUniverseCode, "KOREA_ALL");
 });
 
 test("bounded runner and compiler configuration execute this contract", () => {

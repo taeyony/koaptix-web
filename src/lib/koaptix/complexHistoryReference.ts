@@ -51,12 +51,12 @@ export type ComplexHistoryReferenceSelection = {
   source: ComplexHistoryReferenceSource;
 };
 
-const SOURCE_KEY = "current-canonical-reconstruction:b0d4cdebf99c0c212e9e979dc6bdbfe20d7a956a3bff8e1ae514bd74258492ea";
+const SOURCE_KEY = "current-canonical-reconstruction:6189ec4da9efd36cf3aa7e1f5990ac38d61c3c8198f08feff6c1ca72c6d4d7bf";
 const GENERATION_ID = "733d03e6-e029-449b-a748-26c4b032df05";
 const SOURCE_NOTE = "현재 확인된 세대수와 가용 거래를 기준으로 재계산한 참고 이력이며, 당시 공표값이나 전국의 완전한 과거 이력이 아닙니다.";
 const source: ComplexHistoryReferenceSource = {
   sourceKey: SOURCE_KEY,
-  sourceObservedAt: "2026-10-15T09:56:59.274903+00:00",
+  sourceObservedAt: "2026-10-15T13:38:56.174204+00:00",
   sourceNote: SOURCE_NOTE,
   expectedPointCount: 33,
   snapshotDate: "2026-08-31",
@@ -72,13 +72,13 @@ function isExactId(id: string): boolean {
 // public rank history: every request also needs a matching *current* anchor.
 function isValidPackage(): boolean {
   const digest = createHash("sha256").update(JSON.stringify(referenceData)).digest("hex").toUpperCase();
-  if (digest !== "17EA1F28FF3B2F6B036F161A3BD0FEBF643501A1BF4806671ACB135C7952306C" ||
+  if (digest !== "5D50ECF974EA035B90A667B7AA3483ACB6106328DDFC58C86FC48C4DC10EEA21" ||
       referenceData.schemaVersion !== 1 ||
       referenceData.status !== "LOCAL_REFERENCE_CANDIDATE_NOT_DEPLOYMENT_APPROVAL" ||
       Object.entries(source).some(([key, value]) => referenceData.source[key as keyof typeof source] !== value) ||
       referenceData.provenance.historicalPublication !== false ||
       referenceData.provenance.nationalHistoricalCompletenessProven !== false ||
-      referenceData.counts.complexes !== 3158 || referenceData.counts.positivePoints !== 28453) return false;
+      referenceData.counts.complexes !== 3158 || referenceData.counts.positivePoints !== 41181) return false;
 
   const expectedDates = ["2024-01-01"];
   for (let year = 2024; year <= 2026; year++) {

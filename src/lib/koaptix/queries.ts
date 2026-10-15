@@ -850,6 +850,34 @@ async function fetchIndexChartChain(
   latestCard: DbIndexLatestCardRow | null;
   rows: DbIndexTimeseriesRow[];
 }> {
+  if (universeCode === DEFAULT_UNIVERSE_CODE) {
+    // This is the same 80-point service series already exposed by /api/home.
+    // Scope BEFORE choosing latest/limiting: the generic latest card currently
+    // points at the separately held official genesis. Reuse the existing public
+    // read client without opening the protected rank-payload wrapper to anon.
+    const result = await supabase
+      .from("v_koaptix_index_timeseries")
+      .select("*")
+      .eq("universe_code", universeCode)
+      .eq("index_code", "KOAPTIX_KOREA")
+      .eq("base_date", KOAPTIX_PUBLIC_SERVICE_BASE_DATE)
+      .order("snapshot_date", { ascending: false })
+      .limit(200);
+    if (result.error) throw new Error("Failed to fetch public service index history");
+    const rows = (result.data ?? []) as DbIndexTimeseriesRow[];
+    const latest = rows[0];
+    return {
+      rows,
+      latestCard: latest ? {
+        ...latest,
+        // The legacy view's lag fields are not an exact one-month comparison.
+        change_1m: null,
+        change_pct_1m: null,
+        movement_1m: null,
+      } : null,
+    };
+  }
+
   const [latestCardResult, rowsResult] = await Promise.all([
     supabase
       .from("v_koaptix_latest_index_card")
