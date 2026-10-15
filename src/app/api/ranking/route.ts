@@ -405,6 +405,7 @@ function toRankingItem(
     published_at: row.published_at,
     surface_code: "UNIVERSE_SERVICE",
     complexId: String(row.complex_id ?? row.id ?? ""),
+    snapshotDate: row.snapshot_date ?? undefined,
 
     name,
     apt_name_ko: name,
