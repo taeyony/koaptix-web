@@ -1,5 +1,8 @@
 export const DISCOVERY_REGION_FALLBACK_CANDIDATE_CAP = 48;
 
+// All clients of /api/search use the existing full-search request budget.
+export const DISCOVERY_SEARCH_REQUEST_TIMEOUT_MS = 7_000;
+
 export type DiscoveryRegionEvidenceSource =
   | "REGION_MAP"
   | "APT_COMPLEX_REGION_FALLBACK";

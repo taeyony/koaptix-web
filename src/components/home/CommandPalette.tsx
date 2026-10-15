@@ -13,6 +13,7 @@ import type {
   RegionResolutionResult,
 } from "../../lib/koaptix/regionAliasV1.types";
 import { BetaDisclosure } from "./BetaDisclosure";
+import { DISCOVERY_SEARCH_REQUEST_TIMEOUT_MS } from "../../lib/koaptix/discoverySearch";
 import {
   DEFAULT_UNIVERSE_CODE,
   getSearchUniverseRegistry,
@@ -606,7 +607,6 @@ export function CommandPalette({
     let cancelled = false;
     let timedOut = false;
 
-    const searchFetchTimeoutMs = 7000;
     let fetchTimeoutId: number | undefined;
 
     const timer = window.setTimeout(async () => {
@@ -617,7 +617,7 @@ export function CommandPalette({
       fetchTimeoutId = window.setTimeout(() => {
         timedOut = true;
         controller.abort();
-      }, searchFetchTimeoutMs);
+      }, DISCOVERY_SEARCH_REQUEST_TIMEOUT_MS);
 
       try {
         const next = await readSearchResult(

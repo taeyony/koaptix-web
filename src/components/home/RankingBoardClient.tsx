@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import { RankingCard } from "./RankingCard";
+import { DISCOVERY_SEARCH_REQUEST_TIMEOUT_MS } from "../../lib/koaptix/discoverySearch";
 import type {
   DiscoveryCandidate,
   RankingItem,
@@ -506,7 +507,6 @@ const KOREA_ALL_HOME_BOARD_LIMIT = 12;
 const RANKING_DISCOVERY_SEARCH_LIMIT = 8;
 const RANKING_DISCOVERY_SEARCH_MIN_QUERY_LENGTH = 2;
 const RANKING_DISCOVERY_SEARCH_DEBOUNCE_MS = 250;
-const RANKING_DISCOVERY_SEARCH_TIMEOUT_MS = 4500;
 
 const DISCOVERY_SEARCH_API = (
   query: string,
@@ -743,6 +743,10 @@ export function RankingBoardClient({
   >([]);
   const [searchRegionWarnings, setSearchRegionWarnings] = useState<string[]>([]);
   const [isDiscoverySearchPending, setIsDiscoverySearchPending] = useState(false);
+  const [discoverySearchError, setDiscoverySearchError] = useState<{
+    scopeKey: string;
+    message: string;
+  } | null>(null);
   const [selectedTierFilter, setSelectedTierFilter] =
     useState<TierFilterKey>(initialSelectedTierFilter);
   const [selectedMovementFilter, setSelectedMovementFilter] =
@@ -915,6 +919,7 @@ export function RankingBoardClient({
         setSearchClarificationChoices([]);
         setSearchRegionWarnings([]);
         setIsDiscoverySearchPending(false);
+        setDiscoverySearchError(null);
       }, 0);
 
       return () => window.clearTimeout(resetId);
@@ -931,6 +936,7 @@ export function RankingBoardClient({
         setSearchRegionWarnings(cached.warnings);
         setSelectedDiscoveryCandidate(null);
         setIsDiscoverySearchPending(false);
+        setDiscoverySearchError(null);
       }, 0);
 
       return () => window.clearTimeout(cacheId);
@@ -943,11 +949,12 @@ export function RankingBoardClient({
 
     const debounceId = window.setTimeout(async () => {
       setIsDiscoverySearchPending(true);
+      setDiscoverySearchError(null);
 
       timeoutId = window.setTimeout(() => {
         timedOut = true;
         controller.abort();
-      }, RANKING_DISCOVERY_SEARCH_TIMEOUT_MS);
+      }, DISCOVERY_SEARCH_REQUEST_TIMEOUT_MS);
 
       try {
         const nextPayload = await readDiscoveryCandidates(
@@ -964,7 +971,7 @@ export function RankingBoardClient({
         setSearchRegionWarnings(nextPayload.warnings);
         setSelectedDiscoveryCandidate(null);
       } catch (error) {
-        if (!timedOut && (cancelled || isAbortError(error))) return;
+        if (cancelled || (!timedOut && isAbortError(error))) return;
 
         console.warn("[RankingBoardClient] discovery search skipped", {
           boardUniverseCode,
@@ -974,6 +981,12 @@ export function RankingBoardClient({
             error instanceof Error
               ? error.message
               : "discovery_search_unavailable",
+        });
+        setDiscoverySearchError({
+          scopeKey: cacheKey,
+          message: timedOut
+            ? "관측 후보 검색 응답이 지연되고 있습니다. 잠시 후 다시 검색해 주세요."
+            : "관측 후보를 불러오지 못했습니다. 잠시 후 다시 검색해 주세요.",
         });
         setDiscoveryCandidates([]);
         setSelectedDiscoveryCandidate(null);
@@ -1534,6 +1547,11 @@ export function RankingBoardClient({
   }, [presentationBoardItems, discoveryCandidates, searchQuery]);
 
   const hasDiscoveryCandidates = visibleDiscoveryCandidates.length > 0;
+  const currentDiscoverySearchError =
+    discoverySearchError?.scopeKey ===
+    `${boardUniverseCode}::${searchQuery.trim().toLowerCase()}`
+      ? discoverySearchError.message
+      : null;
 
   const activeDistrictLabel = useMemo(() => {
     if (!districtQueryLocal) return "";
@@ -2077,6 +2095,14 @@ export function RankingBoardClient({
                   </p>
                 </div>
                 {renderDiscoveryCandidatesSection()}
+              </div>
+            ) : isDiscoverySearchPending ? (
+              <div role="status" className="flex h-32 items-center justify-center text-sm text-slate-400">
+                관측 후보를 확인하는 중입니다.
+              </div>
+            ) : currentDiscoverySearchError ? (
+              <div role="status" className="flex h-32 items-center justify-center px-4 text-center text-sm text-amber-200">
+                {currentDiscoverySearchError}
               </div>
             ) : (
               <div className="flex h-32 flex-col items-center justify-center gap-2 text-slate-500">
