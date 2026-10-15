@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import { RankingCard } from "./RankingCard";
 import { DISCOVERY_SEARCH_REQUEST_TIMEOUT_MS } from "../../lib/koaptix/discoverySearch";
+import { matchesComplexNameQuery } from "../../lib/koaptix/nameSearch";
+import { SearchProgress } from "./SearchProgress";
 import type {
   DiscoveryCandidate,
   RankingItem,
@@ -74,11 +77,15 @@ type RankingsApiResponse = {
 
 type DiscoverySearchApiResponse = RegionAliasApiMetadata & {
   ok?: boolean;
+  localItems?: RankingItem[];
+  globalItems?: RankingItem[];
   discoveryCandidates?: DiscoveryCandidate[];
   message?: string;
 };
 
 type DiscoverySearchPayload = {
+  rankedMatchIds: string[];
+  globalItems: RankingItem[];
   discoveryCandidates: DiscoveryCandidate[];
   regionResolution: RegionResolutionResult | null;
   clarificationChoices: RegionClarificationChoice[];
@@ -593,6 +600,7 @@ function hasValidClarificationChoices(
 async function readDiscoveryCandidates(
   input: string,
   signal: AbortSignal,
+  universeCode: string,
 ): Promise<DiscoverySearchPayload> {
   const response = await fetch(input, {
     method: "GET",
@@ -615,6 +623,8 @@ async function readDiscoveryCandidates(
   }
 
   return {
+    rankedMatchIds: (json.localItems ?? []).filter(item => item.universeCode === universeCode).map(item => item.complexId),
+    globalItems: (json.globalItems ?? []).filter(item => item.universeCode && item.universeCode !== universeCode),
     discoveryCandidates: json.discoveryCandidates ?? [],
     regionResolution: json.regionResolution ?? null,
     clarificationChoices: json.clarificationChoices ?? [],
@@ -731,6 +741,7 @@ export function RankingBoardClient({
   );
 
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+  const [rankedNameMatches, setRankedNameMatches] = useState<{ scopeKey: string; ids: string[]; globalItems: RankingItem[] } | null>(null);
   const [discoveryCandidates, setDiscoveryCandidates] = useState<
     DiscoveryCandidate[]
   >([]);
@@ -915,6 +926,7 @@ export function RankingBoardClient({
     if (normalizedQuery.length < RANKING_DISCOVERY_SEARCH_MIN_QUERY_LENGTH) {
       const resetId = window.setTimeout(() => {
         setDiscoveryCandidates([]);
+        setRankedNameMatches(null);
         setSelectedDiscoveryCandidate(null);
         setSearchRegionResolution(null);
         setSearchClarificationChoices([]);
@@ -932,6 +944,7 @@ export function RankingBoardClient({
     if (cached) {
       const cacheId = window.setTimeout(() => {
         setDiscoveryCandidates(cached.discoveryCandidates);
+        setRankedNameMatches({ scopeKey: cacheKey, ids: cached.rankedMatchIds, globalItems: cached.globalItems });
         setSearchRegionResolution(cached.regionResolution);
         setSearchClarificationChoices(cached.clarificationChoices);
         setSearchRegionWarnings(cached.warnings);
@@ -961,12 +974,14 @@ export function RankingBoardClient({
         const nextPayload = await readDiscoveryCandidates(
           DISCOVERY_SEARCH_API(rawQuery, boardUniverseCode),
           controller.signal,
+          boardUniverseCode,
         );
 
         if (cancelled) return;
 
         discoverySearchCacheRef.current[cacheKey] = nextPayload;
         setDiscoveryCandidates(nextPayload.discoveryCandidates);
+        setRankedNameMatches({ scopeKey: cacheKey, ids: nextPayload.rankedMatchIds, globalItems: nextPayload.globalItems });
         setSearchRegionResolution(nextPayload.regionResolution);
         setSearchClarificationChoices(nextPayload.clarificationChoices);
         setSearchRegionWarnings(nextPayload.warnings);
@@ -990,6 +1005,7 @@ export function RankingBoardClient({
             : "관측 후보를 불러오지 못했습니다. 잠시 후 다시 검색해 주세요.",
         });
         setDiscoveryCandidates([]);
+        setRankedNameMatches(null);
         setSelectedDiscoveryCandidate(null);
         setSearchRegionResolution(null);
         setSearchClarificationChoices([]);
@@ -1448,9 +1464,12 @@ export function RankingBoardClient({
     }
 
     if (searchQuery) {
-      const lowerQ = searchQuery.toLowerCase();
+      const lowerQ = searchQuery.trim().toLowerCase();
+      const apiMatches = new Set(rankedNameMatches?.scopeKey === `${boardUniverseCode}::${lowerQ}` ? rankedNameMatches.ids : []);
       result = result.filter(
         (item) =>
+          apiMatches.has(item.complexId) ||
+          matchesComplexNameQuery(item.name, searchQuery) ||
           item.name.toLowerCase().includes(lowerQ) ||
           item.sigunguName?.toLowerCase().includes(lowerQ) ||
           item.legalDongName?.toLowerCase().includes(lowerQ) ||
@@ -1472,6 +1491,7 @@ export function RankingBoardClient({
     districtQueryLocal,
     boardUniverseCode,
     searchQuery,
+    rankedNameMatches,
     showBookmarksOnly,
     bookmarks,
     isLoaded,
@@ -1548,6 +1568,8 @@ export function RankingBoardClient({
   }, [presentationBoardItems, discoveryCandidates, searchQuery]);
 
   const hasDiscoveryCandidates = visibleDiscoveryCandidates.length > 0;
+  const otherRegionSearchItems = !shouldSuppressSearchResults && rankedNameMatches?.scopeKey === `${boardUniverseCode}::${searchQuery.trim().toLowerCase()}`
+    ? rankedNameMatches.globalItems : [];
   const currentDiscoverySearchError =
     discoverySearchError?.scopeKey ===
     `${boardUniverseCode}::${searchQuery.trim().toLowerCase()}`
@@ -1928,6 +1950,8 @@ export function RankingBoardClient({
               <input
                 type="text"
                 placeholder="보드 안에서 단지·지역 찾기"
+                aria-label="보드 안에서 단지·지역 찾기"
+                aria-busy={isDiscoverySearchPending}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="min-h-11 w-full rounded-lg border border-slate-700/50 bg-slate-800/30 px-3 py-2 text-sm text-slate-200 outline-none transition-all focus:border-cyan-500/50 focus:bg-slate-800/60 sm:min-h-0"
@@ -2041,10 +2065,7 @@ export function RankingBoardClient({
           >
             {renderRegionResolutionNotice()}
             {isBoardLoading && presentationBoardItems.length === 0 ? (
-              <div className="flex h-32 flex-col items-center justify-center gap-2 text-slate-500">
-                <span className="text-2xl opacity-50">📡</span>
-                <p className="text-sm">공개 랭킹 보드를 불러오는 중입니다.</p>
-              </div>
+              <div aria-busy="true" className="flex h-32 items-center justify-center"><SearchProgress label="공개 랭킹을 불러오고 있어요" /></div>
             ) : liveBoardError && presentationBoardItems.length === 0 ? (
               <div
                 className="flex h-32 flex-col items-center justify-center gap-2 text-rose-300"
@@ -2053,7 +2074,9 @@ export function RankingBoardClient({
                 <span className="text-2xl opacity-60">!</span>
                 <p className="text-sm">요청한 유니버스 보드를 표시할 수 없습니다.</p>
               </div>
-            ) : filteredItems.length > 0 ? (
+            ) : isDiscoverySearchPending ? (
+              <div aria-busy="true" className="flex h-32 items-center justify-center"><SearchProgress /></div>
+            ) : filteredItems.length > 0 || otherRegionSearchItems.length > 0 ? (
               <div className="flex flex-col gap-2 pb-2">
                 {filteredItems.map((item) => (
                   <RankingCard
@@ -2081,6 +2104,19 @@ export function RankingBoardClient({
                     }}
                   />
                 ))}
+                {otherRegionSearchItems.length > 0 ? (
+                  <section aria-label="다른 지역의 공개 검색 결과" className="rounded-xl border border-[var(--ko-border)] bg-surface p-4">
+                    <h3 className="text-control font-semibold text-ink">다른 지역의 공개 결과에서 찾았어요</h3>
+                    <p className="mt-1 text-caption text-muted">전국 순위와 구분되는 해당 지역의 공표 순위입니다.</p>
+                    {otherRegionSearchItems.map(item => (
+                      <Link key={`${item.universeCode}:${item.complexId}`} href={`/ranking?${new URLSearchParams({ universe: item.universeCode!, complexId: item.complexId })}`}
+                        className="mt-3 flex min-h-11 items-center justify-between gap-4 rounded-lg border border-[var(--ko-border)] px-4 py-3 hover:bg-[var(--ko-accent-soft)] focus-visible:outline-2 focus-visible:outline-[var(--ko-focus)]">
+                        <span className="min-w-0"><strong className="block text-control text-ink">{item.name}</strong><span className="text-caption text-muted">{item.locationLabel}</span></span>
+                        <span className="shrink-0 text-right text-control font-semibold text-accent">{getUniverseLabel(item.universeCode!)} · {item.rank}위{item.snapshotDate ? <span className="block text-caption font-normal text-muted">{item.snapshotDate} 기준</span> : null}</span>
+                      </Link>
+                    ))}
+                  </section>
+                ) : null}
                 {renderDiscoveryCandidatesSection()}
               </div>
             ) : hasDiscoveryCandidates ? (
@@ -2096,10 +2132,6 @@ export function RankingBoardClient({
                   </p>
                 </div>
                 {renderDiscoveryCandidatesSection()}
-              </div>
-            ) : isDiscoverySearchPending ? (
-              <div role="status" className="flex h-32 items-center justify-center text-sm text-slate-400">
-                관측 후보를 확인하는 중입니다.
               </div>
             ) : currentDiscoverySearchError ? (
               <div role="status" className="flex h-32 items-center justify-center px-4 text-center text-sm text-amber-200">
