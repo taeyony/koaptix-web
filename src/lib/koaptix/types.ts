@@ -282,7 +282,14 @@ export type HistoryChartPoint = {
   value: number;
 };
 
-export type ComplexChartMode = "weekly" | "ma7";
+export type ComplexChartPeriod = "weekly" | "monthly" | "yearly";
+export type ComplexChartMode = ComplexChartPeriod | "ma7";
+
+export type ComplexChartRange = {
+  requestedStartDate: string;
+  availableFrom: string | null;
+  availableTo: string | null;
+};
 
 export type KpiItem = {
   label: string;

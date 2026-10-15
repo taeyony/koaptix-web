@@ -1089,9 +1089,11 @@ export async function getHomeKpi() {
   }
 }
 
+export const COMPLEX_CHART_HISTORY_ROW_LIMIT = 2500;
+
 export async function getComplexChartHistories(
   complexIds: Array<string | number>,
-  options: { days?: number } = {}
+  options: { days?: number; sinceBase?: boolean } = {}
 ): Promise<Record<string, DbComplexChartHistoryRow[]>> {
   const supabase = createServerSupabase();
   const safeDays = Math.max(90, Math.min(options.days ?? 180, 180));
@@ -1107,19 +1109,42 @@ export async function getComplexChartHistories(
   if (normalizedIds.length === 0) return {};
 
   const anchorDate = await getWeeklyAnchorDate(supabase);
-  const startDate = shiftSeoulDateString(anchorDate, -safeDays);
+  const startDate = options.sinceBase
+    ? KOAPTIX_OFFICIAL_BASE_DATE
+    : shiftSeoulDateString(anchorDate, -safeDays);
 
-  const { data, error } = await supabase
+  const historyQuery = () => supabase
     .from("complex_rank_history")
-    .select("snapshot_date, complex_id, market_cap_krw, rank_all")
+    .select("snapshot_date, complex_id, market_cap_krw, rank_all", options.sinceBase ? { count: "exact" } : undefined)
     .in("complex_id", normalizedIds)
     .gte("snapshot_date", startDate)
     .lte("snapshot_date", anchorDate)
     .order("snapshot_date", { ascending: true })
-    .limit(Math.min(normalizedIds.length * (safeDays + 14), 2500));
+    .order("complex_id", { ascending: true });
 
-  if (error) {
-    throw new Error(`Failed to fetch complex chart histories: ${error.message}`);
+  const historyRows: DbComplexChartHistoryRow[] = [];
+  if (options.sinceBase) {
+    // Bounded pages and an exact count prevent a REST row cap from silently
+    // dropping newer history. Partial results are never returned as complete.
+    const pageSize = 500;
+    for (let offset = 0; offset < COMPLEX_CHART_HISTORY_ROW_LIMIT;) {
+      const end = Math.min(offset + pageSize - 1, COMPLEX_CHART_HISTORY_ROW_LIMIT - 1);
+      const { data, error, count } = await historyQuery().range(offset, end);
+      if (error) throw new Error(`Failed to fetch complex chart histories: ${error.message}`);
+      if (count == null || count > COMPLEX_CHART_HISTORY_ROW_LIMIT) {
+        throw new Error("Cannot return complete complex history within the row budget; request fewer complexes");
+      }
+      const page = (data ?? []) as DbComplexChartHistoryRow[];
+      historyRows.push(...page);
+      if (historyRows.length === count) break;
+      if (page.length === 0 || historyRows.length > count) throw new Error("Incomplete complex history page");
+      offset += page.length;
+    }
+  } else {
+    const { data, error } = await historyQuery()
+      .limit(Math.min(normalizedIds.length * (safeDays + 14), COMPLEX_CHART_HISTORY_ROW_LIMIT));
+    if (error) throw new Error(`Failed to fetch complex chart histories: ${error.message}`);
+    historyRows.push(...((data ?? []) as DbComplexChartHistoryRow[]));
   }
 
   const grouped: Record<string, DbComplexChartHistoryRow[]> = {};
@@ -1127,7 +1152,7 @@ export async function getComplexChartHistories(
     grouped[String(rawId)] = [];
   }
 
-  for (const row of (data ?? []) as DbComplexChartHistoryRow[]) {
+  for (const row of historyRows) {
     const key = row.complex_id == null ? "" : String(row.complex_id);
     if (!key) continue;
     if (!grouped[key]) grouped[key] = [];

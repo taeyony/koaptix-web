@@ -8,10 +8,13 @@ import { RecoveryGauge } from "./RecoveryGauge";
 import { TierBadge } from "./TierBadge";
 import { BetaDisclosure } from "./BetaDisclosure";
 import type {
+  ComplexChartPeriod,
+  ComplexChartRange,
   ComplexDetail,
   HistoryChartPoint,
   RankingItem,
 } from "../../lib/koaptix/types";
+import { KOAPTIX_OFFICIAL_BASE_DATE } from "../../types/koaptix";
 
 const ComplexHistoryMiniChart = dynamic(
   () =>
@@ -43,10 +46,18 @@ type ToastState = {
 
 type ChartState = {
   complexId: string;
+  period: ComplexChartPeriod;
   points: HistoryChartPoint[];
+  range: ComplexChartRange | null;
   loading: boolean;
   error: string | null;
 };
+
+const CHART_PERIODS: Array<{ value: ComplexChartPeriod; label: string; description: string }> = [
+  { value: "weekly", label: "주", description: "각 주의 마지막 저장값" },
+  { value: "monthly", label: "월", description: "각 월의 마지막 저장값" },
+  { value: "yearly", label: "년", description: "각 연도의 마지막 저장값" },
+];
 
 function formatMarketCapKrw(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "-";
@@ -192,14 +203,18 @@ export function ComplexDetailSheet({
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [chartState, setChartState] = useState<ChartState | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<ComplexChartPeriod>("weekly");
 
   const chartAbortRef = useRef<AbortController | null>(null);
-  const chartCacheRef = useRef<Record<string, HistoryChartPoint[]>>({});
+  const chartCacheRef = useRef<Record<string, { points: HistoryChartPoint[]; range: ComplexChartRange }>>({});
   const activeComplexId =
     item?.complexId ?? detail?.complexId ?? fallbackComplexId ?? null;
   const chartComplexId = item?.complexId ?? detail?.complexId ?? null;
-  const matchingChart = chartState?.complexId === chartComplexId ? chartState : null;
+  const matchingChart = chartState?.complexId === chartComplexId && chartState.period === chartPeriod
+    ? chartState
+    : null;
   const chartData = matchingChart?.points ?? [];
+  const chartRange = matchingChart?.range ?? null;
   const chartLoading = chartComplexId != null && (matchingChart?.loading ?? true);
   const chartError = matchingChart?.error ?? null;
 
@@ -239,10 +254,12 @@ export function ComplexDetailSheet({
     }
 
     const complexId = chartComplexId;
-    const cached = chartCacheRef.current[complexId];
+    const period = chartPeriod;
+    const cacheKey = `${complexId}:since-base:${period}`;
+    const cached = chartCacheRef.current[cacheKey];
 
     if (cached) {
-      setChartState({ complexId, points: cached, loading: false, error: null });
+      setChartState({ complexId, period, ...cached, loading: false, error: null });
       return;
     }
 
@@ -250,36 +267,41 @@ export function ComplexDetailSheet({
     const controller = new AbortController();
     chartAbortRef.current = controller;
 
-    setChartState({ complexId, points: [], loading: true, error: null });
+    setChartState({ complexId, period, points: [], range: null, loading: true, error: null });
 
     (async () => {
       const response = await fetch(
-        `/api/complex-history?complexId=${encodeURIComponent(complexId)}&mode=weekly&days=180`,
+        `/api/complex-history?complexId=${encodeURIComponent(complexId)}&mode=${period}&range=since-base`,
         { method: "GET", signal: controller.signal, cache: "no-store" }
       );
       const payload = await response.json();
       if (controller.signal.aborted) return;
       if (!response.ok) throw new Error(payload.error ?? "히스토리 차트를 불러오지 못했다.");
+      if (payload.data?.mode !== period) throw new Error("Chart period does not match the requested period");
 
       const series = Array.isArray(payload.data?.series) ? payload.data.series : [];
       const matchingSeries = series.find((entry: { complexId?: string }) => String(entry.complexId) === complexId);
       const nextData = Array.isArray(matchingSeries?.points) ? (matchingSeries.points as HistoryChartPoint[]) : [];
+      const range = matchingSeries?.range as ComplexChartRange | undefined;
+      if (range?.requestedStartDate !== KOAPTIX_OFFICIAL_BASE_DATE) throw new Error("Chart history range does not match the request");
 
-      chartCacheRef.current[complexId] = nextData;
-      setChartState({ complexId, points: nextData, loading: false, error: null });
+      chartCacheRef.current[cacheKey] = { points: nextData, range };
+      setChartState({ complexId, period, points: nextData, range, loading: false, error: null });
     })()
       .catch((fetchError) => {
         if (controller.signal.aborted) return;
         setChartState({
           complexId,
+          period,
           points: [],
+          range: null,
           loading: false,
           error: fetchError instanceof Error ? fetchError.message : "히스토리 차트를 불러오지 못했다.",
         });
       });
 
     return () => controller.abort();
-  }, [open, chartComplexId]);
+  }, [open, chartComplexId, chartPeriod]);
 
   async function handleShare() {
     if (!activeComplexId || typeof window === "undefined") return;
@@ -521,13 +543,33 @@ export function ComplexDetailSheet({
             <section aria-label="공개 시총 이력" className="mt-4 overflow-hidden rounded-2xl border border-[var(--ko-border)] bg-surface">
               <div className="px-4 pb-3 pt-4 sm:px-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1 basis-80">
                     <p className="text-caption font-semibold uppercase tracking-label text-accent">CAP FLOW HISTORY</p>
                     <h4 className="mt-1 text-xl font-bold text-ink">시가총액 변화 추이</h4>
-                    <p className="mt-2 text-sm text-muted">저장된 시총을 주간으로 표시합니다. 관측 사이의 변동은 확인할 수 없습니다.</p>
+                    <p className="mt-2 text-sm text-muted">{CHART_PERIODS.find((entry) => entry.value === chartPeriod)?.description}을 표시합니다. 점은 거래 건수가 아니라 저장된 시총의 기준일입니다.</p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-[var(--ko-accent-soft)] px-3 py-1 text-caption font-semibold text-accent">주간 이력</span>
+                  <div role="group" aria-label="시총 차트 표시 단위" className="inline-flex shrink-0 gap-1 rounded-xl border border-[var(--ko-border)] p-1">
+                    {CHART_PERIODS.map((entry) => (
+                      <button
+                        key={entry.value}
+                        type="button"
+                        aria-pressed={chartPeriod === entry.value}
+                        title={entry.description}
+                        onClick={() => setChartPeriod(entry.value)}
+                        className={`min-w-12 rounded-lg px-4 py-2 text-control font-semibold transition-colors ${chartPeriod === entry.value ? "bg-[var(--ko-accent-soft)] text-accent" : "text-muted hover:bg-[var(--ko-accent-soft)]"}`}
+                      >{entry.label}</button>
+                    ))}
+                  </div>
                 </div>
+                <p className="mt-2 text-caption text-muted">조회 시작: {KOAPTIX_OFFICIAL_BASE_DATE} · 실제 저장된 공개 이력만 표시합니다.</p>
+                {chartRange?.availableFrom && chartRange.availableTo ? (
+                  <div className="mt-3 rounded-xl border border-[var(--ko-border)] px-3 py-2 text-caption text-muted">
+                    <p>보유 이력: {chartRange.availableFrom} ~ {chartRange.availableTo}</p>
+                    {chartRange.availableFrom > chartRange.requestedStartDate ? (
+                      <p className="mt-1 text-[var(--ko-warning)]">조회 시작일부터의 전체 이력이 아직 준비되지 않았습니다. 첫 이력 이전 구간은 비워 둡니다.</p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
               <div className="px-3 pb-4 sm:px-4">
                 {chartError ? (
@@ -535,7 +577,7 @@ export function ComplexDetailSheet({
                 ) : chartLoading ? (
                   <div role="status" aria-label="시총 이력 불러오는 중" className="flex h-[260px] items-center justify-center rounded-2xl bg-[var(--ko-accent-soft)] text-sm text-muted">시총 이력을 불러오고 있습니다.</div>
                 ) : (
-                  <ComplexHistoryMiniChart key={chartComplexId} data={chartData} />
+                  <ComplexHistoryMiniChart key={`${chartComplexId}:${chartPeriod}`} data={chartData} period={chartPeriod} requestedStartDate={chartRange?.requestedStartDate} />
                 )}
               </div>
             </section>

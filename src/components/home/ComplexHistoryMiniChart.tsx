@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import type {
+  ComplexChartPeriod,
   HistoryChartPoint,
   HistoryChartSeries,
 } from "../../lib/koaptix/types";
@@ -17,6 +18,8 @@ import type {
 type ComplexHistoryMiniChartProps = {
   data?: HistoryChartPoint[];
   series?: HistoryChartSeries[];
+  period?: ComplexChartPeriod;
+  requestedStartDate?: string;
 };
 
 const DEFAULT_COLORS = [
@@ -26,6 +29,11 @@ const DEFAULT_COLORS = [
   "var(--ko-warning)",
 ];
 const MIN_CHART_HEIGHT = 260;
+const PERIOD_LABELS: Record<ComplexChartPeriod, string> = {
+  weekly: "주간",
+  monthly: "월간",
+  yearly: "연간",
+};
 
 function formatMarketCapCompact(value: number): string {
   if (value === 0) return "0";
@@ -73,6 +81,7 @@ function buildMergedDataset(series: HistoryChartSeries[]) {
       const current = merged.get(point.snapshotDate) ?? {
         snapshotDate: point.snapshotDate,
         label: point.label,
+        timestamp: Date.parse(`${point.snapshotDate}T00:00:00Z`),
       };
 
       current[entry.key] = point.value;
@@ -88,7 +97,10 @@ function buildMergedDataset(series: HistoryChartSeries[]) {
 export function ComplexHistoryMiniChart({
   data,
   series,
+  period = "weekly",
+  requestedStartDate,
 }: ComplexHistoryMiniChartProps) {
+  const periodLabel = PERIOD_LABELS[period];
   const normalizedSeries = useMemo(() => {
     const base =
       series && series.length > 0 ? series : buildSingleSeries(data);
@@ -177,13 +189,13 @@ export function ComplexHistoryMiniChart({
     const point = normalizedSeries[0].points[0];
     return (
       <div className="rounded-2xl border border-[var(--ko-border)] bg-surface p-4 sm:p-5">
-        <p className="text-caption font-semibold text-accent">공개 이력 1개 · 추이 비교 대기</p>
+        <p className="text-caption font-semibold text-accent">{periodLabel} 표시 1개 · 추이 비교 대기</p>
         <dl className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 tabular-nums">
           <dt className="text-sm text-muted"><time dateTime={point.snapshotDate}>{point.snapshotDate}</time></dt>
           <dd className="text-lg font-bold text-ink">{formatMarketCapFull(point.value)}</dd>
         </dl>
         <p className="mt-3 text-sm text-muted">
-          공개 이력이 한 시점뿐입니다. 서로 다른 두 날짜 이상의 이력이 있어야 변화 추이를 볼 수 있습니다.
+          조회 범위에서 {periodLabel}으로 묶어 표시한 값이 1개입니다. 두 기간 이상의 표시점이 있어야 변화 추이를 볼 수 있습니다.
         </p>
       </div>
     );
@@ -196,13 +208,29 @@ export function ComplexHistoryMiniChart({
     mergedData.length >= 4 && distinctValueCount > 0 && distinctValueCount <= 3;
   const firstDate = String(mergedData[0].snapshotDate);
   const lastDate = String(mergedData[mergedData.length - 1].snapshotDate);
+  const requestedStart = requestedStartDate ? Date.parse(`${requestedStartDate}T00:00:00Z`) : NaN;
+  const showRequestedRange = Number.isFinite(requestedStart);
+  const axisStart = new Date(requestedStart);
+  const axisStepMonths = period === "yearly" ? 12 : 6;
+  const axisMonthSpan = (Number(lastDate.slice(0, 4)) - axisStart.getUTCFullYear()) * 12
+    + Number(lastDate.slice(5, 7)) - 1 - axisStart.getUTCMonth();
+  const axisTicks = showRequestedRange
+    ? Array.from(
+        { length: Math.floor(axisMonthSpan / axisStepMonths) + 1 },
+        (_, i) => Date.UTC(axisStart.getUTCFullYear(), axisStart.getUTCMonth() + i * axisStepMonths, axisStart.getUTCDate()),
+      )
+    : undefined;
+  const lastTimestamp = Date.parse(`${lastDate}T00:00:00Z`);
+  if (axisTicks && period !== "yearly" && axisTicks[axisTicks.length - 1] !== lastTimestamp) {
+    axisTicks.push(lastTimestamp);
+  }
 
   return (
     <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-[var(--ko-border)] bg-surface text-ink">
       <div className="border-b border-[var(--ko-border)] px-3 py-3 sm:px-4">
         <p className="text-caption tabular-nums text-muted">
           <time dateTime={firstDate}>{firstDate}</time> ~ <time dateTime={lastDate}>{lastDate}</time>
-          {" · "}주간 표시 {mergedData.length}개
+          {" · "}{periodLabel} 표시 {mergedData.length}개
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           {normalizedSeries.map((entry) => (
@@ -225,7 +253,7 @@ export function ComplexHistoryMiniChart({
       <div
         ref={chartContainerRef}
         role="group"
-        aria-label={`${firstDate}부터 ${lastDate}까지 공개 시총 이력 차트`}
+        aria-label={`${firstDate}부터 ${lastDate}까지 ${periodLabel} 공개 시총 이력 차트`}
         className="h-[260px] min-h-[260px] w-full min-w-0 overflow-hidden"
       >
         {!canRenderMeasuredChart ? (
@@ -244,7 +272,16 @@ export function ComplexHistoryMiniChart({
             />
 
             <XAxis
-              dataKey="label"
+              dataKey={showRequestedRange ? "timestamp" : "label"}
+              type={showRequestedRange ? "number" : "category"}
+              scale={showRequestedRange ? "time" : "auto"}
+              domain={showRequestedRange ? [requestedStart, "dataMax"] : undefined}
+              ticks={axisTicks}
+              interval="preserveStartEnd"
+              tickFormatter={showRequestedRange ? (value) => {
+                const date = new Date(Number(value)).toISOString();
+                return period === "yearly" ? date.slice(0, 4) : date.slice(0, 7).replace("-", ".");
+              } : undefined}
               axisLine={false}
               tickLine={false}
               minTickGap={18}
@@ -309,7 +346,7 @@ export function ComplexHistoryMiniChart({
 
       {hasSparseStepSeries ? (
         <div className="border-t border-[var(--ko-border)] px-3 py-3 text-caption text-muted sm:px-4">
-          표시된 이력의 서로 다른 금액은 {distinctValueCount}개입니다. 같은 값의 반복을 매주 새로운 계산으로 해석하지 마세요.
+          표시된 이력의 서로 다른 금액은 {distinctValueCount}개입니다. 같은 값의 반복을 새로운 계산으로 해석하지 마세요.
         </div>
       ) : null}
       <details className="border-t border-[var(--ko-border)] px-3 py-3 sm:px-4">

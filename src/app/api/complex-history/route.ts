@@ -1,6 +1,7 @@
 import { mapComplexChartHistoryMap } from "../../../lib/koaptix/mappers";
-import { getComplexChartHistories } from "../../../lib/koaptix/queries";
+import { COMPLEX_CHART_HISTORY_ROW_LIMIT, getComplexChartHistories } from "../../../lib/koaptix/queries";
 import type { ComplexChartMode } from "../../../lib/koaptix/types";
+import { KOAPTIX_OFFICIAL_BASE_DATE } from "../../../types/koaptix";
 
 function parseComplexIds(raw: string | null): string[] {
   if (!raw) return [];
@@ -13,9 +14,14 @@ function parseComplexIds(raw: string | null): string[] {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const complexIds = parseComplexIds(searchParams.get("complexId"));
-  const mode = (searchParams.get("mode") as ComplexChartMode | null) ?? "weekly";
+  const requestedMode = searchParams.get("mode");
+  const mode: ComplexChartMode =
+    requestedMode === "monthly" || requestedMode === "yearly" || requestedMode === "ma7"
+      ? requestedMode
+      : "weekly";
   const daysParam = Number(searchParams.get("days") ?? "180");
   const days = Number.isFinite(daysParam) ? daysParam : 180;
+  const sinceBase = searchParams.get("range") === "since-base";
 
   if (complexIds.length === 0) {
     return Response.json(
@@ -25,21 +31,37 @@ export async function GET(request: Request) {
   }
 
   try {
-    const rowsById = await getComplexChartHistories(complexIds, { days });
+    const rowsById = await getComplexChartHistories(complexIds, {
+      days,
+      ...(sinceBase ? { sinceBase: true } : {}),
+    });
     const mappedById = mapComplexChartHistoryMap(rowsById, {
-      mode: mode === "ma7" ? "ma7" : "weekly",
-      maxPoints: mode === "ma7" ? 60 : 26,
+      mode,
+      maxPoints: sinceBase ? COMPLEX_CHART_HISTORY_ROW_LIMIT : mode === "ma7" ? 60 : 26,
     });
 
-    const series = complexIds.map((complexId) => ({
-      complexId,
-      points: mappedById[complexId] ?? [],
-    }));
+    const series = complexIds.map((complexId) => {
+      const points = mappedById[complexId] ?? [];
+      if (!sinceBase) return { complexId, points };
+      const dates = (rowsById[complexId] ?? [])
+        .filter((row) => Number.isFinite(Number(row.market_cap_krw)) && Number(row.market_cap_krw) > 0)
+        .map((row) => row.snapshot_date)
+        .sort();
+      return {
+        complexId,
+        points,
+        range: {
+          requestedStartDate: KOAPTIX_OFFICIAL_BASE_DATE,
+          availableFrom: dates[0] ?? null,
+          availableTo: dates[dates.length - 1] ?? null,
+        },
+      };
+    });
 
     return Response.json(
       {
         data: {
-          mode: mode === "ma7" ? "ma7" : "weekly",
+          mode,
           series,
         },
       },

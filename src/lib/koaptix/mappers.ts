@@ -318,22 +318,36 @@ export function mapComplexChartHistoryRows(
   } = {}
 ): HistoryChartPoint[] {
   const mode = options.mode ?? "weekly";
-  const maxPoints = options.maxPoints ?? (mode === "weekly" ? 26 : 60);
+  const maxPoints = options.maxPoints ?? (mode === "ma7" ? 60 : 26);
 
   const normalized = normalizeComplexHistoryRows(rows);
   if (normalized.length === 0) {
     return [];
   }
 
-  // mode를 "weekly" | "ma7"에 맞게 강제 타입 캐스팅
+  // Calendar modes keep the last stored observation without aggregation or gap filling.
+  const calendarRows = new Map<string, NormalizedComplexHistoryRow>();
+  if (mode === "monthly" || mode === "yearly") {
+    for (const row of normalized) {
+      const bucket = row.snapshotDate.slice(0, mode === "monthly" ? 7 : 4);
+      calendarRows.set(bucket, row);
+    }
+  }
+
   const series =
     mode === "ma7"
       ? applyMovingAverage(normalized, 7)
-      : selectWeeklyRows(normalized);
+      : mode === "monthly" || mode === "yearly"
+        ? Array.from(calendarRows.values())
+        : selectWeeklyRows(normalized);
 
   return series.slice(-maxPoints).map((row) => ({
     snapshotDate: row.snapshotDate,
-    label: formatChartLabel(row.snapshotDate),
+    label: mode === "monthly"
+      ? row.snapshotDate.slice(0, 7).replace("-", ".")
+      : mode === "yearly"
+        ? row.snapshotDate.slice(0, 4)
+        : formatChartLabel(row.snapshotDate),
     value: row.value,
   }));
 }
