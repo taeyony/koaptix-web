@@ -61,10 +61,30 @@ test("all packaged references preserve every date, exact amount and null gap", (
       else positive++;
     }
   }
-  assert.equal(positive, 28439);
-  assert.equal(empty, 75775);
+  assert.equal(positive, 28453);
+  assert.equal(empty, 75761);
   assert.equal(selected.source.expectedPointCount, 33);
   assert.equal(selected.source.sourceNote, "현재 확인된 세대수와 가용 거래를 기준으로 재계산한 참고 이력이며, 당시 공표값이나 전국의 완전한 과거 이력이 아닙니다.");
+});
+
+test("the approved reconnection adds only the two historical segments and preserves all other complexes", () => {
+  const unchanged = Object.fromEntries(Object.entries(data.series).filter(([id]) => !["168421", "168423"].includes(id)));
+  assert.equal(crypto.createHash("sha256").update(JSON.stringify(unchanged)).digest("hex").toUpperCase(),
+    "1479B9FBF9ED99751C08E27E56BA7D1ACE79CC81445F3E39AD7FA1F34AE30CFA");
+  assert.equal(data.series["168421"][0], 414155333074);
+  assert.equal(data.series["168423"][0], 1258598332865);
+  assert.equal(data.series["168421"].at(-1), 358398666926);
+  assert.equal(data.series["168423"].at(-1), 1128304999930);
+  assert.ok(data.series["168421"].slice(9, 21).every(value => value === null));
+  assert.ok(data.series["168423"].slice(5, 25).every(value => value === null));
+  const proof = data.provenance.committedExtension;
+  assert.equal(proof.approvalScopeDigest, "85B57D4A103FAE857F268A51E70E5BAB1BF73B0365F31D5E290E1B9C0BE24D57");
+  assert.equal(proof.addedPoints.length, 14);
+  assert.equal(proof.changedOtherComplexes, 0);
+  assert.equal(proof.changedExistingPositivePoints, 0);
+  const selected = load()([168421, 168423], { 168421: anchor("168421"), 168423: anchor("168423") });
+  assert.equal(selected.metadataById[168421].availableFrom, "2024-01-01");
+  assert.equal(selected.metadataById[168423].availableFrom, "2024-01-01");
 });
 
 test("a fresh current publication anchor is required for each exact ID", () => {
