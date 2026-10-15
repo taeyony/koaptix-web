@@ -1091,6 +1091,36 @@ export async function getHomeKpi() {
 
 export const COMPLEX_CHART_HISTORY_ROW_LIMIT = 2500;
 
+// Reuse the public board's current surface and publication identity. Historic
+// rows alone cannot prove that a complex remains in the current public cohort.
+export async function getComplexHistoryPublicAnchors(complexIds: string[]) {
+  const supabase = createServerSupabase();
+  const ids = [...new Set(complexIds)];
+  if (ids.length === 0 || ids.length > 10 || ids.some((id) => !/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id)))) {
+    throw new Error("Reference history requires 1 to 10 valid complex IDs");
+  }
+  const { data, error } = await supabase
+    .from(PUBLISHED_UNIVERSE_SERVICE_VIEW)
+    .select("complex_id, snapshot_date, market_cap_krw, generation_id, publication_version")
+    .eq("surface_code", "UNIVERSE_SERVICE")
+    .eq("universe_code", "KOREA_ALL")
+    .in("complex_id", ids)
+    .limit(11);
+  if (error) throw new Error("Could not verify the current public chart reference");
+  const anchors: Record<string, { snapshotDate: string; marketCapKrw: number | null; generationId: string; publicationVersion: number }> = {};
+  for (const row of data ?? []) {
+    const id = String(row.complex_id);
+    if (!ids.includes(id) || anchors[id]) throw new Error("Ambiguous public chart reference");
+    anchors[id] = {
+      snapshotDate: row.snapshot_date,
+      marketCapKrw: row.market_cap_krw == null ? null : Number(row.market_cap_krw),
+      generationId: row.generation_id,
+      publicationVersion: Number(row.publication_version),
+    };
+  }
+  return anchors;
+}
+
 export async function getComplexChartHistories(
   complexIds: Array<string | number>,
   options: { days?: number; sinceBase?: boolean } = {}

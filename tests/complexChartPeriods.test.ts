@@ -92,6 +92,13 @@ function loadHistoryRoute() {
     require(name: string) {
       if (name.endsWith("/mappers")) return { mapComplexChartHistoryMap };
       if (name.endsWith("/types/koaptix")) return { KOAPTIX_OFFICIAL_BASE_DATE };
+      if (name.endsWith("/complexHistoryReference")) return {
+        selectComplexHistoryReference: () => { throw new Error("Public history tests must not select reference history"); },
+      };
+      if (name.endsWith("/complexHistoryRecovery")) return {
+        isLocalHistoryReview: () => false,
+        readLocalHistoryRecovery: () => { throw new Error("Public history tests must not read local review files"); },
+      };
       if (name.endsWith("/queries")) return {
         COMPLEX_CHART_HISTORY_ROW_LIMIT: 2500,
         async getComplexChartHistories(ids: string[], options: { days: number; sinceBase?: boolean }) {

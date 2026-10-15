@@ -269,14 +269,22 @@ export type ComplexDetail = {
   recoveryRate52w: number | null;
 };
 
-export type DbComplexChartHistoryRow = {
+// Optional provenance is supplied by a verified history adapter. It does not
+// imply new database columns or permission to combine different sources.
+export type ComplexChartContinuity = {
+  sourceKey?: string;
+  segmentKey?: string;
+  breakBefore?: boolean;
+};
+
+export type DbComplexChartHistoryRow = ComplexChartContinuity & {
   snapshot_date: string;
   complex_id: number | string | null;
   market_cap_krw: number | string | null;
   rank_all: number | null;
 };
 
-export type HistoryChartPoint = {
+export type HistoryChartPoint = ComplexChartContinuity & {
   snapshotDate: string;
   label: string;
   value: number;
@@ -289,6 +297,14 @@ export type ComplexChartRange = {
   requestedStartDate: string;
   availableFrom: string | null;
   availableTo: string | null;
+  basis?: "published" | "reference" | "restored-local-review";
+  sourceObservedAt?: string;
+  excludedPointCount?: number;
+  expectedPointCount?: number;
+  sourceNote?: string;
+  reviewBlockedReasons?: string[];
+  localOnly?: boolean;
+  referenceUnavailable?: boolean;
 };
 
 export type KpiItem = {

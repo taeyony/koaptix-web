@@ -8,6 +8,7 @@ import type {
   RankingItem,
   KpiItem,
   ComplexChartMode,
+  ComplexChartContinuity,
   DbComplexChartHistoryRow,
   HistoryChartPoint,
 } from "./types";
@@ -110,8 +111,8 @@ function applyMovingAverage(
   });
 }
 
-function selectWeeklyRows(rows: NormalizedChartRow[]): NormalizedChartRow[] {
-  const latestByWeek = new Map<string, NormalizedChartRow>();
+function selectWeeklyRows<T extends NormalizedChartRow>(rows: T[]): T[] {
+  const latestByWeek = new Map<string, T>();
   for (const row of rows) {
     latestByWeek.set(getWeekBucket(row.snapshotDate), row);
   }
@@ -293,21 +294,80 @@ export function mapIndexChartRows(
 }
 
 // --- 페이즈 16, 17: 단지별 히스토리 멀티맵 매퍼 ---
-type NormalizedComplexHistoryRow = {
+type NormalizedComplexHistoryRow = ComplexChartContinuity & {
   snapshotDate: string;
   value: number;
 };
 
+export function hasComplexHistoryBoundary(
+  previous: ComplexChartContinuity,
+  current: ComplexChartContinuity,
+): boolean {
+  return current.breakBefore === true
+    || previous.sourceKey !== current.sourceKey
+    || previous.segmentKey !== current.segmentKey;
+}
+
+export function deduplicateComplexHistoryObservations<T extends ComplexChartContinuity & {
+  snapshotDate: string;
+  value: number | null;
+}>(rows: readonly T[]): T[] {
+  const byDate = new Map<string, T>();
+  for (const row of rows) {
+    const previous = byDate.get(row.snapshotDate);
+    if (previous) {
+      if (previous.value !== row.value) {
+        throw new Error(`Conflicting complex history values at ${row.snapshotDate}`);
+      }
+      for (const key of ["sourceKey", "segmentKey"] as const) {
+        if (previous[key] != null && row[key] != null && previous[key] !== row[key]) {
+          throw new Error(`Conflicting complex history provenance at ${row.snapshotDate}`);
+        }
+      }
+      byDate.set(row.snapshotDate, {
+        ...previous,
+        ...row,
+        ...(previous.sourceKey != null || row.sourceKey != null ? { sourceKey: row.sourceKey ?? previous.sourceKey } : {}),
+        ...(previous.segmentKey != null || row.segmentKey != null ? { segmentKey: row.segmentKey ?? previous.segmentKey } : {}),
+        ...(previous.breakBefore || row.breakBefore ? { breakBefore: true } : {}),
+      });
+    } else {
+      byDate.set(row.snapshotDate, { ...row });
+    }
+  }
+  return Array.from(byDate.values()).sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate));
+}
+
 function normalizeComplexHistoryRows(
   rows: DbComplexChartHistoryRow[]
 ): NormalizedComplexHistoryRow[] {
-  return rows
-    .map((row) => ({
-      snapshotDate: row.snapshot_date,
-      value: toNumber(row.market_cap_krw, 0),
-    }))
-    .filter((row) => row.snapshotDate.length > 0 && row.value > 0)
-    .sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate));
+  const observations = deduplicateComplexHistoryObservations(rows
+    .filter((row) => row.snapshot_date.length > 0)
+    .map((row) => {
+      const amount = toNullableNumber(row.market_cap_krw);
+      return {
+        snapshotDate: row.snapshot_date,
+        value: amount != null && amount > 0 ? amount : null,
+        ...(row.sourceKey != null ? { sourceKey: row.sourceKey } : {}),
+        ...(row.segmentKey != null ? { segmentKey: row.segmentKey } : {}),
+        ...(row.breakBefore === true ? { breakBefore: true } : {}),
+      };
+    }));
+
+  const normalized: NormalizedComplexHistoryRow[] = [];
+  let pendingBreak = false;
+  for (const row of observations) {
+    if (row.value == null) {
+      pendingBreak = true;
+      continue;
+    }
+    const previous = normalized.at(-1);
+    const breakBefore = pendingBreak || row.breakBefore === true
+      || (previous != null && hasComplexHistoryBoundary(previous, row));
+    normalized.push({ ...row, value: row.value, ...(breakBefore ? { breakBefore: true } : {}) });
+    pendingBreak = false;
+  }
+  return normalized;
 }
 
 export function mapComplexChartHistoryRows(
@@ -325,6 +385,10 @@ export function mapComplexChartHistoryRows(
     return [];
   }
 
+  if (mode === "ma7" && normalized.some((row) => row.breakBefore || row.sourceKey != null || row.segmentKey != null)) {
+    throw new Error("Moving averages are unavailable for segmented complex history");
+  }
+
   // Calendar modes keep the last stored observation without aggregation or gap filling.
   const calendarRows = new Map<string, NormalizedComplexHistoryRow>();
   if (mode === "monthly" || mode === "yearly") {
@@ -334,22 +398,35 @@ export function mapComplexChartHistoryRows(
     }
   }
 
-  const series =
+  const series: NormalizedComplexHistoryRow[] =
     mode === "ma7"
       ? applyMovingAverage(normalized, 7)
       : mode === "monthly" || mode === "yearly"
         ? Array.from(calendarRows.values())
         : selectWeeklyRows(normalized);
 
-  return series.slice(-maxPoints).map((row) => ({
-    snapshotDate: row.snapshotDate,
-    label: mode === "monthly"
-      ? row.snapshotDate.slice(0, 7).replace("-", ".")
-      : mode === "yearly"
-        ? row.snapshotDate.slice(0, 4)
-        : formatChartLabel(row.snapshotDate),
-    value: row.value,
-  }));
+  // A boundary within a calendar bucket must survive choosing its last value.
+  // Missing dates alone do not establish a cadence or create a new boundary.
+  let cursor = 0;
+  return series.map((row) => {
+    let breakBefore = false;
+    while (cursor < normalized.length && normalized[cursor].snapshotDate <= row.snapshotDate) {
+      breakBefore ||= normalized[cursor].breakBefore === true;
+      cursor += 1;
+    }
+    return {
+      snapshotDate: row.snapshotDate,
+      label: mode === "monthly"
+        ? row.snapshotDate.slice(0, 7).replace("-", ".")
+        : mode === "yearly"
+          ? row.snapshotDate.slice(0, 4)
+          : formatChartLabel(row.snapshotDate),
+      value: row.value,
+      ...(row.sourceKey != null ? { sourceKey: row.sourceKey } : {}),
+      ...(row.segmentKey != null ? { segmentKey: row.segmentKey } : {}),
+      ...(breakBefore ? { breakBefore: true } : {}),
+    };
+  }).slice(-maxPoints);
 }
 
 export function mapComplexChartHistoryMap(

@@ -47,6 +47,7 @@ type ToastState = {
 type ChartState = {
   complexId: string;
   period: ComplexChartPeriod;
+  source: "reference" | "published";
   points: HistoryChartPoint[];
   range: ComplexChartRange | null;
   loading: boolean;
@@ -204,13 +205,14 @@ export function ComplexDetailSheet({
 
   const [chartState, setChartState] = useState<ChartState | null>(null);
   const [chartPeriod, setChartPeriod] = useState<ComplexChartPeriod>("weekly");
+  const [chartSource, setChartSource] = useState<"reference" | "published">("reference");
 
   const chartAbortRef = useRef<AbortController | null>(null);
   const chartCacheRef = useRef<Record<string, { points: HistoryChartPoint[]; range: ComplexChartRange }>>({});
   const activeComplexId =
     item?.complexId ?? detail?.complexId ?? fallbackComplexId ?? null;
   const chartComplexId = item?.complexId ?? detail?.complexId ?? null;
-  const matchingChart = chartState?.complexId === chartComplexId && chartState.period === chartPeriod
+  const matchingChart = chartState?.complexId === chartComplexId && chartState.period === chartPeriod && chartState.source === chartSource
     ? chartState
     : null;
   const chartData = matchingChart?.points ?? [];
@@ -255,11 +257,17 @@ export function ComplexDetailSheet({
 
     const complexId = chartComplexId;
     const period = chartPeriod;
-    const cacheKey = `${complexId}:since-base:${period}`;
-    const cached = chartCacheRef.current[cacheKey];
+    const source = chartSource;
+    const localReview = process.env.NODE_ENV === "development"
+      && source === "reference"
+      && new URLSearchParams(window.location.search).get("historyReview") === "restored";
+    const cacheKey = `${complexId}:since-base:${period}:${localReview ? "review" : source}`;
+    // A reference must recheck the current publication whenever it is opened;
+    // a previous successful anchor check is not a lasting publication grant.
+    const cached = localReview || source === "published" ? chartCacheRef.current[cacheKey] : undefined;
 
     if (cached) {
-      setChartState({ complexId, period, ...cached, loading: false, error: null });
+      setChartState({ complexId, period, source, ...cached, loading: false, error: null });
       return;
     }
 
@@ -267,11 +275,11 @@ export function ComplexDetailSheet({
     const controller = new AbortController();
     chartAbortRef.current = controller;
 
-    setChartState({ complexId, period, points: [], range: null, loading: true, error: null });
+    setChartState({ complexId, period, source, points: [], range: null, loading: true, error: null });
 
     (async () => {
       const response = await fetch(
-        `/api/complex-history?complexId=${encodeURIComponent(complexId)}&mode=${period}&range=since-base`,
+        `/api/complex-history?complexId=${encodeURIComponent(complexId)}&mode=${period}&range=since-base${localReview ? "&review=restored" : source === "reference" ? "&source=reference" : ""}`,
         { method: "GET", signal: controller.signal, cache: "no-store" }
       );
       const payload = await response.json();
@@ -284,15 +292,22 @@ export function ComplexDetailSheet({
       const nextData = Array.isArray(matchingSeries?.points) ? (matchingSeries.points as HistoryChartPoint[]) : [];
       const range = matchingSeries?.range as ComplexChartRange | undefined;
       if (range?.requestedStartDate !== KOAPTIX_OFFICIAL_BASE_DATE) throw new Error("Chart history range does not match the request");
+      const expectedBasis = localReview
+        ? range.basis === "restored-local-review" && range.localOnly === true
+        : source === "reference"
+          ? range.basis === "reference" || (range.basis === "published" && range.referenceUnavailable === true)
+          : range.basis == null || range.basis === "published";
+      if (!expectedBasis) throw new Error("Chart history source does not match the request");
 
-      chartCacheRef.current[cacheKey] = { points: nextData, range };
-      setChartState({ complexId, period, points: nextData, range, loading: false, error: null });
+      if (localReview || source === "published") chartCacheRef.current[cacheKey] = { points: nextData, range };
+      setChartState({ complexId, period, source, points: nextData, range, loading: false, error: null });
     })()
       .catch((fetchError) => {
         if (controller.signal.aborted) return;
         setChartState({
           complexId,
           period,
+          source,
           points: [],
           range: null,
           loading: false,
@@ -301,7 +316,7 @@ export function ComplexDetailSheet({
       });
 
     return () => controller.abort();
-  }, [open, chartComplexId, chartPeriod]);
+  }, [open, chartComplexId, chartPeriod, chartSource]);
 
   async function handleShare() {
     if (!activeComplexId || typeof window === "undefined") return;
@@ -540,13 +555,13 @@ export function ComplexDetailSheet({
               />
             </div>
 
-            <section aria-label="공개 시총 이력" className="mt-4 overflow-hidden rounded-2xl border border-[var(--ko-border)] bg-surface">
+            <section aria-label={chartRange?.basis === "reference" ? "참고 재계산 시총 이력" : chartRange?.basis === "restored-local-review" ? "시총 재구성 검토" : "공개 시총 이력"} className="mt-4 overflow-hidden rounded-2xl border border-[var(--ko-border)] bg-surface">
               <div className="px-4 pb-3 pt-4 sm:px-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1 basis-80">
                     <p className="text-caption font-semibold uppercase tracking-label text-accent">CAP FLOW HISTORY</p>
                     <h4 className="mt-1 text-xl font-bold text-ink">시가총액 변화 추이</h4>
-                    <p className="mt-2 text-sm text-muted">{CHART_PERIODS.find((entry) => entry.value === chartPeriod)?.description}을 표시합니다. 점은 거래 건수가 아니라 저장된 시총의 기준일입니다.</p>
+                    <p className="mt-2 text-sm text-muted">{CHART_PERIODS.find((entry) => entry.value === chartPeriod)?.description}을 표시합니다. 점은 거래 건수가 아니라 시총의 기준일입니다.</p>
                   </div>
                   <div role="group" aria-label="시총 차트 표시 단위" className="inline-flex shrink-0 gap-1 rounded-xl border border-[var(--ko-border)] p-1">
                     {CHART_PERIODS.map((entry) => (
@@ -561,7 +576,23 @@ export function ComplexDetailSheet({
                     ))}
                   </div>
                 </div>
-                <p className="mt-2 text-caption text-muted">조회 시작: {KOAPTIX_OFFICIAL_BASE_DATE} · 실제 저장된 공개 이력만 표시합니다.</p>
+                <div role="group" aria-label="시총 이력 기준" className="mt-4 flex flex-wrap gap-2">
+                  {([{ value: "reference", label: "참고 재계산 이력" }, { value: "published", label: "기존 공표 기록" }] as const).map((entry) => (
+                    <button key={entry.value} type="button" aria-pressed={chartSource === entry.value} onClick={() => setChartSource(entry.value)}
+                      className={`min-h-11 rounded-lg border border-[var(--ko-border)] px-3 py-2 text-control font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ko-accent)] ${chartSource === entry.value ? "bg-[var(--ko-accent-soft)] text-accent" : "text-muted hover:bg-[var(--ko-accent-soft)]"}`}>{entry.label}</button>
+                  ))}
+                </div>
+                <p className="mt-2 text-caption text-muted">조회 시작: {KOAPTIX_OFFICIAL_BASE_DATE} · {chartLoading ? "이력을 확인하고 있습니다." : chartRange?.basis === "reference" ? "가용 거래로 다시 계산한 참고 이력입니다." : chartRange?.basis === "restored-local-review" ? "로컬 복구 검토 · 실사이트 미반영" : "실제 저장된 공개 이력만 표시합니다."}</p>
+                {chartRange?.referenceUnavailable ? <p role="status" className="mt-3 text-caption text-[var(--ko-warning)]">이 단지는 참고 이력의 검증 조건을 충족하지 않아 기존 공표 기록을 표시합니다.</p> : null}
+                {chartRange?.basis === "restored-local-review" || chartRange?.basis === "reference" ? (
+                  <div role="status" className="mt-3 rounded-xl border border-[var(--ko-border)] bg-[var(--ko-accent-soft)] px-3 py-3 text-caption text-muted">
+                    <p className="font-semibold text-ink">{chartRange.basis === "reference" ? "참고 이력의 계산 기준" : "과거 시총 재구성 검토"}</p>
+                    <p className="mt-1">{chartRange.sourceNote}</p>
+                    <p className="mt-1">원천 확인일: {chartRange.sourceObservedAt?.slice(0, 10)} · 최초 기준일과 월말 계산값을 선택한 단위로 묶습니다. 주간 계산점을 새로 만들지 않습니다.</p>
+                    {(chartRange.excludedPointCount ?? 0) > 0 ? <p className="mt-1 text-[var(--ko-warning)]">검증값이 없는 {chartRange.excludedPointCount}개 기준일은 비워 두며, 빈 구간을 연결하지 않습니다.</p> : null}
+                    {chartRange.reviewBlockedReasons?.length ? <p className="mt-1 text-[var(--ko-warning)]">이 단지는 원천·세대수 또는 현재 공표값 대조 조건을 충족하지 않아 재구성값을 표시하지 않습니다. 기존 공개 이력은 보존되어 있습니다.</p> : null}
+                  </div>
+                ) : null}
                 {chartRange?.availableFrom && chartRange.availableTo ? (
                   <div className="mt-3 rounded-xl border border-[var(--ko-border)] px-3 py-2 text-caption text-muted">
                     <p>보유 이력: {chartRange.availableFrom} ~ {chartRange.availableTo}</p>
@@ -573,11 +604,11 @@ export function ComplexDetailSheet({
               </div>
               <div className="px-3 pb-4 sm:px-4">
                 {chartError ? (
-                  <div role="status" className="rounded-2xl border border-[var(--ko-border)] px-4 py-4 text-sm text-down">공개 시총 이력을 불러오지 못했습니다. 잠시 후 상세 화면을 다시 열어 주세요.</div>
+                  <div role="status" className="rounded-2xl border border-[var(--ko-border)] px-4 py-4 text-sm text-down">시총 이력을 불러오지 못했습니다. 잠시 후 상세 화면을 다시 열어 주세요.</div>
                 ) : chartLoading ? (
                   <div role="status" aria-label="시총 이력 불러오는 중" className="flex h-[260px] items-center justify-center rounded-2xl bg-[var(--ko-accent-soft)] text-sm text-muted">시총 이력을 불러오고 있습니다.</div>
                 ) : (
-                  <ComplexHistoryMiniChart key={`${chartComplexId}:${chartPeriod}`} data={chartData} period={chartPeriod} requestedStartDate={chartRange?.requestedStartDate} />
+                  <ComplexHistoryMiniChart key={`${chartComplexId}:${chartPeriod}:${chartSource}`} data={chartData} period={chartPeriod} requestedStartDate={chartRange?.requestedStartDate} basis={chartRange?.basis} />
                 )}
               </div>
             </section>
@@ -643,7 +674,7 @@ export function ComplexDetailSheet({
                     <DetailRow label="연식" value={`${ageYears}년차`} />
                   ) : null}
                   {chartData.length > 0 ? (
-                    <DetailRow label="공개 시총 이력 최종 기준일" value={chartData[chartData.length - 1].snapshotDate} />
+                    <DetailRow label={chartRange?.basis === "reference" ? "참고 이력 최종 기준일" : chartRange?.basis === "restored-local-review" ? "재구성 검토 최종 기준일" : "공개 시총 이력 최종 기준일"} value={chartData[chartData.length - 1].snapshotDate} />
                   ) : null}
                 </>
               )}

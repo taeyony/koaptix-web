@@ -14,12 +14,14 @@ import type {
   HistoryChartPoint,
   HistoryChartSeries,
 } from "../../lib/koaptix/types";
+import { deduplicateComplexHistoryObservations, hasComplexHistoryBoundary } from "../../lib/koaptix/mappers";
 
 type ComplexHistoryMiniChartProps = {
   data?: HistoryChartPoint[];
   series?: HistoryChartSeries[];
   period?: ComplexChartPeriod;
   requestedStartDate?: string;
+  basis?: "published" | "reference" | "restored-local-review";
 };
 
 const DEFAULT_COLORS = [
@@ -33,6 +35,23 @@ const PERIOD_LABELS: Record<ComplexChartPeriod, string> = {
   weekly: "주간",
   monthly: "월간",
   yearly: "연간",
+};
+const HISTORY_COPY = {
+  published: {
+    label: "공개 시총",
+    empty: "조회 기간에 공개된 시총 이력이 없습니다.",
+    caption: "공개 시총 이력의 날짜별 저장 값",
+  },
+  reference: {
+    label: "참고 재계산 시총",
+    empty: "조회 기간에 검증 조건을 충족하는 참고 재계산 시총 이력이 없습니다.",
+    caption: "참고 재계산 시총 이력의 날짜별 값 · 당시 공표 기록과 별도",
+  },
+  "restored-local-review": {
+    label: "검토용 시총",
+    empty: "조회 기간에 검토 가능한 시총 이력이 없습니다.",
+    caption: "검토용 시총 이력의 날짜별 값",
+  },
 };
 
 function formatMarketCapCompact(value: number): string {
@@ -73,11 +92,20 @@ function buildSingleSeries(data?: HistoryChartPoint[]): HistoryChartSeries[] {
   ];
 }
 
-function buildMergedDataset(series: HistoryChartSeries[]) {
+export function buildComplexHistoryChartModel(series: HistoryChartSeries[]) {
   const merged = new Map<string, Record<string, string | number | null>>();
+  const lines: Array<{ key: string; name: string; color?: string; seriesIndex: number }> = [];
 
-  for (const entry of series) {
-    for (const point of entry.points) {
+  for (const [seriesIndex, entry] of series.entries()) {
+    let segmentIndex = -1;
+    let lineKey = "";
+    let previous: HistoryChartPoint | undefined;
+    for (const point of deduplicateComplexHistoryObservations(entry.points)) {
+      if (!previous || hasComplexHistoryBoundary(previous, point)) {
+        segmentIndex += 1;
+        lineKey = `__ko_line_${seriesIndex}_${segmentIndex}`;
+        lines.push({ key: lineKey, name: entry.name, color: entry.color, seriesIndex });
+      }
       const current = merged.get(point.snapshotDate) ?? {
         snapshotDate: point.snapshotDate,
         label: point.label,
@@ -85,13 +113,18 @@ function buildMergedDataset(series: HistoryChartSeries[]) {
       };
 
       current[entry.key] = point.value;
+      current[lineKey] = point.value;
       merged.set(point.snapshotDate, current);
+      previous = point;
     }
   }
 
-  return Array.from(merged.values()).sort((a, b) =>
-    String(a.snapshotDate).localeCompare(String(b.snapshotDate)),
-  );
+  return {
+    data: Array.from(merged.values()).sort((a, b) =>
+      String(a.snapshotDate).localeCompare(String(b.snapshotDate)),
+    ),
+    lines,
+  };
 }
 
 export function ComplexHistoryMiniChart({
@@ -99,8 +132,11 @@ export function ComplexHistoryMiniChart({
   series,
   period = "weekly",
   requestedStartDate,
+  basis = "published",
 }: ComplexHistoryMiniChartProps) {
   const periodLabel = PERIOD_LABELS[period];
+  const historyCopy = HISTORY_COPY[basis];
+  const historyLabel = historyCopy.label;
   const normalizedSeries = useMemo(() => {
     const base =
       series && series.length > 0 ? series : buildSingleSeries(data);
@@ -113,8 +149,8 @@ export function ComplexHistoryMiniChart({
       }));
   }, [data, series]);
 
-  const mergedData = useMemo(
-    () => buildMergedDataset(normalizedSeries),
+  const { data: mergedData, lines } = useMemo(
+    () => buildComplexHistoryChartModel(normalizedSeries),
     [normalizedSeries],
   );
 
@@ -180,7 +216,7 @@ export function ComplexHistoryMiniChart({
   if (normalizedSeries.length === 0 || mergedData.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-copy text-white/55">
-        조회 기간에 공개된 시총 이력이 없습니다. 현재 시총만으로 과거 추이를 만들 수 없습니다.
+        {historyCopy.empty} 현재 시총만으로 과거 추이를 만들 수 없습니다.
       </div>
     );
   }
@@ -188,7 +224,7 @@ export function ComplexHistoryMiniChart({
   if (isSingleObservation) {
     const point = normalizedSeries[0].points[0];
     return (
-      <div className="rounded-2xl border border-[var(--ko-border)] bg-surface p-4 sm:p-5">
+      <div role="group" aria-label={`${historyLabel} 단일 기준일 값`} className="rounded-2xl border border-[var(--ko-border)] bg-surface p-4 sm:p-5">
         <p className="text-caption font-semibold text-accent">{periodLabel} 표시 1개 · 추이 비교 대기</p>
         <dl className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 tabular-nums">
           <dt className="text-sm text-muted"><time dateTime={point.snapshotDate}>{point.snapshotDate}</time></dt>
@@ -253,7 +289,7 @@ export function ComplexHistoryMiniChart({
       <div
         ref={chartContainerRef}
         role="group"
-        aria-label={`${firstDate}부터 ${lastDate}까지 ${periodLabel} 공개 시총 이력 차트`}
+        aria-label={`${firstDate}부터 ${lastDate}까지 ${periodLabel} ${historyLabel} 이력 차트`}
         className="h-[260px] min-h-[260px] w-full min-w-0 overflow-hidden"
       >
         {!canRenderMeasuredChart ? (
@@ -321,7 +357,7 @@ export function ComplexHistoryMiniChart({
               ]}
             />
 
-            {normalizedSeries.map((entry, index) => (
+            {lines.map((entry) => (
               <Line
                 key={entry.key}
                 type="linear"
@@ -337,7 +373,7 @@ export function ComplexHistoryMiniChart({
                   fill: entry.color,
                   strokeWidth: 0,
                 }}
-                strokeDasharray={index % 2 === 1 ? "5 4" : undefined}
+                strokeDasharray={entry.seriesIndex % 2 === 1 ? "5 4" : undefined}
               />
             ))}
           </LineChart>
@@ -353,9 +389,9 @@ export function ComplexHistoryMiniChart({
         <summary className="cursor-pointer text-control font-semibold text-accent underline underline-offset-4">
           날짜별 시총 값 보기
         </summary>
-        <div className="mt-3 max-h-64 overflow-auto" tabIndex={0} role="region" aria-label="날짜별 공개 시총 값">
+        <div className="mt-3 max-h-64 overflow-auto" tabIndex={0} role="region" aria-label={`날짜별 ${historyLabel} 값`}>
           <table className="w-full text-left text-sm tabular-nums">
-            <caption className="sr-only">공개 시총 이력의 날짜별 저장 값</caption>
+            <caption className="sr-only">{historyCopy.caption}</caption>
             <thead>
               <tr>
                 <th scope="col" className="py-2 pr-3 text-caption text-muted">기준일</th>
