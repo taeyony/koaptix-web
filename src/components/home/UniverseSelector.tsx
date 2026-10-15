@@ -3,11 +3,15 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
 } from "react";
-import type { UniverseOption } from "../../lib/koaptix/universes";
+import {
+  PUBLIC_UNIVERSE_REGISTRY,
+  type UniverseOption,
+} from "../../lib/koaptix/universes";
 
 type UniverseSelectorProps = {
   value?: string;
@@ -18,6 +22,10 @@ type UniverseSelectorProps = {
 
 const RECENT_STORAGE_KEY = "koaptix_recent_universe_codes_v1";
 const MAX_RECENT_CODES = 6;
+const UNAVAILABLE_MACRO_OPTIONS: UniverseOption[] = PUBLIC_UNIVERSE_REGISTRY.filter(
+  (universe) => universe.scope === "MACRO" && !universe.enabled,
+)
+  .map(({ code, label }) => ({ code, label }));
 
 const MACRO_UNIVERSE_ORDER = [
   "KOREA_ALL",
@@ -193,6 +201,7 @@ export default function UniverseSelector({
   onChange,
   density = "default",
 }: UniverseSelectorProps) {
+  const finderId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const selectGuardRef = useRef<{ code: string; at: number } | null>(null);
@@ -205,6 +214,22 @@ export default function UniverseSelector({
   const sortedOptions = useMemo(() => {
     return [...options].sort(sortUniverseOptions);
   }, [options]);
+
+  const availableCodes = useMemo(
+    () => new Set<string>(options.map((option) => option.code)),
+    [options],
+  );
+
+  const finderOptions = useMemo(
+    () =>
+      [
+        ...sortedOptions,
+        ...UNAVAILABLE_MACRO_OPTIONS.filter(
+          (option) => !availableCodes.has(option.code),
+        ),
+      ].sort(sortUniverseOptions),
+    [availableCodes, sortedOptions],
+  );
 
   const currentOption = useMemo(() => {
     return sortedOptions.find((option) => option.code === value) ?? null;
@@ -221,8 +246,8 @@ export default function UniverseSelector({
   }, [currentDisplayCode]);
 
   const macroOptions = useMemo(() => {
-    return sortedOptions.filter((option) => isMacroUniverseCode(option.code));
-  }, [sortedOptions]);
+    return finderOptions.filter((option) => isMacroUniverseCode(option.code));
+  }, [finderOptions]);
 
   const sggOptions = useMemo(() => {
     return sortedOptions.filter((option) => isSggUniverseCode(option.code));
@@ -259,16 +284,18 @@ export default function UniverseSelector({
   const parentMacroOption = useMemo(() => {
     if (!currentMacroCode) return null;
     return (
-      macroOptions.find((option) => option.code === currentMacroCode) ?? null
+      macroOptions.find(
+        (option) => option.code === currentMacroCode && availableCodes.has(option.code),
+      ) ?? null
     );
-  }, [currentMacroCode, macroOptions]);
+  }, [availableCodes, currentMacroCode, macroOptions]);
 
   const filteredOptions = useMemo(() => {
     const q = normalizeQuery(query);
     if (!q) return contextualSggOptions;
 
-    return sortedOptions.filter((option) => buildSearchText(option).includes(q));
-  }, [query, contextualSggOptions, sortedOptions]);
+    return finderOptions.filter((option) => buildSearchText(option).includes(q));
+  }, [query, contextualSggOptions, finderOptions]);
 
   const groupedFilteredOptions = useMemo(() => {
     const q = normalizeQuery(query);
@@ -355,6 +382,7 @@ export default function UniverseSelector({
 
   const handleSelect = useCallback(
     (nextCode: string) => {
+      if (!availableCodes.has(nextCode)) return;
       const now = Date.now();
       const lastSelect = selectGuardRef.current;
 
@@ -372,7 +400,7 @@ export default function UniverseSelector({
       setIsOpen(false);
       setQuery("");
     },
-    [onChange, pushRecentCode],
+    [availableCodes, onChange, pushRecentCode],
   );
 
   useEffect(() => {
@@ -410,15 +438,16 @@ export default function UniverseSelector({
       variant: "macro" | "recent" | "list" = "list",
     ) => {
       const isActive = option.code === value;
+      const isUnavailable = !availableCodes.has(option.code);
 
       const baseClass =
         variant === "macro"
           ? `${
               isCompact
                 ? "shrink-0 whitespace-nowrap"
-                : "min-w-0 max-w-full break-words [overflow-wrap:anywhere]"
+                : "min-w-0 max-w-full break-words [overflow-wrap:break-word]"
             } rounded-xl border px-3 py-2 text-sm font-semibold transition-all`
-          : "min-w-0 max-w-full break-words rounded-lg border px-3 py-1.5 text-sm transition-all [overflow-wrap:anywhere]";
+          : "min-w-0 max-w-full break-words rounded-lg border px-3 py-1.5 text-sm transition-all [overflow-wrap:break-word]";
 
       const activeClass =
         variant === "macro"
@@ -434,15 +463,23 @@ export default function UniverseSelector({
           key={option.code}
           type="button"
           onClick={() => handleSelect(option.code)}
+          disabled={isUnavailable}
+          aria-disabled={isUnavailable}
+          title={
+            isUnavailable
+              ? `${option.label} 공개 랭킹은 아직 제공되지 않습니다.`
+              : undefined
+          }
           data-testid="universe-option"
           data-universe-code={option.code}
-          className={`${baseClass} ${isActive ? activeClass : inactiveClass}`}
+          className={`${baseClass} ${isActive ? activeClass : inactiveClass} disabled:cursor-not-allowed disabled:opacity-60`}
         >
           {option.label}
+          {isUnavailable && <span className="ml-1.5 text-caption">준비중</span>}
         </button>
       );
     },
-    [handleSelect, isCompact, value],
+    [availableCodes, handleSelect, isCompact, value],
   );
 
   const currentRegionLabel = useMemo(() => {
@@ -471,7 +508,7 @@ export default function UniverseSelector({
       <div
         className={
           isCompact
-            ? "hidden max-w-full items-center gap-2 sm:flex sm:flex-nowrap sm:overflow-x-auto sm:pb-1"
+            ? "hidden max-w-full items-center gap-2 sm:flex sm:flex-wrap"
             : "flex max-w-full flex-wrap items-center gap-2"
         }
       >
@@ -481,8 +518,10 @@ export default function UniverseSelector({
           <button
             type="button"
             onClick={() => setIsOpen((prev) => !prev)}
+            aria-expanded={isOpen}
+            aria-controls={finderId}
             data-testid="universe-finder-toggle"
-            className={`min-w-0 max-w-full break-words rounded-xl border px-3 py-2 text-sm font-semibold transition-all [overflow-wrap:anywhere] ${
+            className={`min-w-0 max-w-full break-words rounded-xl border px-3 py-2 text-sm font-semibold transition-all [overflow-wrap:break-word] ${
               isOpen
                 ? "border-cyan-400/50 bg-cyan-500/15 text-cyan-300"
                 : "border-slate-700 bg-slate-900/70 text-slate-200 hover:border-slate-500 hover:text-white"
@@ -495,7 +534,7 @@ export default function UniverseSelector({
 
       {!isCompact && contextualRecentOptions.length > 0 && (
         <div className="flex max-w-full flex-wrap items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <span className="text-caption font-semibold uppercase tracking-label text-slate-500">
             Recent
           </span>
           {contextualRecentOptions.map((option) => renderChip(option, "recent"))}
@@ -509,7 +548,7 @@ export default function UniverseSelector({
       >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+            <p className="text-caption uppercase tracking-label text-slate-500">
               현재 선택 지역
             </p>
             <p
@@ -526,7 +565,7 @@ export default function UniverseSelector({
             </p>
             {currentValueUnavailable && (
               <p
-                className="mt-1 text-[11px] text-amber-300/80"
+                className="mt-1 text-caption text-amber-300/80"
                 data-testid="current-universe-unavailable"
               >
                 Not selectable from the public universe list.
@@ -537,6 +576,8 @@ export default function UniverseSelector({
           <button
             type="button"
             onClick={() => setIsOpen((prev) => !prev)}
+            aria-expanded={isOpen}
+            aria-controls={finderId}
             data-testid="universe-finder-toggle"
             className={`rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-all hover:border-slate-500 hover:text-white ${
               isCompact ? "min-h-11 whitespace-nowrap sm:min-h-0" : ""
@@ -548,7 +589,7 @@ export default function UniverseSelector({
       </div>
 
       {!isCompact && (
-      <div className="flex max-w-full flex-wrap items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+      <div className="flex max-w-full flex-wrap items-center gap-1.5 text-caption uppercase tracking-label text-slate-500">
         <span
           data-testid="universe-kind-chip"
           data-universe-kind={currentKindLabel}
@@ -583,7 +624,12 @@ export default function UniverseSelector({
       )}
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-30 mt-2 w-full overflow-hidden rounded-2xl border border-slate-700/70 bg-[#0b1118] shadow-[0_18px_40px_rgba(0,0,0,0.45)]">
+        <div
+          id={finderId}
+          role="region"
+          aria-label="지역 찾기"
+          className="relative mt-2 w-full overflow-hidden rounded-2xl border border-slate-700/70 bg-[#0b1118] shadow-[0_18px_40px_rgba(0,0,0,0.45)]"
+        >
           <div className="border-b border-slate-800/80 p-3">
             <input
               ref={inputRef}
@@ -597,7 +643,7 @@ export default function UniverseSelector({
           </div>
 
           <div className="max-h-[360px] overflow-y-auto p-3">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-[11px] text-slate-500">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-caption text-slate-500">
               <span data-testid="universe-finder-active-scope">
                 {finderScopeLabel}
               </span>
@@ -606,7 +652,7 @@ export default function UniverseSelector({
 
             {!query && allRecentOptions.length > 0 && (
               <div className="mb-4">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                <p className="mb-2 text-caption font-semibold uppercase tracking-label text-slate-500">
                   최근 본 지역
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -619,7 +665,7 @@ export default function UniverseSelector({
 
             {!query && macroOptions.length > 0 && (
               <div className="mb-4">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                <p className="mb-2 text-caption font-semibold uppercase tracking-label text-slate-500">
                   주요 광역시 · 도
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -638,22 +684,30 @@ export default function UniverseSelector({
               <div className="space-y-4">
                 {groupedFilteredOptions.map(([groupLabel, groupOptions]) => (
                   <div key={groupLabel}>
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    <p className="mb-2 text-caption font-semibold uppercase tracking-label text-slate-500">
                       {query ? groupLabel : `${currentRegionLabel} 시군구`}
                     </p>
 
                     <div className="space-y-2">
                       {groupOptions.map((option) => {
                         const isActive = option.code === value;
+                        const isUnavailable = !availableCodes.has(option.code);
 
                         return (
                           <button
                             key={option.code}
                             type="button"
                             onClick={() => handleSelect(option.code)}
+                            disabled={isUnavailable}
+                            aria-disabled={isUnavailable}
+                            title={
+                              isUnavailable
+                                ? `${option.label} 공개 랭킹은 아직 제공되지 않습니다.`
+                                : undefined
+                            }
                             data-testid="universe-option"
                             data-universe-code={option.code}
-                            className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition-all ${
+                            className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
                               isActive
                                 ? "border-cyan-400/40 bg-cyan-500/12"
                                 : "border-slate-800 bg-slate-900/40 hover:border-slate-600 hover:bg-slate-800/50"
@@ -667,11 +721,11 @@ export default function UniverseSelector({
                               >
                                 {option.label}
                               </p>
-                              <p className="truncate text-[11px] text-slate-500">
+                              <p className="truncate text-caption text-slate-500">
                                 {option.code}
                               </p>
                               {!isMacroUniverseCode(option.code) && (
-                                <p className="truncate text-[11px] text-slate-600">
+                                <p className="truncate text-caption text-slate-600">
                                   {getUniversePrefixLabel(option.code)} /{" "}
                                   {getParentMacroCode(option.code)}
                                 </p>
@@ -679,12 +733,16 @@ export default function UniverseSelector({
                             </div>
 
                             <div className="ml-3 shrink-0">
-                              {isMacroUniverseCode(option.code) ? (
-                                <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-slate-400">
+                              {isUnavailable ? (
+                                <span className="rounded-full border border-slate-700 px-2 py-0.5 text-caption text-slate-400">
+                                  준비중
+                                </span>
+                              ) : isMacroUniverseCode(option.code) ? (
+                                <span className="rounded-full border border-slate-700 px-2 py-0.5 text-caption uppercase tracking-label text-slate-400">
                                   광역
                                 </span>
                               ) : (
-                                <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-slate-400">
+                                <span className="rounded-full border border-slate-700 px-2 py-0.5 text-caption uppercase tracking-label text-slate-400">
                                   시군구
                                 </span>
                               )}

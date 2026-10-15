@@ -23,9 +23,9 @@ export function TierBadge({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border font-medium uppercase tracking-[0.16em] ${getToneClass(
+      className={`inline-flex items-center gap-1.5 rounded-full border font-medium uppercase tracking-label ${getToneClass(
         badge.tone
-      )} ${compact ? "px-2.5 py-1 text-[10px]" : "px-3 py-1.5 text-[11px]"}`}
+      )} ${compact ? "px-2.5 py-1 text-caption" : "px-3 py-1.5 text-caption"}`}
       title={badge.label}
     >
       <span aria-hidden="true">{badge.icon}</span>

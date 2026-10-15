@@ -162,7 +162,7 @@ export function ComplexHistoryMiniChart({
 
   if (normalizedSeries.length === 0 || mergedData.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55">
+      <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-copy text-white/55">
         최근 6개월 시총 흐름을 계산할 스냅샷 데이터가 아직 충분하지 않습니다.
       </div>
     );
@@ -191,7 +191,7 @@ export function ComplexHistoryMiniChart({
           {normalizedSeries.map((entry) => (
             <span
               key={entry.key}
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-white/75"
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-caption uppercase tracking-label text-white/75"
             >
               <span
                 className="h-2 w-2 rounded-full"
@@ -221,7 +221,7 @@ export function ComplexHistoryMiniChart({
           >
             <CartesianGrid
               vertical={false}
-              stroke="rgba(255,255,255,0.08)"
+              stroke="var(--ko-chart-grid)"
               strokeDasharray="3 3"
             />
 
@@ -231,7 +231,7 @@ export function ComplexHistoryMiniChart({
               tickLine={false}
               minTickGap={18}
               tickMargin={10}
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
+              tick={{ fill: "var(--ko-muted)", fontSize: "var(--ko-size-label)" }}
             />
 
             <YAxis
@@ -239,7 +239,7 @@ export function ComplexHistoryMiniChart({
               axisLine={false}
               tickLine={false}
               tickFormatter={(value) => formatMarketCapCompact(Number(value))}
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
+              tick={{ fill: "var(--ko-muted)", fontSize: "var(--ko-size-label)" }}
             />
 
             <Tooltip
@@ -248,8 +248,10 @@ export function ComplexHistoryMiniChart({
                 strokeWidth: 1,
               }}
               contentStyle={{
-                background: "#081018",
-                border: "1px solid rgba(255,255,255,0.12)",
+                background: "var(--ko-surface)",
+                color: "var(--ko-ink)",
+                fontSize: "var(--ko-size-body)",
+                border: "1px solid var(--ko-border)",
                 borderRadius: 16,
               }}
               labelFormatter={(label, payload) => {
@@ -290,7 +292,7 @@ export function ComplexHistoryMiniChart({
       </div>
 
       {hasSparseStepSeries ? (
-        <div className="relative border-t border-white/6 px-3 py-2 text-[11px] leading-5 text-white/50">
+        <div className="relative border-t border-white/6 px-3 py-2 text-caption leading-copy text-white/50">
           관측 가능한 시총 값이 적어 선이 계단처럼 보일 수 있습니다.
         </div>
       ) : null}

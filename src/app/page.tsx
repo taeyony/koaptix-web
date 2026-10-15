@@ -1,28 +1,13 @@
 /**
- * Home = lightweight tactical board.
- * Board/map/search stay on the universe-aware delivery path, while the chart
- * uses the KOAPTIX index chain for the selected service universe.
+ * Home V2 reuses the published board/map/search delivery paths and keeps
+ * the index fallback scoped to the selected service universe.
  */
 
-import { Suspense } from "react";
-import Link from "next/link";
+import { HomeV2Terminal } from "../components/home/v2/HomeV2Terminal";
 import {
-  DEFAULT_UNIVERSE_CODE,
   getUniverseLabel,
   resolveUniverseRequest,
 } from "../lib/koaptix/universes";
-
-import { CommandPalette } from "../components/home/CommandPalette";
-import { NeonMap } from "../components/home/NeonMap";
-import MarketChartCard from "../components/home/MarketChartCard";
-import { RankingBoardClient } from "../components/home/RankingBoardClient";
-import FormulaExplainer from "../components/home/FormulaExplainer";
-import { ThemeToggle } from "../components/home/ThemeToggle";
-import {
-  BetaDisclosure,
-  LAUNCH_COPY,
-} from "../components/home/BetaDisclosure";
-
 import {
   KOAPTIX_PUBLIC_EXPOSURE_BLOCKED,
   KOAPTIX_PUBLIC_INDEX_BASELINE_MODE,
@@ -31,18 +16,15 @@ import {
   KOAPTIX_PUBLIC_SERVICE_BASE_VALUE,
 } from "../types/koaptix";
 import {
-  getLatestRankBoard,
   getHomeKpi,
   getIndexChartPayload,
-  toNullableNumber,
   type HomeIndexChartPayload,
 } from "../lib/koaptix/queries";
-import type { RankingItem } from "../lib/koaptix/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-let lastGoodHomeKpi: any | null = null;
+let lastGoodHomeKpi: Awaited<ReturnType<typeof getHomeKpi>> = null;
 const lastGoodIndexChartPayloadByUniverse = new Map<string, HomeIndexChartPayload>();
 
 type SearchParamValue = string | string[] | undefined;
@@ -151,17 +133,6 @@ export default async function Home({
   const universeUnavailable = universeResolution.universeUnavailable;
   const universeLabel = getUniverseResolutionLabel(universeResolution);
 
-  const rankingHref =
-    universeCode === DEFAULT_UNIVERSE_CODE
-      ? "/ranking"
-      : `/ranking?universe=${encodeURIComponent(universeCode)}`;
-
-  const homeBoardClientLimit = 20;
-  const boardPrimaryLimit =
-    universeCode === DEFAULT_UNIVERSE_CODE ? 8 : homeBoardClientLimit;
-
-  const boardSeedTimeoutMs = 2500;
-
   // Keep chart fallback scoped to the requested universe so a stale national
   // payload does not appear as the selected region.
   const chartFallback = buildSafeChartFallback(
@@ -170,44 +141,7 @@ export default async function Home({
     universeLabel,
   );
 
-  // KOREA_ALL intentionally skips a DB-backed SSR board seed. The home board
-  // stays lightweight and lets /api/rankings deliver the tactical payload on
-  // the client path with its own timeout/cache contract.
-  const boardSeedPromise =
-    universeCode === DEFAULT_UNIVERSE_CODE || universeUnavailable
-      ? Promise.resolve({
-          items: [] as any[],
-          boardError: null as string | null,
-        })
-      : withTimeoutFallback(
-          getLatestRankBoard(universeCode, boardPrimaryLimit)
-            .then((items) => ({
-              items,
-              boardError: null as string | null,
-            }))
-            .catch((error) => {
-              const message =
-                error instanceof Error ? error.message : "보드 로딩 실패";
-              console.warn("[HOME] getLatestRankBoard failed:", error);
-              return {
-                items: [] as any[],
-                boardError: message,
-              };
-            }),
-          boardSeedTimeoutMs,
-          {
-            items: [] as any[],
-            boardError: null as string | null,
-          },
-          () =>
-            console.warn(
-              "[HOME] board seed timeout; falling back to empty seed for client hydration",
-              { universeCode, boardSeedTimeoutMs },
-            ),
-        );
-
-  const [boardSeed, rawKpi, indexChartPayload] = await Promise.all([
-    boardSeedPromise,
+  const [rawKpi, indexChartPayload] = await Promise.all([
     withTimeoutFallback(
       getHomeKpi()
         .then((data) => {
@@ -252,210 +186,19 @@ export default async function Home({
         ),
   ]);
 
-  const rawItems = boardSeed.items;
-  const boardError = boardSeed.boardError;
-  const boardSeedSnapshotDate =
-    rawItems.length > 0 &&
-    rawItems.every(
-      (row: any) =>
-        typeof row.snapshot_date === "string" &&
-        row.snapshot_date === rawItems[0]?.snapshot_date,
-    )
-      ? String(rawItems[0].snapshot_date)
-      : null;
-
-  const currentYear = new Date().getFullYear();
-
-  const refinedItems: RankingItem[] = rawItems.map((row: any) => {
-    const buildYear = toNullableNumber(row.build_year ?? row.approval_year);
-    const ageYears = buildYear ? currentYear - buildYear : null;
-    const households = toNullableNumber(
-      row.household_count ?? row.total_household_count ?? row.households,
-    );
-    const recovery = toNullableNumber(
-      row.recovery_52w ?? row.recovery_rate_52w,
-    );
-
-    return {
-      complexId: String(row.complex_id ?? row.id),
-      name: row.apt_name_ko ?? row.name ?? "",
-      apt_name_ko: row.apt_name_ko ?? row.name ?? "",
-      rank: row.rank_all ?? row.rank ?? 0,
-      rank_all: row.rank_all ?? row.rank ?? 0,
-      sigunguName: row.sigungu_name ?? "",
-      sigungu_name: row.sigungu_name ?? "",
-      legalDongName: row.legal_dong_name ?? "",
-      legal_dong_name: row.legal_dong_name ?? "",
-      marketCapKrw: row.market_cap_krw ?? 0,
-      market_cap_krw: row.market_cap_krw ?? 0,
-      marketCapTrillionKrw: row.market_cap_trillion_krw ?? 0,
-      market_cap_trillion_krw: row.market_cap_trillion_krw ?? 0,
-      rankDelta7d: toNullableNumber(row.rank_delta_w ?? row.rank_delta_7d),
-      rank_delta_w: toNullableNumber(row.rank_delta_w ?? row.rank_delta_7d),
-      rankMovement: row.rank_movement ?? null,
-      rank_movement: row.rank_movement ?? null,
-      previousRankAll: toNullableNumber(row.previous_rank_all),
-      previous_rank_all: toNullableNumber(row.previous_rank_all),
-      recoveryRate52w: recovery,
-      recovery_52w: recovery,
-      locationLabel: `${row.location_search_label ??
-        row.sigungu_full_name ??
-        row.sigungu_name ??
-        ""
-        } ${row.legal_dong_name ?? ""}`.trim(),
-      households,
-      household_count: households,
-      buildYear,
-      build_year: buildYear,
-      ageYears,
-      age_years: ageYears,
-      universeCode: row.universe_code ?? universeCode,
-      universe_code: row.universe_code ?? universeCode,
-      universeName: row.universe_name ?? null,
-      universe_name: row.universe_name ?? null,
-    } as unknown as RankingItem;
-  });
-
-  const home = {
-    items: refinedItems,
-    kpis: [
-      {
-        label: "KOAPTIX 500 SUM",
-        value: rawKpi?.total_market_cap_krw_string || null,
-        subValue: "공개 보드 추정 시가총액 합계",
-      },
-      {
-        label: "OBSERVED UNITS",
-        value: rawKpi?.total_household_count_string || null,
-        subValue: "KOAPTIX 공개 관측 범위",
-      },
-    ],
-  };
+  const kpiDate = typeof rawKpi?.snapshot_date === "string"
+    ? rawKpi.snapshot_date.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? null
+    : null;
 
   return (
-    <>
-      <CommandPalette
-        key={`cmd-${universeCode}`}
-        items={home.items}
-        initialUniverseCode={universeCode}
-      />
-
-      <main
-        className="min-h-screen overflow-x-hidden bg-[#06090f] px-2 py-4 sm:p-4 lg:p-6"
-        data-universe-code={universeCode}
-        data-universe-unavailable={universeUnavailable ? "true" : "false"}
-        data-universe-resolution-status={
-          universeResolution.universeResolutionStatus
-        }
-        data-universe-unavailable-reason={universeResolution.reason ?? ""}
-      >
-        <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-4 overflow-x-hidden">
-          <section className="w-full min-w-0 border-y border-slate-800/80 py-3 sm:py-4">
-            <div className="grid min-w-0 gap-4 lg:grid-cols-12 lg:items-start">
-              <div className="min-w-0 lg:col-span-8">
-                <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">
-                  KOAPTIX / APARTMENT CAPITAL TERMINAL
-                </p>
-
-                <h1 className="mt-1 max-w-4xl break-words text-xl font-semibold leading-tight tracking-tight text-white [overflow-wrap:anywhere] sm:text-2xl">
-                  {LAUNCH_COPY.heroSubheadline}
-                </h1>
-                <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-400 sm:text-sm">
-                  KOAPTIX 500은 단지별 자본 순위를, KOAPTIX Index는 선택 범위의
-                  집계 흐름을 보여줍니다.
-                </p>
-
-                <BetaDisclosure
-                  variant="compact"
-                  className="mt-3 max-w-3xl"
-                />
-
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <FormulaExplainer triggerLabel="산출 기준 보기" />
-                  <span className="max-w-full break-words text-[10px] uppercase tracking-[0.14em] text-slate-500 [overflow-wrap:anywhere]">
-                    {LAUNCH_COPY.representativeMetric}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex min-w-0 flex-col gap-3 lg:col-span-4 lg:items-end">
-                <ThemeToggle />
-
-                <dl className="grid w-full grid-cols-2 divide-x divide-slate-800/80 border-y border-slate-800/80">
-                  {home.kpis.map((kpi) => (
-                    <div key={kpi.label} className="min-w-0 px-3 py-3">
-                      <dt className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                        {kpi.label}
-                      </dt>
-                      <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-slate-100 sm:text-xl">
-                        {kpi.value ?? "—"}
-                      </dd>
-                      <dd className="mt-1 text-[10px] text-slate-500">
-                        {kpi.value ? kpi.subValue : "현재 공개 데이터 없음"}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            </div>
-          </section>
-
-          <section className="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 lg:gap-6">
-            <div className="h-[620px] min-h-0 lg:order-2 lg:col-span-8 lg:h-[650px]">
-              <Suspense
-                fallback={
-                  <div className="h-full w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />
-                }
-              >
-                <RankingBoardClient
-                  key={`board-${universeCode}`}
-                  items={home.items}
-                  initialUniverseCode={universeCode}
-                  boardError={boardError}
-                  initialLatestBoardDate={boardSeedSnapshotDate}
-                  presentation="home-flagship"
-                />
-              </Suspense>
-            </div>
-
-            <div className="h-[620px] min-h-0 min-w-0 overflow-hidden lg:order-1 lg:col-span-4 lg:h-[650px]">
-              {/* Force chart remount when selected/rendered universe scope changes. */}
-              <MarketChartCard
-                key={`chart-${indexChartPayload.requestedUniverseCode}-${indexChartPayload.renderedUniverseCode}`}
-                payload={indexChartPayload}
-              />
-            </div>
-          </section>
-
-          <section className="flex flex-col gap-3 border-y border-slate-800/80 px-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-2">
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                {universeLabel}
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                더 넓은 공개 순위와 단지 탐색은 TOP1000 보드에서 계속됩니다.
-              </p>
-            </div>
-
-            <Link
-              href={rankingHref}
-              className="w-fit max-w-full break-words rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300 transition-all [overflow-wrap:anywhere] hover:border-cyan-400/50 hover:bg-cyan-500/20 hover:text-cyan-200"
-            >
-              {universeLabel} · {LAUNCH_COPY.top1000Cta}
-            </Link>
-          </section>
-
-          <section className="h-[600px] min-h-0 sm:h-[650px]">
-            <Suspense
-              fallback={
-                <div className="h-full w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />
-              }
-            >
-              <NeonMap key={`map-${universeCode}`} items={home.items} />
-            </Suspense>
-          </section>
-        </div>
-      </main>
-    </>
+    <HomeV2Terminal
+      index={indexChartPayload}
+      totalMarketCapLabel={rawKpi?.total_market_cap_krw_string ?? null}
+      currentnessDate={kpiDate}
+      dataAvailable={indexChartPayload.rows.length > 0 || Boolean(rawKpi)}
+      universeCode={universeCode}
+      universeLabel={universeLabel}
+      universeUnavailable={universeUnavailable}
+    />
   );
 }

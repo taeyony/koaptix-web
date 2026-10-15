@@ -198,10 +198,10 @@ function buildMetricRows(leftItem: unknown, rightItem: unknown): MetricDefinitio
 function MetricCell({ value, winner, side }: { value: string; winner: WinnerSide; side: "left" | "right" }) {
   const isWinner = winner === side;
   return (
-    <div className={cx("rounded-2xl border px-4 py-3 transition", isWinner ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300" : "border-slate-800 bg-slate-900/70 text-slate-100")}>
+    <div className={cx("ko-comparison-metric rounded-2xl border px-4 py-3 transition", isWinner ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300" : "border-slate-800 bg-slate-900/70 text-slate-100")}>
       <div className={cx("flex items-center gap-2", side === "right" ? "justify-end" : "justify-start")}>
         <span className="text-sm font-semibold tabular-nums">{value}</span>
-        {isWinner ? <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium tracking-[0.18em] text-emerald-300">우위</span> : null}
+        {isWinner ? <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-caption font-medium tracking-label text-emerald-300">우위</span> : null}
       </div>
     </div>
   );
@@ -256,13 +256,13 @@ export default function ComparisonSheet({ open, items, onClose, onRemoveItem, on
     <div className={cx("fixed inset-0 z-[1000] isolate", open ? "pointer-events-auto" : "pointer-events-none")}>
       <div className={cx("absolute inset-0 bg-slate-950/70 backdrop-blur-[2px] transition-opacity duration-300", open ? "opacity-100" : "opacity-0")} onClick={onClose} />
       <div className={cx("absolute inset-x-0 bottom-0 mx-auto w-full max-w-7xl px-4 pb-4 transition-all duration-300 ease-out", open ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0")} onClick={(event) => event.stopPropagation()}>
-        <section role="dialog" aria-modal="true" aria-labelledby="comparison-sheet-title" className="overflow-hidden rounded-[28px] border border-slate-800 bg-slate-950/95 shadow-[0_-30px_80px_rgba(2,6,23,0.82)] ring-1 ring-white/5">
+        <section role="dialog" aria-modal="true" aria-labelledby="comparison-sheet-title" className="ko-comparison-sheet overflow-hidden rounded-[28px] border border-slate-800 bg-slate-950/95 shadow-[0_-30px_80px_rgba(2,6,23,0.82)] ring-1 ring-white/5">
           <div className="border-b border-slate-800/80 px-6 py-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-500">Comparison Sheet</p>
-                <h2 id="comparison-sheet-title" className="mt-2 text-lg font-semibold text-slate-100">1:1 스펙 비교</h2>
-                <p className="mt-1 text-xs text-slate-500">에메랄드 포인트는 해당 항목의 우위를 의미합니다.</p>
+                <p className="text-caption font-medium uppercase tracking-label text-slate-500">Comparison Sheet</p>
+                <h2 id="comparison-sheet-title" className="ko-section-title mt-2 text-section font-bold text-slate-100">1:1 스펙 비교</h2>
+                <p className="ko-copy mt-1 text-sm text-slate-500">에메랄드 포인트는 해당 항목의 우위를 의미합니다.</p>
               </div>
               <div className="flex items-center gap-2">
                 {onClear ? <button type="button" onClick={onClear} className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-cyan-400/30 hover:text-cyan-300">초기화</button> : null}
@@ -275,33 +275,33 @@ export default function ComparisonSheet({ open, items, onClose, onRemoveItem, on
               <div className="flex min-h-[280px] items-center justify-center px-6 py-8">
                 <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/60 px-6 py-8 text-center">
                   <p className="text-sm font-medium text-slate-200">비교 대상 2개를 담으면 여기서 바로 대조됩니다.</p>
-                  <p className="mt-2 text-xs text-slate-500">랭킹 카드의 VS 버튼으로 두 단지를 선택하세요.</p>
+                  <p className="ko-copy mt-2 text-sm text-slate-500">랭킹 카드의 VS 버튼으로 두 단지를 선택하세요.</p>
                 </div>
               </div>
             ) : (
               <div className="px-6 pb-6 pt-5">
-                <div className="grid grid-cols-[minmax(0,1fr)_76px_minmax(0,1fr)] gap-3">
+                <div className="ko-comparison-grid grid grid-cols-[minmax(0,1fr)_76px_minmax(0,1fr)] gap-3">
                   <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="ko-comparison-summary flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">LEFT</p>
+                        <p className="text-caption uppercase tracking-label text-slate-500">LEFT</p>
                         <h3 className="mt-2 break-words text-base font-semibold text-slate-50">{getComplexName(leftItem)}</h3>
-                        <p className="mt-2 text-xs text-slate-400">{getLocationText(leftItem)}</p>
+                        <p className="mt-2 text-sm text-slate-400">{getLocationText(leftItem)}</p>
                         {getRankText(leftItem) ? <p className="mt-1 text-xs text-slate-500">현재 순위 {getRankText(leftItem)}</p> : null}
                       </div>
-                      {onRemoveItem ? <button type="button" onClick={() => onRemoveItem(leftItem)} className="shrink-0 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1.5 text-[11px] font-medium text-slate-400 transition hover:border-cyan-400/30 hover:text-cyan-300">제거</button> : null}
+                      {onRemoveItem ? <button type="button" onClick={() => onRemoveItem(leftItem)} className="shrink-0 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1.5 text-caption font-medium text-slate-400 transition hover:border-cyan-400/30 hover:text-cyan-300">제거</button> : null}
                     </div>
                   </article>
                   <div className="flex items-center justify-center">
-                    <div className="rounded-full border border-slate-800 bg-slate-900/80 px-3 py-2 text-[11px] font-medium tracking-[0.28em] text-slate-300">VS</div>
+                    <div className="rounded-full border border-slate-800 bg-slate-900/80 px-3 py-2 text-caption font-medium tracking-label text-slate-300">VS</div>
                   </div>
                   <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      {onRemoveItem ? <button type="button" onClick={() => onRemoveItem(rightItem)} className="shrink-0 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1.5 text-[11px] font-medium text-slate-400 transition hover:border-cyan-400/30 hover:text-cyan-300">제거</button> : null}
+                    <div className="ko-comparison-summary flex items-start justify-between gap-3">
+                      {onRemoveItem ? <button type="button" onClick={() => onRemoveItem(rightItem)} className="shrink-0 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1.5 text-caption font-medium text-slate-400 transition hover:border-cyan-400/30 hover:text-cyan-300">제거</button> : null}
                       <div className="min-w-0 text-right">
-                        <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">RIGHT</p>
+                        <p className="text-caption uppercase tracking-label text-slate-500">RIGHT</p>
                         <h3 className="mt-2 break-words text-base font-semibold text-slate-50">{getComplexName(rightItem)}</h3>
-                        <p className="mt-2 text-xs text-slate-400">{getLocationText(rightItem)}</p>
+                        <p className="mt-2 text-sm text-slate-400">{getLocationText(rightItem)}</p>
                         {getRankText(rightItem) ? <p className="mt-1 text-xs text-slate-500">현재 순위 {getRankText(rightItem)}</p> : null}
                       </div>
                     </div>
@@ -311,9 +311,9 @@ export default function ComparisonSheet({ open, items, onClose, onRemoveItem, on
                   {metricRows.map((row) => {
                     const winner = getWinnerSide(row.leftValue, row.rightValue, row.compare);
                     return (
-                      <div key={row.label} className="grid grid-cols-[minmax(0,1fr)_76px_minmax(0,1fr)] gap-3">
+                      <div key={row.label} className="ko-comparison-grid grid grid-cols-[minmax(0,1fr)_76px_minmax(0,1fr)] gap-3">
                         <MetricCell value={row.displayLeft} winner={winner} side="left" />
-                        <div className="flex items-center justify-center px-2 text-center text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">{row.label}</div>
+                        <div className="flex items-center justify-center px-2 text-center text-caption font-medium uppercase tracking-label text-slate-500">{row.label}</div>
                         <MetricCell value={row.displayRight} winner={winner} side="right" />
                       </div>
                     );

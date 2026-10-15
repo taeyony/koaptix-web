@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./design-tokens.css";
 
 :root {
   color-scheme: dark;
@@ -9,11 +10,40 @@
 }
 
 body {
-  background-color: #05070b;
-  color: #eaf2ff;
+  background-color: var(--ko-bg);
+  color: var(--ko-ink);
   transition:
     background-color 180ms ease,
     color 180ms ease;
+}
+
+.home-v2 {
+  color: var(--ko-ink);
+}
+
+:root[data-theme="night"] .home-v2 {
+  color-scheme: dark;
+}
+
+:root[data-theme="day"] .home-v2 {
+  color-scheme: light;
+}
+
+.home-v2 :is(a, button, input):focus-visible {
+  outline: 2px solid var(--ko-focus);
+  outline-offset: 4px;
+}
+
+.home-v2-region-selector [class*="bg-slate"] {
+  background-color: var(--ko-surface);
+}
+
+.home-v2-region-selector [class*="border-slate"] {
+  border-color: var(--ko-border);
+}
+
+.home-v2-region-selector :is([class*="text-slate"], [class*="text-white"]) {
+  color: var(--ko-muted);
 }
 
 .theme-toggle {
@@ -34,9 +64,9 @@ body {
   border: 0;
   border-radius: 9999px;
   background: transparent;
-  color: rgba(203, 213, 225, 0.72);
+  color: var(--ko-muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--ko-size-control);
   font-weight: 700;
   line-height: 1;
   padding: 8px 10px;
@@ -49,7 +79,7 @@ body {
 
 .theme-toggle button[data-active="true"] {
   background: rgba(34, 211, 238, 0.16);
-  color: #67e8f9;
+  color: var(--ko-accent);
   box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.24);
 }
 
@@ -89,8 +119,8 @@ body {
 }
 
 :root[data-theme="day"] body {
-  background-color: #f5f7fb;
-  color: #172033;
+  background-color: var(--ko-bg);
+  color: var(--ko-ink);
 }
 
 :root[data-theme="day"] .theme-toggle {
@@ -102,12 +132,12 @@ body {
 }
 
 :root[data-theme="day"] .theme-toggle button {
-  color: rgba(51, 65, 85, 0.72);
+  color: var(--ko-muted);
 }
 
 :root[data-theme="day"] .theme-toggle button[data-active="true"] {
-  background: #0f172a;
-  color: #ffffff;
+  background: var(--ko-ink);
+  color: var(--ko-surface);
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.16);
 }
 
@@ -128,21 +158,19 @@ body {
   background: rgba(71, 85, 105, 0.72);
 }
 
-:root[data-theme="day"] .bg-slate-950,
-:root[data-theme="day"] .bg-slate-900,
-:root[data-theme="day"] .bg-slate-800,
+:root[data-theme="day"] [class*="bg-slate-950"],
+:root[data-theme="day"] [class*="bg-slate-900"],
+:root[data-theme="day"] [class*="bg-slate-800"],
 :root[data-theme="day"] [class*="bg-[#06090f]"],
-:root[data-theme="day"] [class*="bg-[#05070b]"],
+:root[data-theme="day"] [class*="bg-[var(--ko-bg)]"],
 :root[data-theme="day"] [class*="bg-[#0b1118]"],
 :root[data-theme="day"] [class*="bg-[#071018]"],
 :root[data-theme="day"] [class*="bg-black/"] {
-  background-color: rgba(255, 255, 255, 0.86) !important;
+  background-color: var(--ko-surface) !important;
 }
 
 :root[data-theme="day"] main[class*="bg-[#06090f]"] {
-  background:
-    radial-gradient(circle at top left, rgba(14, 165, 233, 0.14), transparent 34rem),
-    linear-gradient(180deg, #f8fbff 0%, #eef3f8 100%) !important;
+  background: var(--ko-bg) !important;
 }
 
 :root[data-theme="day"] section[class*="bg-[#0b1118]"],
@@ -150,7 +178,7 @@ body {
 :root[data-theme="day"] [class*="bg-slate-900/"],
 :root[data-theme="day"] [class*="bg-slate-800/"],
 :root[data-theme="day"] [class*="bg-white/[0.0"] {
-  background-color: rgba(255, 255, 255, 0.76) !important;
+  background-color: var(--ko-surface) !important;
 }
 
 :root[data-theme="day"] .text-white,
@@ -158,14 +186,21 @@ body {
 :root[data-theme="day"] .text-slate-100,
 :root[data-theme="day"] .text-slate-200,
 :root[data-theme="day"] [class*="text-white/"] {
-  color: #172033 !important;
+  color: var(--ko-ink) !important;
 }
 
 :root[data-theme="day"] .text-slate-300,
 :root[data-theme="day"] .text-slate-400,
 :root[data-theme="day"] .text-slate-500,
 :root[data-theme="day"] .text-slate-600 {
-  color: #526173 !important;
+  color: var(--ko-muted) !important;
+}
+
+:root[data-theme="day"] :is(
+  [class^="bg-slate-700"], [class*=" bg-slate-700"],
+  [class^="bg-slate-600"], [class*=" bg-slate-600"]
+) {
+  background-color: var(--ko-selected-neutral) !important;
 }
 
 :root[data-theme="day"] .border-slate-800,
@@ -180,17 +215,363 @@ body {
 :root[data-theme="day"] input,
 :root[data-theme="day"] select,
 :root[data-theme="day"] textarea {
-  background-color: rgba(255, 255, 255, 0.9) !important;
-  color: #172033 !important;
+  background-color: var(--ko-surface) !important;
+  color: var(--ko-ink) !important;
+}
+
+:root[data-theme="day"] :is([class^="text-cyan-"], [class*=" text-cyan-"]) {
+  color: var(--ko-accent) !important;
+}
+
+:root[data-theme="day"] :is([class^="text-emerald-"], [class*=" text-emerald-"]) {
+  color: var(--ko-up) !important;
+}
+
+:root[data-theme="day"] :is([class^="text-rose-"], [class*=" text-rose-"]) {
+  color: var(--ko-down) !important;
+}
+
+:root[data-theme="day"] :is([class^="text-amber-"], [class*=" text-amber-"]) {
+  color: var(--ko-warning) !important;
+}
+
+:root[data-theme="day"] :is([class^="text-fuchsia-"], [class*=" text-fuchsia-"]) {
+  color: var(--ko-purple) !important;
+}
+
+:root[data-theme="day"] [class*="shadow-"] {
+  box-shadow: var(--ko-shadow);
+}
+
+/* These are modal backdrops, not card surfaces. Keep their contrast in day mode. */
+:root[data-theme="day"] [class*="backdrop-blur"][class*="bg-slate-950/70"],
+:root[data-theme="day"] [class*="backdrop-blur"][class*="bg-[#06090f]/90"] {
+  background-color: var(--ko-backdrop) !important;
+}
+
+:root[data-theme="day"] [aria-modal="true"] {
+  color: var(--ko-ink);
+}
+
+:root[data-theme="day"] .home-v2 input {
+  background-color: transparent !important;
 }
 
 :root[data-theme="day"] ::placeholder {
-  color: rgba(82, 97, 115, 0.72);
+  color: var(--ko-muted);
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
   body,
   .theme-toggle button {
     transition: none;
+  }
+}
+
+/* Readable typography and controls on the established surfaces. */
+body {
+  background-color: var(--ko-bg);
+  color: var(--ko-ink);
+}
+
+:root[data-theme="day"] main.home-v2 {
+  background-color: var(--ko-bg) !important;
+}
+
+:root :is(input, textarea) {
+  font-size: var(--ko-size-input);
+  line-height: var(--ko-leading-body);
+}
+
+:root button {
+  min-height: var(--ko-hit-target);
+}
+
+:root button[aria-label] {
+  min-width: var(--ko-hit-target);
+}
+
+:root :is(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--ko-focus) !important;
+  outline-offset: 3px;
+}
+
+:root .font-mono,
+:root .tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.ko-copy {
+  max-width: var(--ko-copy-width);
+  font-size: var(--ko-size-body);
+  line-height: var(--ko-leading-body);
+}
+
+.ko-caption {
+  font-size: var(--ko-size-caption);
+  line-height: var(--ko-leading-body);
+}
+
+.ko-section-title {
+  font-size: var(--ko-size-section);
+  font-weight: 700;
+  line-height: var(--ko-leading-heading);
+  letter-spacing: var(--ko-tracking-heading);
+}
+
+.ko-text-link {
+  color: var(--ko-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+.ko-icon-button {
+  display: inline-flex;
+  min-height: var(--ko-hit-target);
+  min-width: var(--ko-hit-target);
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ko-space-1);
+  font-size: var(--ko-size-input);
+}
+
+.ko-icon-button:hover,
+.ko-icon-button[aria-pressed="true"] {
+  background-color: var(--ko-accent-soft);
+  color: var(--ko-accent);
+}
+
+:root[data-theme="day"] :is(
+  .text-slate-700, .text-slate-800, .text-slate-900, .text-cyan-50,
+  .text-teal-50, .text-amber-50
+) {
+  color: var(--ko-ink) !important;
+}
+
+:root[data-theme="day"] :is(
+  [class^="text-teal-"], [class*=" text-teal-"],
+  [class^="text-yellow-"], [class*=" text-yellow-"]
+) {
+  color: var(--ko-accent) !important;
+}
+
+/* Solid, tested surface/text pairs also apply to chips inside portal dialogs. */
+:root[data-theme="day"] :is(
+  [class^="bg-cyan-"], [class*=" bg-cyan-"],
+  [class^="bg-teal-"], [class*=" bg-teal-"]
+) {
+  background-color: var(--ko-accent-soft) !important;
+}
+
+:root[data-theme="day"] [data-testid="universe-option"][class*="bg-cyan-"] {
+  color: var(--ko-accent) !important;
+  border-color: var(--ko-accent) !important;
+  font-weight: 700;
+}
+
+:root [data-testid="universe-option"] {
+  font-size: var(--ko-size-control);
+  line-height: var(--ko-leading-body);
+}
+
+:root[data-theme="day"] :is(
+  [class^="text-amber-"], [class*=" text-amber-"]
+) {
+  color: var(--ko-warning) !important;
+}
+
+:root[data-theme="day"] :is(
+  [class^="text-slate-"], [class*=" text-slate-"],
+  [class^="text-white/"], [class*=" text-white/"]
+) {
+  --tw-text-opacity: 1;
+}
+
+:root[data-theme="day"] :is(.opacity-60, .opacity-70, .opacity-80),
+:root[data-theme="day"] button:disabled {
+  opacity: 1;
+}
+
+:root[data-theme="day"] button:disabled {
+  color: var(--ko-muted);
+  border-style: dashed;
+}
+
+:root[data-theme="day"] .recharts-text {
+  fill: var(--ko-muted);
+  font-size: var(--ko-size-label);
+}
+
+:root[data-theme="day"] .recharts-tooltip-wrapper :is(p, li, span) {
+  color: var(--ko-ink) !important;
+}
+
+.home-v2 section {
+  min-width: 0;
+  scroll-margin-top: 6rem;
+}
+
+:root .home-v2 section[tabindex="-1"]:focus {
+  outline: none !important;
+}
+
+.ko-map-region {
+  transition: fill 140ms ease, stroke-width 140ms ease;
+}
+
+.ko-map-region-link:hover .ko-map-region,
+.ko-map-region-link:focus-visible .ko-map-region {
+  fill: var(--ko-accent-soft);
+  stroke-width: 2.5;
+}
+
+.home-v2 :is(#capital-map, #index, #insights, #watchlist) {
+  padding-block: var(--ko-space-4);
+}
+
+.ko-capital-map {
+  container-name: capital-map;
+  container-type: inline-size;
+}
+
+.ko-capital-map-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: var(--ko-space-3);
+}
+
+.ko-capital-map-figure {
+  display: grid;
+  width: 100%;
+  max-width: var(--ko-map-max-width);
+  justify-self: center;
+  gap: var(--ko-space-2);
+}
+
+.ko-capital-map-svg {
+  display: block;
+  width: 100%;
+  height: var(--ko-map-height);
+}
+
+.ko-capital-map-regions {
+  min-width: 0;
+}
+
+@container capital-map (min-width: 28rem) {
+  .ko-capital-map-content {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  }
+}
+
+.home-v2 .ko-table-scroll {
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.home-v2 .ko-table-row,
+.home-v2 .ko-table-head {
+  grid-template-columns: 2rem minmax(7rem, 1fr) 5rem 2.5rem 2.5rem;
+  align-items: center;
+  gap: var(--ko-space-1);
+  min-width: 21rem;
+}
+
+.home-v2 .ko-table-row {
+  display: grid;
+  padding-block: var(--ko-row-padding);
+  font-size: var(--ko-size-body);
+}
+
+.home-v2 .ko-table-row :is(a, span) {
+  font-size: inherit;
+}
+
+.home-v2 .ko-table-row p {
+  font-size: var(--ko-size-caption);
+}
+
+:root[data-theme="day"] :is([class^="bg-emerald-"], [class*=" bg-emerald-"]) {
+  background-color: var(--ko-up-soft) !important;
+}
+
+:root[data-theme="day"] :is([class^="bg-rose-"], [class*=" bg-rose-"]) {
+  background-color: var(--ko-down-soft) !important;
+}
+
+.ko-comparison-sheet {
+  display: flex;
+  max-height: calc(100dvh - var(--ko-space-4));
+  flex-direction: column;
+}
+
+.ko-comparison-sheet > div:first-child {
+  flex-shrink: 0;
+}
+
+.ko-comparison-sheet > div:last-child {
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (min-width: 768px) {
+  .home-v2 .ko-table-head {
+    display: grid;
+  }
+  .home-v2 .ko-table-row,
+  .home-v2 .ko-table-head {
+    grid-template-columns: 3rem minmax(8rem, 1fr) minmax(6rem, 0.65fr) 8rem 6rem 2.5rem 2.5rem;
+    gap: var(--ko-space-2);
+    min-width: 45rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .ko-comparison-sheet > div:first-child,
+  .ko-comparison-sheet > div:last-child > div {
+    padding-inline: var(--ko-space-2);
+  }
+
+  .ko-comparison-sheet > div:first-child > div {
+    flex-wrap: wrap;
+  }
+
+  .ko-comparison-grid {
+    grid-template-columns: minmax(0, 1fr) var(--ko-hit-target) minmax(0, 1fr);
+    gap: var(--ko-space-1);
+  }
+
+  .ko-comparison-grid article,
+  .ko-comparison-metric {
+    padding-inline: var(--ko-space-1);
+  }
+
+  .ko-comparison-summary {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--ko-space-1);
+  }
+
+  .ko-comparison-summary button {
+    order: 2;
+    align-self: flex-start;
+  }
+
+  .ko-comparison-metric > div {
+    flex-wrap: wrap;
+    gap: var(--ko-space-1);
+  }
+
+  .home-v2 .ko-section-heading {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--ko-space-1);
+  }
+
+  .home-v2 .ko-section-heading p {
+    max-width: 100%;
+    text-align: left;
   }
 }

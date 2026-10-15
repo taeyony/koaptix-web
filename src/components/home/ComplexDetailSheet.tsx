@@ -143,7 +143,7 @@ function Metric({
 }) {
   return (
     <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3 sm:p-4">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-white/40 sm:text-xs">
+      <p className="text-caption uppercase tracking-label text-white/40 sm:text-xs">
         {label}
       </p>
       <p className={`mt-1 text-base font-semibold tabular-nums sm:text-lg ${tone ?? ""}`}>
@@ -344,10 +344,10 @@ export function ComplexDetailSheet({
 
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/70 sm:text-xs">
+                  <p className="text-caption uppercase tracking-label text-cyan-300/70 sm:text-xs">
                     COMPLEX DETAIL
                   </p>
-                  <h3 id="complex-detail-title" className="mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl">
+                  <h3 id="complex-detail-title" className="mt-1 truncate text-xl font-semibold tracking-heading sm:text-2xl">
                     {error ? "Detail unavailable" : "Loading detail"}
                   </h3>
                 </div>
@@ -437,13 +437,13 @@ export function ComplexDetailSheet({
 
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/70 sm:text-xs">
+                <p className="text-caption uppercase tracking-label text-cyan-300/70 sm:text-xs">
                   COMPLEX DETAIL
                 </p>
-                <h3 id="complex-detail-title" className="mt-1 truncate text-xl font-semibold tracking-tight sm:text-2xl">
+                <h3 id="complex-detail-title" className="mt-1 truncate text-xl font-semibold tracking-heading sm:text-2xl">
                   {title}
                 </h3>
-                <p className="mt-1 truncate text-sm text-white/50 sm:text-[15px]">
+                <p className="mt-1 truncate text-sm text-white/50 sm:text-control">
                   {location}
                 </p>
 
@@ -527,7 +527,7 @@ export function ComplexDetailSheet({
               <div className="border-b border-white/5 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70">회복 관측 지표</p>
+                    <p className="text-caption uppercase tracking-label text-cyan-300/70">회복 관측 지표</p>
                     <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">52주 최고가 회복률</h4>
                     <p className="mt-1 text-xs text-white/45">이전 고점과 현재 추정치 사이의 거리를 보여주는 참고 지표입니다.</p>
                   </div>
@@ -550,11 +550,11 @@ export function ComplexDetailSheet({
               <div className="border-b border-white/5 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300/70">CAP FLOW HISTORY</p>
+                    <p className="text-caption uppercase tracking-label text-cyan-300/70">CAP FLOW HISTORY</p>
                     <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">최근 6개월 시가총액 흐름</h4>
                     <p className="mt-1 text-xs text-white/45">주간 점 기준으로 노이즈를 걷어낸 모멘텀 라인</p>
                   </div>
-                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-white/60">
+                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-caption uppercase tracking-label text-white/60">
                     Weekly View
                   </span>
                 </div>
@@ -568,7 +568,7 @@ export function ComplexDetailSheet({
                 ) : chartData.length > 0 ? (
                   <ComplexHistoryMiniChart data={chartData} />
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-6 text-white/55">
+                  <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-copy text-white/55">
                     최근 6개월 시총 흐름을 계산할 스냅샷 데이터가 아직 충분하지 않습니다.
                   </div>
                 )}
@@ -607,7 +607,7 @@ export function ComplexDetailSheet({
                     <DetailRow label="연식" value={`${ageYears}년차`} />
                   ) : null}
                   {detail?.updatedAt ? (
-                    <DetailRow label="데이터 기준일" value={formatUpdatedAt(detail.updatedAt)} />
+                    <DetailRow label="상세 정보 갱신일" value={formatUpdatedAt(detail.updatedAt)} />
                   ) : null}
                 </>
               )}

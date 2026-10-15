@@ -133,7 +133,7 @@ export default function FormulaExplainer({
         onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
         aria-controls={panelId}
-        className="inline-flex items-center gap-1 rounded-full border border-slate-700/90 bg-slate-900/80 px-2.5 py-1 text-xs font-medium text-slate-300 transition hover:border-cyan-300/80 hover:text-cyan-200 focus-visible:border-cyan-300 focus-visible:text-cyan-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400/40"
+        className="ko-text-link inline-flex items-center gap-2 rounded-full border border-slate-700/90 bg-slate-900/80 px-2.5 py-1 text-xs font-medium text-slate-300 transition hover:border-cyan-300/80 hover:text-cyan-200 focus-visible:border-cyan-300 focus-visible:text-cyan-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400/40"
       >
         <span aria-hidden="true">i</span>
         <span>{triggerLabel}</span>
@@ -176,7 +176,7 @@ export default function FormulaExplainer({
                 }
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs font-semibold text-slate-200 md:text-[11px]">
+                  <p className="text-xs font-semibold text-slate-200 md:text-caption">
                     {title}
                   </p>
                   <button
@@ -189,10 +189,10 @@ export default function FormulaExplainer({
                   </button>
                 </div>
 
-                <p className="mt-2 text-[11px] leading-6 text-slate-400">
+                <p className="ko-copy mt-2 text-sm leading-copy text-slate-400">
                   {formulaLead}
                 </p>
-                <ul className="mt-2 space-y-1 text-[11px] leading-6 text-slate-300">
+                <ul className="ko-copy mt-2 space-y-2 text-sm leading-copy text-slate-300">
                   {formulaBullets.map((line) => (
                     <li key={line} className="flex items-start gap-2">
                       <span className="mt-2 inline-block h-1 w-1 rounded-full bg-slate-500" />
@@ -200,7 +200,7 @@ export default function FormulaExplainer({
                     </li>
                   ))}
                 </ul>
-                <p className="mt-3 text-[11px] leading-6 text-slate-500">
+                <p className="mt-3 text-caption leading-copy text-slate-500">
                   {formulaFootnote}
                 </p>
               </div>

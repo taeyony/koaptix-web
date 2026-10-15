@@ -88,11 +88,11 @@ export function RecoveryGauge({
         className={`rounded-xl border px-3 py-2 ${state.shellClass} ${className}`}
       >
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[10px] uppercase tracking-[0.18em] text-white/42">
+          <span className="text-caption uppercase tracking-label text-white/42">
             52W Recovery
           </span>
           <span
-            className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${state.accentClass}`}
+            className={`text-caption font-semibold uppercase tracking-label ${state.accentClass}`}
           >
             {state.signal}
           </span>
@@ -130,18 +130,18 @@ export function RecoveryGauge({
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-[0.2em] text-white/42">
+          <p className="text-caption uppercase tracking-label text-white/42">
             52-Week Recovery Rate
           </p>
 
           <div className="mt-2 flex items-end gap-3">
             <p
-              className={`text-3xl font-black tracking-tight tabular-nums sm:text-4xl ${state.accentClass}`}
+              className={`text-3xl font-black tracking-heading tabular-nums sm:text-4xl ${state.accentClass}`}
             >
               {formatRate(recoveryRate)}
             </p>
             <p
-              className={`pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${state.accentClass}`}
+              className={`pb-1 text-caption font-semibold uppercase tracking-label ${state.accentClass}`}
             >
               {state.signal}
             </p>

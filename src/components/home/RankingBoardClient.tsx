@@ -302,7 +302,7 @@ function resolveCanonicalSidoLabel(
   );
 }
 
-function resolveSidoFromUniverseCode(
+export function resolveSidoFromUniverseCode(
   universeCode?: string | null,
 ): CanonicalSidoIdentity | null {
   const normalized = String(universeCode ?? "")
@@ -315,7 +315,7 @@ function resolveSidoFromUniverseCode(
   return sggMatch ? SIDO_BY_ADMIN_PREFIX[sggMatch[1]] ?? null : null;
 }
 
-function parseDistrictIdentity(value: unknown): DistrictIdentity | null {
+export function parseDistrictIdentity(value: unknown): DistrictIdentity | null {
   const normalized = normalizeAdministrativeLabel(value);
   if (!normalized) return null;
 
@@ -755,7 +755,7 @@ export function RankingBoardClient({
     );
 
   const { bookmarks, toggleBookmark, isLoaded } = useBookmarks();
-  const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
+  const [showBookmarksOnly, setShowBookmarksOnly] = useState(searchParams?.get("view") === "watchlist");
 
   const [comparisonItems, setComparisonItems] = useState<RankingItem[]>([]);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
@@ -803,6 +803,7 @@ export function RankingBoardClient({
     );
     setDistrictQueryLocal(params.get("district") ?? "");
     setSelectedComplexId(params.get("complexId"));
+    setShowBookmarksOnly(params.get("view") === "watchlist");
 
     if (syncRankingUrlState) {
       setSearchQuery(params.get("q") ?? "");
@@ -1598,7 +1599,7 @@ export function RankingBoardClient({
         data-testid="ranking-discovery-section"
         className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-3 text-left sm:px-4"
       >
-        <div className="mb-3 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.16em] text-amber-200/80">
+        <div className="mb-3 flex items-center justify-between gap-3 text-caption uppercase tracking-label text-amber-200/80">
           <span>랭킹 산정 전 후보</span>
           <span>{visibleDiscoveryCandidates.length} ITEMS</span>
         </div>
@@ -1622,17 +1623,17 @@ export function RankingBoardClient({
                 }`}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                  <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-caption font-semibold text-amber-200">
                     관측 준비중
                   </span>
                   <span className="min-w-0 truncate text-sm font-semibold text-slate-100">
                     {candidate.displayName}
                   </span>
                 </div>
-                <p className="mt-1 truncate text-[11px] text-slate-500">
+                <p className="mt-1 truncate text-caption text-slate-500">
                   {candidate.regionLabel}
                 </p>
-                <p className="mt-2 text-[12px] leading-relaxed text-amber-100/80">
+                <p className="mt-2 text-sm leading-copy text-amber-100/80">
                   {candidate.copy.message}
                 </p>
               </button>
@@ -1641,7 +1642,7 @@ export function RankingBoardClient({
         </div>
 
         {selectedCandidateVisible && selectedDiscoveryCandidate && (
-          <div className="mt-3 rounded-xl border border-amber-300/20 bg-black/25 px-3 py-3 text-[12px] leading-relaxed text-slate-300">
+          <div className="mt-3 rounded-xl border border-amber-300/20 bg-black/25 px-3 py-3 text-sm leading-copy text-slate-300">
             <p className="font-semibold text-amber-100">
               {selectedDiscoveryCandidate.displayName}
             </p>
@@ -1656,7 +1657,7 @@ export function RankingBoardClient({
         )}
 
         {isDiscoverySearchPending && (
-          <p className="mt-3 text-[11px] text-amber-100/60">
+          <p className="mt-3 text-caption text-amber-100/60">
             관측 후보를 확인하는 중입니다.
           </p>
         )}
@@ -1743,24 +1744,24 @@ export function RankingBoardClient({
           >
             <div className="w-full min-w-0 max-w-full">
               <h2
-                className={`break-words font-bold text-slate-100 [overflow-wrap:anywhere] ${
+                className={`ko-section-title break-words font-bold text-slate-100 [overflow-wrap:break-word] ${
                   isHomeFlagship
-                    ? "font-mono text-xl tracking-[-0.03em] sm:text-2xl"
-                    : "text-base tracking-tight sm:text-lg"
+                    ? "font-mono tabular-nums text-xl tracking-heading sm:text-2xl"
+                    : "text-section tracking-heading"
                 }`}
               >
                 {title}
               </h2>
 
               {isWeeklyMovementFullBoard && (
-                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">
+                <p className="mt-1 text-caption font-semibold uppercase tracking-label text-cyan-300">
                   Authoritative weekly universe-rank movement
                 </p>
               )}
 
               {!isWeeklyMovementFullBoard && (
                 <p
-                  className={`mt-1 max-w-xl break-words text-[11px] leading-5 text-slate-500 [overflow-wrap:anywhere] ${
+                  className={`ko-copy mt-1 max-w-copy break-words text-sm leading-copy text-slate-500 [overflow-wrap:break-word] ${
                     isHomeFlagship ? "hidden sm:block" : ""
                   }`}
                 >
@@ -1774,7 +1775,7 @@ export function RankingBoardClient({
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               {isWeeklyMovementFullBoard && formattedLatestBoardDate && (
                 <span
-                  className="w-fit rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-300"
+                  className="w-fit rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-caption font-semibold uppercase tracking-label text-slate-300"
                   data-testid="ranking-freshness"
                 >
                   Updated {formattedLatestBoardDate}
@@ -1782,14 +1783,14 @@ export function RankingBoardClient({
               )}
               {isHomeFlagship && formattedLatestBoardDate && (
                 <span
-                  className="w-fit rounded-full border border-slate-700 bg-slate-950/80 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-300"
+                  className="w-fit rounded-full border border-slate-700 bg-slate-950/80 px-2.5 py-1 font-mono tabular-nums text-caption font-semibold uppercase tracking-label text-slate-300"
                   data-testid="home-ranking-freshness"
                 >
                   Snapshot {formattedLatestBoardDate}
                 </span>
               )}
               {isBoardLoading && (
-                <span className="w-fit rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
+                <span className="w-fit rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-caption font-semibold uppercase tracking-label text-cyan-300">
                   보드 새로고침 중
                 </span>
               )}
@@ -1821,10 +1822,10 @@ export function RankingBoardClient({
               data-testid="ranking-movement-filters"
             >
               <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                <span className="text-caption font-semibold uppercase tracking-label text-cyan-300">
                   Weekly Rank Movement
                 </span>
-                <span className="text-[10px] text-slate-500">
+                <span className="text-caption text-slate-500">
                   Published state
                 </span>
               </div>
@@ -1869,7 +1870,7 @@ export function RankingBoardClient({
                     key={tier.key}
                     type="button"
                     onClick={() => setSelectedTierFilter(tier.key)}
-                    className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition-all ${
+                    className={`rounded-lg border px-3 py-1.5 text-caption font-semibold transition-all ${
                       isWeeklyMovementFullBoard
                         ? "min-h-11 shrink-0 whitespace-nowrap sm:min-h-0 "
                         : ""
@@ -1962,12 +1963,12 @@ export function RankingBoardClient({
             (isWeeklyMovementFullBoard && selectedMovementFilter !== "ALL") ||
             (enableTierFilters && selectedTierFilter !== "ALL")) && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="text-[10px] uppercase tracking-widest text-slate-500">
+                <span className="text-caption uppercase tracking-label text-slate-500">
                   적용 중
                 </span>
 
                 {enableTierFilters && selectedTierFilter !== "ALL" && (
-                  <div className="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-300">
+                  <div className="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-caption font-semibold text-cyan-300">
                     <span>🏷 {selectedTierFilter}</span>
                     <button
                       onClick={() => setSelectedTierFilter("ALL")}
@@ -1980,7 +1981,7 @@ export function RankingBoardClient({
 
                 {isWeeklyMovementFullBoard &&
                   selectedMovementFilter !== "ALL" && (
-                    <div className="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
+                    <div className="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-caption font-semibold text-cyan-200">
                       <span>Weekly {selectedMovementFilter}</span>
                       <button
                         type="button"
@@ -1994,7 +1995,7 @@ export function RankingBoardClient({
                   )}
 
                 {districtQueryLocal && (
-                  <div className="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-400">
+                  <div className="flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-caption font-semibold text-cyan-400">
                     <span>📍 {activeDistrictLabel}</span>
                     <button
                       onClick={clearDistrict}
@@ -2006,7 +2007,7 @@ export function RankingBoardClient({
                 )}
 
                 {searchQuery && (
-                  <div className="flex items-center gap-1 rounded-full border border-slate-600 bg-slate-700 px-2.5 py-1 text-[11px] font-semibold text-slate-200">
+                  <div className="flex items-center gap-1 rounded-full border border-slate-600 bg-slate-700 px-2.5 py-1 text-caption font-semibold text-slate-200">
                     <span>🔍 {searchQuery}</span>
                     <button
                       onClick={() => setSearchQuery("")}
@@ -2020,7 +2021,7 @@ export function RankingBoardClient({
             )}
 
           <div
-            className={`mt-1 justify-between text-[11px] text-slate-500 ${
+            className={`mt-1 justify-between text-caption text-slate-500 ${
               isHomeFlagship ? "hidden sm:flex" : "flex"
             }`}
           >
@@ -2063,7 +2064,7 @@ export function RankingBoardClient({
                     }
                     currentSnapshotDate={boardDeliveryMeta.latestBoardDate}
                     isBookmarked={bookmarks.includes(item.complexId)}
-                    onToggleBookmark={toggleBookmark}
+                    onToggleBookmark={(id) => toggleBookmark(id, { name: item.name, locationLabel: [item.sigunguName, item.legalDongName].filter(Boolean).join(" ") })}
                     isCompared={comparisonItems.some(
                       (p) => p.complexId === item.complexId,
                     )}
@@ -2084,7 +2085,7 @@ export function RankingBoardClient({
               </div>
             ) : hasDiscoveryCandidates ? (
               <div className="flex flex-col gap-3 pb-2">
-                <div className="rounded-2xl border border-slate-800 bg-black/20 px-4 py-4 text-sm leading-relaxed text-slate-400">
+                <div className="rounded-2xl border border-slate-800 bg-black/20 px-4 py-4 text-sm leading-copy text-slate-400">
                   <p className="font-semibold text-slate-200">
                     현재 공개 랭킹 보드에는 일치하는 행이 없습니다.
                   </p>

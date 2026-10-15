@@ -1,0 +1,169 @@
+@font-face {
+  font-family: "Pretendard Variable";
+  src: url("/fonts/pretendard/PretendardVariable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+}
+
+/* Shared by the home, ranking board and their portal dialogs. */
+:root {
+  --ko-font-ui: "Pretendard Variable", -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  --ko-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Pretendard Variable", monospace;
+  --ko-size-label: 0.8125rem;
+  --ko-size-caption: 0.8125rem;
+  --ko-size-control: 0.9375rem;
+  --ko-size-body: clamp(1rem, 0.96rem + 0.12vw, 1.0625rem);
+  --ko-size-input: 1.125rem;
+  --ko-size-section: clamp(1.5rem, 1.35rem + 0.3vw, 1.75rem);
+  --ko-size-heading: clamp(1.5rem, 1.25rem + 0.9vw, 2.65rem);
+  --ko-size-metric: clamp(1.875rem, 1.6rem + 0.5vw, 2.25rem);
+  --ko-size-display: clamp(2.25rem, 1.8rem + 1vw, 3rem);
+  --ko-size-hero: clamp(2.8rem, 9vw, 10rem);
+  --ko-leading-body: 1.6;
+  --ko-leading-heading: 1.3;
+  --ko-leading-hero: 0.95;
+  --ko-tracking-label: 0.05em;
+  --ko-tracking-heading: -0.025em;
+  --ko-tracking-number: -0.05em;
+  --ko-tracking-hero: -0.07em;
+  --ko-space-unit: 0.25rem;
+  --ko-space-1: 0.5rem;
+  --ko-space-2: 1rem;
+  --ko-space-3: 1.5rem;
+  --ko-space-4: 2rem;
+  --ko-space-5: 2.5rem;
+  --ko-space-6: 3rem;
+  --ko-row-padding: 0.9375rem;
+  --ko-hit-target: 2.5rem;
+  --ko-content-width: 92.5rem;
+  --ko-board-width: 100rem;
+  --ko-copy-width: 60ch;
+  --ko-bg: #05070b;
+  --ko-surface: #0b1118;
+  --ko-ink: #eaf2ff;
+  --ko-muted: #b8c6d7;
+  --ko-accent: #67e8f9;
+  --ko-accent-soft: #12333e;
+  --ko-up: #6ee7b7;
+  --ko-up-soft: #12352a;
+  --ko-down: #fda4af;
+  --ko-down-soft: #3f1726;
+  --ko-warning: #fcd34d;
+  --ko-purple: #f0abfc;
+  --ko-selected-neutral: #273649;
+  --ko-border: #334155;
+  --ko-focus: #67e8f9;
+  --ko-backdrop: rgb(2 6 23 / 70%);
+  --ko-map-surface: #12333e;
+  --ko-map-line: #718096;
+  --ko-map-height: clamp(17.5rem, 22vw, 21rem);
+  --ko-map-max-width: 18rem;
+  --ko-chart-grid: #334155;
+  --ko-shadow: 0 8px 24px rgb(11 31 53 / 6%);
+}
+
+:root[data-theme="day"] {
+  --ko-bg: #f7f5ef;
+  --ko-surface: #fbfaf6;
+  --ko-ink: #0b1f35;
+  --ko-muted: #405068;
+  --ko-accent: #09564f;
+  --ko-accent-soft: #e2eeea;
+  --ko-up: #034e38;
+  --ko-up-soft: #e8f0e9;
+  --ko-down: #8d1030;
+  --ko-down-soft: #f7e9ec;
+  --ko-warning: #7c420c;
+  --ko-purple: #741780;
+  --ko-selected-neutral: #e8e5dc;
+  --ko-border: #c7cdd1;
+  --ko-focus: #0b625c;
+  --ko-backdrop: rgb(11 31 53 / 32%);
+  --ko-chart-grid: #c7cdd1;
+  --ko-map-surface: #edf5f3;
+}
+
+@theme inline {
+  --font-sans: var(--ko-font-ui);
+  --font-mono: var(--ko-font-mono);
+  --spacing: var(--ko-space-unit);
+  --color-ink: var(--ko-ink);
+  --color-muted: var(--ko-muted);
+  --color-accent: var(--ko-accent);
+  --color-surface: var(--ko-surface);
+  --color-up: var(--ko-up);
+  --color-down: var(--ko-down);
+  --text-label: var(--ko-size-label);
+  --text-label--line-height: var(--ko-leading-body);
+  --text-caption: var(--ko-size-caption);
+  --text-caption--line-height: var(--ko-leading-body);
+  --text-control: var(--ko-size-control);
+  --text-control--line-height: var(--ko-leading-body);
+  --text-xs: var(--ko-size-caption);
+  --text-xs--line-height: var(--ko-leading-body);
+  --text-sm: var(--ko-size-body);
+  --text-sm--line-height: var(--ko-leading-body);
+  --text-base: var(--ko-size-body);
+  --text-base--line-height: var(--ko-leading-body);
+  --text-lg: var(--ko-size-input);
+  --text-lg--line-height: var(--ko-leading-body);
+  --text-xl: var(--ko-size-section);
+  --text-xl--line-height: var(--ko-leading-heading);
+  --text-2xl: var(--ko-size-section);
+  --text-2xl--line-height: var(--ko-leading-heading);
+  --text-3xl: var(--ko-size-metric);
+  --text-3xl--line-height: var(--ko-leading-heading);
+  --text-4xl: var(--ko-size-display);
+  --text-4xl--line-height: var(--ko-leading-heading);
+  --text-5xl: var(--ko-size-display);
+  --text-5xl--line-height: var(--ko-leading-heading);
+  --text-section: var(--ko-size-section);
+  --text-section--line-height: var(--ko-leading-heading);
+  --text-hero: var(--ko-size-hero);
+  --text-hero--line-height: var(--ko-leading-hero);
+  --tracking-label: var(--ko-tracking-label);
+  --tracking-heading: var(--ko-tracking-heading);
+  --tracking-number: var(--ko-tracking-number);
+  --tracking-hero: var(--ko-tracking-hero);
+  --leading-copy: var(--ko-leading-body);
+  --leading-heading: var(--ko-leading-heading);
+  --leading-hero: var(--ko-leading-hero);
+  --container-home: var(--ko-content-width);
+  --container-board: var(--ko-board-width);
+  --container-copy: var(--ko-copy-width);
+}
+
+@layer base {
+  body {
+    font-family: var(--ko-font-ui);
+    font-size: var(--ko-size-body);
+    line-height: var(--ko-leading-body);
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+
+  :is(h1, h2, h3, h4, h5, h6) {
+    line-height: var(--ko-leading-heading);
+  }
+
+  :is(input, select, textarea) {
+    font-family: var(--ko-font-ui);
+    font-size: var(--ko-size-input);
+  }
+
+  :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--ko-focus);
+    outline-offset: 3px;
+  }
+}
+
+@media (min-width: 2560px) {
+  :root {
+    font-size: 18px;
+    --ko-content-width: 100rem;
+    --ko-board-width: 104rem;
+  }
+}

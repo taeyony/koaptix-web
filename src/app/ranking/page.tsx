@@ -14,6 +14,7 @@ import type { RankingItem } from "../../lib/koaptix/types";
 
 import { RankingBoardClient } from "../../components/home/RankingBoardClient";
 import { LAUNCH_COPY } from "../../components/home/BetaDisclosure";
+import { ThemeToggle } from "../../components/home/ThemeToggle";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -99,24 +100,24 @@ export default async function RankingPage({
       data-has-query={initialSearchQuery ? "true" : "false"}
       data-selected-complex-id={initialComplexId ?? ""}
     >
-      <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-2 overflow-x-hidden">
+      <div className="mx-auto w-full min-w-0 max-w-board space-y-2 overflow-x-hidden">
         <section className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_rgba(0,0,0,0.4)]">
           <div className="min-w-0 max-w-full border-b border-slate-800/80 px-3 py-2.5 lg:px-4 lg:py-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="w-full min-w-0 max-w-full">
-                <p className="text-[10px] uppercase tracking-[0.24em] text-slate-400">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 max-w-full flex-1 basis-64">
+                <p className="text-caption uppercase tracking-label text-slate-400">
                   KOAPTIX RANKING BOARD
                 </p>
-                <h1 className="mt-1 break-words text-lg font-semibold tracking-tight text-white [overflow-wrap:anywhere] sm:text-xl lg:text-2xl">
+                <h1 className="ko-section-title mt-1 break-words text-section font-bold tracking-heading text-white [overflow-wrap:break-word] sm:text-xl lg:text-2xl">
                   KOAPTIX TOP1000
                 </h1>
 
                 {/* 🚨 지차장 지시 C: 헤더 설명에 현재 유니버스 배지 추가 */}
                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                  <p className="min-w-0 max-w-full break-words text-xs text-slate-300 [overflow-wrap:anywhere] sm:text-sm">
+                  <p className="min-w-0 max-w-full ko-copy break-words text-sm text-slate-300 [overflow-wrap:break-word] sm:text-sm">
                     {LAUNCH_COPY.rankingSubtitle}
                   </p>
-                  <span className="max-w-full break-words rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-slate-300 [overflow-wrap:anywhere]">
+                  <span className="max-w-full break-words rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-caption uppercase tracking-label text-slate-300 [overflow-wrap:break-word]">
                     {universeLabel}
                   </span>
                 </div>
@@ -125,7 +126,7 @@ export default async function RankingPage({
                   className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
                   data-testid="ranking-weekly-movement-hero"
                 >
-                  <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">
+                  <span className="text-caption font-bold uppercase tracking-label text-cyan-300">
                     Weekly Rank Movement
                   </span>
                   <span className="font-medium text-slate-200 sm:text-sm">
@@ -136,10 +137,11 @@ export default async function RankingPage({
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
+                <ThemeToggle />
                 {/* 🚨 지차장 지시 D: 홈으로 돌아갈 때 현재 유니버스를 유지하는 링크로 교체 */}
                 <Link
                   href={homeHref}
-                  className="shrink-0 whitespace-nowrap rounded-lg border border-slate-700 px-2.5 py-2 text-xs uppercase tracking-[0.16em] text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
+                  className="shrink-0 whitespace-nowrap rounded-lg border border-slate-700 px-2.5 py-2 text-xs uppercase tracking-label text-slate-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
                 >
                   홈으로
                 </Link>

@@ -73,7 +73,7 @@ export function BetaDisclosure({
     <aside
       className={[
         "w-full min-w-0 max-w-full overflow-hidden rounded-xl border text-left",
-        "break-words [overflow-wrap:anywhere]",
+        "break-words [overflow-wrap:break-word]",
         variantClassName[variant],
         className,
       ]
@@ -82,19 +82,19 @@ export function BetaDisclosure({
       data-testid={`beta-disclosure-${variant}`}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200">
+        <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5 text-caption font-semibold uppercase tracking-label text-cyan-200">
           {LAUNCH_COPY.softPublicBetaEn}
         </span>
-        <span className="text-[11px] font-semibold text-cyan-100">
+        <span className="text-caption font-semibold text-cyan-100">
           {LAUNCH_COPY.softPublicBetaKo}
         </span>
       </div>
 
-      <div className="mt-2 space-y-1 text-[11px] leading-5 text-current sm:text-xs">
+      <div className="ko-copy mt-2 space-y-2 text-sm leading-copy text-current">
         {messages.map((message) => (
           <p
             key={message}
-            className="min-w-0 max-w-full break-words whitespace-normal [overflow-wrap:anywhere]"
+            className="min-w-0 max-w-full break-words whitespace-normal [overflow-wrap:break-word]"
           >
             {message}
           </p>

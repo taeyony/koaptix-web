@@ -262,7 +262,7 @@ function hasMatchingClarificationChoices(
   );
 }
 
-function readCurrentSearchClarificationResult(
+export function readCurrentSearchClarificationResult(
   response: Response,
   json: SearchApiResponse,
 ): SearchResultPayload | null {
@@ -856,21 +856,21 @@ export function CommandPalette({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-[11px] font-semibold text-amber-200">
+              <span className="rounded-full border border-amber-300/40 px-2 py-0.5 text-caption font-semibold text-amber-200">
                 {candidate.copy.badge}
               </span>
-              <span className="truncate text-[24px] font-semibold leading-none text-white">
+              <span className="truncate text-section font-semibold leading-none text-white">
                 {candidate.displayName}
               </span>
             </div>
             <p className="mt-2 text-sm text-amber-100/80">
               {candidate.regionLabel}
             </p>
-            <p className="mt-3 text-sm leading-6 text-slate-300">
+            <p className="mt-3 text-sm leading-copy text-slate-300">
               {candidate.copy.message}
             </p>
           </div>
-          <div className="shrink-0 text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-200/80">
+          <div className="shrink-0 text-right text-caption font-semibold uppercase tracking-label text-amber-200/80">
             OBSERVE
           </div>
         </div>
@@ -880,7 +880,7 @@ export function CommandPalette({
             {evidenceLabels.map((label) => (
               <span
                 key={label}
-                className="rounded-full border border-amber-300/20 bg-black/20 px-2 py-1 text-[11px] text-amber-100/75"
+                className="rounded-full border border-amber-300/20 bg-black/20 px-2 py-1 text-caption text-amber-100/75"
               >
                 {label}
               </span>
@@ -893,7 +893,7 @@ export function CommandPalette({
             {candidate.warnings.map((warning) => (
               <span
                 key={warning}
-                className="rounded-full border border-slate-600 bg-slate-950/50 px-2 py-1 text-[11px] text-slate-300"
+                className="rounded-full border border-slate-600 bg-slate-950/50 px-2 py-1 text-caption text-slate-300"
               >
                 {getDiscoveryWarningLabel(warning)}
               </span>
@@ -916,10 +916,10 @@ export function CommandPalette({
     >
       <div className="min-w-0 pr-4">
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400">
+          <span className="rounded-full border border-slate-700 px-2 py-0.5 text-caption text-slate-400">
             #{item.rank_all ?? item.rank ?? "-"}
           </span>
-          <span className="truncate text-[28px] font-semibold leading-none text-white">
+          <span className="truncate text-section font-semibold leading-none text-white">
             {item.name}
           </span>
         </div>
@@ -932,7 +932,7 @@ export function CommandPalette({
       </div>
 
       <div className="shrink-0 text-right">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
+        <p className="text-caption uppercase tracking-label text-slate-500">
           MARKET CAP
         </p>
         <p className="mt-1 text-3xl font-semibold text-slate-100">
@@ -955,10 +955,10 @@ export function CommandPalette({
     >
       <div className="min-w-0 pr-4">
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-emerald-400/30 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+          <span className="rounded-full border border-emerald-400/30 px-2 py-0.5 text-caption font-semibold uppercase tracking-label text-emerald-300">
             REGION
           </span>
-          <span className="truncate text-[26px] font-semibold leading-none text-white">
+          <span className="truncate text-section font-semibold leading-none text-white">
             {result.displayLabel}
           </span>
         </div>
@@ -970,7 +970,7 @@ export function CommandPalette({
         </p>
       </div>
 
-      <div className="shrink-0 text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-300/80">
+      <div className="shrink-0 text-right text-caption font-semibold uppercase tracking-label text-emerald-300/80">
         OPEN
       </div>
     </button>
@@ -1000,7 +1000,7 @@ export function CommandPalette({
         >
           <div className="mx-auto mt-24 w-[92%] max-w-[820px] rounded-[28px] border border-cyan-500/20 bg-[#0b1118]/95 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_24px_80px_rgba(0,0,0,0.55)]">
             <div className="border-b border-slate-800/80 px-6 py-5">
-              <p className="text-[12px] uppercase tracking-[0.24em] text-cyan-300/80">
+              <p className="text-caption uppercase tracking-label text-cyan-300/80">
                 KOAPTIX 관측 검색
               </p>
 
@@ -1023,7 +1023,7 @@ export function CommandPalette({
                   onClick={handleOpenRankingSearch}
                   data-testid="command-open-ranking-search"
                   disabled={!rankingSearchHref}
-                  className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-cyan-300 transition hover:border-cyan-400/50 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-900/60 disabled:text-slate-500"
+                  className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs uppercase tracking-label text-cyan-300 transition hover:border-cyan-400/50 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-900/60 disabled:text-slate-500"
                 >
                   TOP1000
                 </button>
@@ -1031,7 +1031,7 @@ export function CommandPalette({
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="rounded-xl border border-slate-700 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-400 transition hover:border-slate-500 hover:text-white"
+                  className="rounded-xl border border-slate-700 px-3 py-2 text-xs uppercase tracking-label text-slate-400 transition hover:border-slate-500 hover:text-white"
                 >
                   닫기
                 </button>
@@ -1050,7 +1050,7 @@ export function CommandPalette({
                 !currentIsSearching &&
                 !hasRegionResolutionBlock && (
                 <div className="mb-4">
-                  <div className="mb-3 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-emerald-300/80">
+                  <div className="mb-3 flex items-center justify-between text-caption uppercase tracking-label text-emerald-300/80">
                     <span>지역 바로가기</span>
                     <span>{regionSearchResults.length} ITEMS</span>
                   </div>
@@ -1112,7 +1112,7 @@ export function CommandPalette({
                 <div className="space-y-3">
                   {visibleLocalItems.length > 0 ? (
                     <>
-                      <div className="mb-2 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-slate-500">
+                      <div className="mb-2 flex items-center justify-between text-caption uppercase tracking-label text-slate-500">
                         <span>현재 보드 미리보기</span>
                         <span>{visibleLocalItems.length} ITEMS</span>
                       </div>
@@ -1136,7 +1136,7 @@ export function CommandPalette({
 
                   {visibleLocalItems.length > 0 && (
                     <div>
-                      <div className="mb-3 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-cyan-300/80">
+                      <div className="mb-3 flex items-center justify-between text-caption uppercase tracking-label text-cyan-300/80">
                         <span>현재 유니버스 결과</span>
                         <span>{visibleLocalItems.length} ITEMS</span>
                       </div>
@@ -1148,7 +1148,7 @@ export function CommandPalette({
 
                   {visibleGlobalItems.length > 0 && (
                     <div>
-                      <div className="mb-3 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-slate-400">
+                      <div className="mb-3 flex items-center justify-between text-caption uppercase tracking-label text-slate-400">
                         <span>전국 결과</span>
                         <span>{visibleGlobalItems.length} ITEMS</span>
                       </div>
@@ -1160,7 +1160,7 @@ export function CommandPalette({
 
                   {visibleDiscoveryCandidates.length > 0 && (
                     <div>
-                      <div className="mb-3 flex items-center justify-between text-[12px] uppercase tracking-[0.18em] text-amber-200/80">
+                      <div className="mb-3 flex items-center justify-between text-caption uppercase tracking-label text-amber-200/80">
                         <span>랭킹 산정 전 후보</span>
                         <span>{visibleDiscoveryCandidates.length} ITEMS</span>
                       </div>
@@ -1169,7 +1169,7 @@ export function CommandPalette({
                       </div>
 
                       {selectedDiscoveryCandidate && (
-                        <div className="mt-3 rounded-2xl border border-amber-300/25 bg-black/30 px-4 py-4 text-sm leading-6 text-slate-300">
+                        <div className="mt-3 rounded-2xl border border-amber-300/25 bg-black/30 px-4 py-4 text-sm leading-copy text-slate-300">
                           <p className="font-semibold text-amber-100">
                             {selectedDiscoveryCandidate.displayName}
                           </p>
@@ -1179,7 +1179,7 @@ export function CommandPalette({
                           <p className="mt-3">
                             {selectedDiscoveryCandidate.copy.helperText}
                           </p>
-                          <p className="mt-3 text-[12px] text-slate-500">
+                          <p className="mt-3 text-caption text-slate-500">
                             아직 공개 랭킹 보드의 단지 상세로 열지 않습니다.
                           </p>
                         </div>
@@ -1203,7 +1203,7 @@ export function CommandPalette({
 
             <div className="border-t border-slate-800/80 px-6 py-3">
               <BetaDisclosure variant="search" />
-              <p className="mt-3 break-words text-[11px] uppercase tracking-[0.14em] text-slate-500 [overflow-wrap:anywhere] sm:text-[12px]">
+              <p className="mt-3 break-words text-caption uppercase tracking-label text-slate-500 [overflow-wrap:break-word] sm:text-caption">
                 ↑ ↓ NAVIGATE · ENTER OPEN DETAIL · ESC CLOSE · CMD/CTRL + K REOPEN
               </p>
             </div>

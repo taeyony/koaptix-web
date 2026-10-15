@@ -164,7 +164,7 @@ export function RankingCard({
       >
         <div className="grid min-w-0 grid-cols-[56px_minmax(0,1fr)_auto] gap-x-3 gap-y-2 lg:grid-cols-[72px_minmax(220px,1fr)_minmax(390px,1.25fr)_auto] lg:items-center">
           <div className="col-start-1 row-span-3 row-start-1 flex min-h-14 items-start justify-center border-r border-slate-800/80 pr-3 lg:row-span-2 lg:items-center">
-            <span className="font-mono text-xl font-bold tabular-nums text-white transition-colors group-hover:text-cyan-300 sm:text-2xl">
+            <span className="font-mono tabular-nums text-xl font-bold tabular-nums text-white transition-colors group-hover:text-cyan-300 sm:text-2xl">
               #{item.rank}
             </span>
           </div>
@@ -174,12 +174,13 @@ export function RankingCard({
               {onToggleBookmark && (
                 <button
                   type="button"
-                  aria-label={isBookmarked ? "Remove bookmark" : "Add bookmark"}
+                  aria-label={`${item.name} ${isBookmarked ? "관심목록에서 제거" : "관심목록에 추가"}`}
+                  aria-pressed={isBookmarked}
                   onClick={(event) => {
                     event.stopPropagation();
                     onToggleBookmark(item.complexId);
                   }}
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sm transition-all hover:scale-105 ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center ko-icon-button rounded-md text-lg transition-all hover:scale-105 ${
                     isBookmarked
                       ? "text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.5)]"
                       : "text-slate-600 hover:text-yellow-300"
@@ -188,7 +189,7 @@ export function RankingCard({
                   {isBookmarked ? "★" : "☆"}
                 </button>
               )}
-              <h3 className="min-w-0 line-clamp-2 break-words text-sm font-bold text-slate-100 transition-colors [overflow-wrap:anywhere] group-hover:text-white sm:line-clamp-1 sm:text-base">
+              <h3 className="min-w-0 line-clamp-2 break-words text-sm font-semibold text-slate-100 transition-colors [overflow-wrap:break-word] group-hover:text-white sm:line-clamp-1 sm:text-base">
                 {item.name}
               </h3>
             </div>
@@ -198,12 +199,14 @@ export function RankingCard({
             <button
               type="button"
               onClick={onCompare}
-              className={`col-start-3 row-start-1 flex h-8 min-w-9 items-center justify-center rounded-lg border px-2 text-[10px] font-bold transition-all lg:col-start-4 ${
+              className={`col-start-3 row-start-1 flex h-10 min-w-10 items-center justify-center rounded-lg border px-2 text-caption font-bold transition-all lg:col-start-4 ${
                 isCompared
                   ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-300"
                   : "border-slate-800 text-slate-500 hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-cyan-300"
               }`}
               title="비교함에 담기"
+              aria-label={`${item.name} 비교 선택`}
+              aria-pressed={isCompared}
             >
               VS
             </button>
@@ -211,7 +214,7 @@ export function RankingCard({
 
           <div className="col-span-2 col-start-2 row-start-2 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:col-span-1 lg:col-start-3 lg:row-start-1">
             <div className="rounded-lg border border-slate-800 bg-black/20 px-3 py-2">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              <p className="text-caption font-semibold uppercase tracking-label text-slate-500">
                 Estimated market cap
               </p>
               <p className="mt-1 text-sm font-semibold tabular-nums text-slate-100 sm:text-base">
@@ -238,10 +241,10 @@ export function RankingCard({
               className={`rounded-lg border px-3 py-2 ${movementTone}`}
               data-testid="ranking-weekly-rank-movement"
             >
-              <p className="text-[9px] font-semibold uppercase tracking-[0.16em] opacity-70">
+              <p className="text-caption font-semibold uppercase tracking-label opacity-70">
                 Weekly rank movement
               </p>
-              <p className="mt-1 truncate text-[11px] font-medium tabular-nums opacity-80 sm:text-xs">
+              <p className="mt-1 truncate text-caption font-medium tabular-nums opacity-80 sm:text-xs">
                 {movementContext}
               </p>
               <p className="mt-1 text-sm font-extrabold tabular-nums sm:text-base">
@@ -250,14 +253,14 @@ export function RankingCard({
             </div>
           </div>
 
-          <p className="col-span-2 col-start-2 row-start-3 truncate text-[11px] text-slate-500 sm:text-xs lg:col-span-2 lg:col-start-2 lg:row-start-2">
+          <p className="col-span-2 col-start-2 row-start-3 break-words text-sm text-slate-500 lg:col-span-2 lg:col-start-2 lg:row-start-2">
             {locationText}
           </p>
         </div>
 
         {item.recoveryRate52w != null && (
           <div className="mt-3 flex items-center gap-2 border-t border-slate-800/60 pt-2 opacity-60 transition-opacity group-hover:opacity-90">
-            <span className="text-[9px] uppercase tracking-wider text-slate-500">
+            <span className="text-caption uppercase tracking-label text-slate-500">
               52W Rec
             </span>
             <div className="h-0.5 flex-1 overflow-hidden rounded-full bg-slate-800">
@@ -268,7 +271,7 @@ export function RankingCard({
                 }}
               />
             </div>
-            <span className="text-[9px] font-medium text-slate-400">
+            <span className="text-caption font-medium text-slate-400">
               {item.recoveryRate52w.toFixed(1)}%
             </span>
           </div>
@@ -287,7 +290,7 @@ export function RankingCard({
     >
       <div className="flex items-center gap-3">
         <div className="flex w-8 shrink-0 justify-center">
-          <span className="font-mono text-lg font-bold text-slate-400 transition-colors group-hover:text-cyan-400 sm:text-xl">
+          <span className="font-mono tabular-nums text-lg font-bold text-slate-400 transition-colors group-hover:text-cyan-400 sm:text-xl">
             {item.rank}
           </span>
         </div>
@@ -296,11 +299,14 @@ export function RankingCard({
           <div className="flex items-center gap-2">
             {onToggleBookmark && (
               <button
+                type="button"
+                aria-label={`${item.name} ${isBookmarked ? "관심목록에서 제거" : "관심목록에 추가"}`}
+                aria-pressed={isBookmarked}
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleBookmark(item.complexId);
                 }}
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-sm transition-all hover:scale-110 ${
+                className={`flex h-10 w-10 shrink-0 items-center justify-center ko-icon-button rounded-md text-lg transition-all hover:scale-110 ${
                   isBookmarked
                     ? "text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.5)]"
                     : "text-slate-600 hover:text-yellow-400/50"
@@ -309,17 +315,17 @@ export function RankingCard({
                 {isBookmarked ? "★" : "☆"}
               </button>
             )}
-            <h3 className="truncate text-sm font-bold text-slate-100 transition-colors group-hover:text-white sm:text-base">
+            <h3 className="truncate text-sm font-semibold text-slate-100 transition-colors group-hover:text-white sm:text-base">
               {item.name}
             </h3>
           </div>
 
-          <p className="truncate pl-8 text-[11px] text-slate-400 sm:text-xs">
+          <p className="break-words pl-8 text-sm text-slate-400">
             {locationText}
           </p>
 
           {weeklyHint && (
-            <p className="truncate pl-8 pt-1 text-[10px] text-slate-500 sm:text-[11px]">
+            <p className="truncate pl-8 pt-1 text-caption text-slate-500 sm:text-caption">
               {weeklyHint}
             </p>
           )}
@@ -329,7 +335,7 @@ export function RankingCard({
           <span className="text-sm font-semibold tabular-nums text-slate-200 transition-colors group-hover:text-white sm:text-base">
             {formatMarketCapKrw(item.marketCapKrw)}
           </span>
-          <span className={`mt-0.5 text-[11px] font-bold sm:text-xs ${momentumColor}`}>
+          <span className={`mt-0.5 text-caption font-bold sm:text-xs ${momentumColor}`}>
             {momentumText}
           </span>
         </div>
@@ -338,12 +344,14 @@ export function RankingCard({
           <div className="ml-1 shrink-0 border-l border-white/5 pl-3 transition-colors group-hover:border-white/10">
             <button
               onClick={onCompare}
-              className={`flex h-8 min-w-[32px] items-center justify-center rounded-lg border px-2 text-[10px] font-bold transition-all ${
+              className={`flex h-10 min-w-10 items-center justify-center rounded-lg border px-2 text-caption font-bold transition-all ${
                 isCompared
                   ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.2)]"
                   : "border-transparent bg-transparent text-slate-500 hover:border-cyan-500/30 hover:bg-cyan-500/10 hover:text-cyan-400 group-hover:border-cyan-500/30 group-hover:bg-cyan-500/10 group-hover:text-cyan-400"
               }`}
               title="비교함에 담기"
+              aria-label={`${item.name} 비교 선택`}
+              aria-pressed={isCompared}
             >
               VS
             </button>
@@ -353,14 +361,14 @@ export function RankingCard({
 
       {item.recoveryRate52w != null && (
         <div className="mt-3 flex items-center gap-2 px-1 opacity-70 transition-opacity group-hover:opacity-100">
-          <span className="text-[9px] uppercase tracking-wider text-slate-500">52W Rec</span>
+          <span className="text-caption uppercase tracking-label text-slate-500">52W Rec</span>
           <div className="h-0.5 flex-1 overflow-hidden rounded-full bg-slate-800">
             <div
               className="h-full bg-emerald-500/60 transition-all"
               style={{ width: `${Math.min(100, Math.max(0, item.recoveryRate52w))}%` }}
             />
           </div>
-          <span className="text-[9px] font-medium text-slate-400">
+          <span className="text-caption font-medium text-slate-400">
             {item.recoveryRate52w.toFixed(1)}%
           </span>
         </div>

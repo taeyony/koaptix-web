@@ -14,13 +14,20 @@ const MODES: Array<{ value: ThemeMode; label: string }> = [
 function readStoredTheme(): ThemeMode {
   if (typeof window === "undefined") return "night";
 
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  return stored === "day" || stored === "night" ? stored : "night";
+  try {
+    return window.localStorage.getItem(STORAGE_KEY) === "day" ? "day" : "night";
+  } catch {
+    return "night";
+  }
 }
 
 function applyTheme(theme: ThemeMode) {
   document.documentElement.dataset.theme = theme;
-  window.localStorage.setItem(STORAGE_KEY, theme);
+  try {
+    window.localStorage.setItem(STORAGE_KEY, theme);
+  } catch {
+    // The current page can still switch themes when storage is unavailable.
+  }
 }
 
 export function ThemeToggle() {

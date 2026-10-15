@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "latest",
+    "@svg-maps/south-korea": "^2.0.0",
     "@tailwindcss/postcss": "^4.2.2",
     "next": "latest",
     "react": "latest",
