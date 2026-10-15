@@ -10,6 +10,14 @@ import type {
 import type { RegionAliasApiMetadata } from "../../../lib/koaptix/regionAliasV1.types";
 import { readCurrentSearchClarificationResult } from "../CommandPalette";
 import { DISCOVERY_SEARCH_REQUEST_TIMEOUT_MS } from "../../../lib/koaptix/discoverySearch";
+import { formatKrwCompact } from "../../../lib/formatters";
+import { getUniverseLabel } from "../../../lib/koaptix/universes";
+
+type HomeV2SearchProps = {
+  universeCode: string;
+  presentation?: "default" | "landing";
+  examples?: { name: string; complexId: string }[];
+};
 
 type SearchPayload = RegionAliasApiMetadata & {
   ok?: boolean;
@@ -39,8 +47,14 @@ function rankingHref(item: RankingItem): string {
   return `/ranking?${params.toString()}`;
 }
 
-export function HomeV2Search({ universeCode }: { universeCode: string }) {
+export function HomeV2Search({
+  universeCode,
+  presentation = "default",
+  examples = [],
+}: HomeV2SearchProps) {
+  const isLanding = presentation === "landing";
   const searchRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [state, setState] = useState<SearchState>(INITIAL_STATE);
   const [popupLayout, setPopupLayout] = useState({ above: false, maxHeight: 384 });
@@ -173,13 +187,14 @@ export function HomeV2Search({ universeCode }: { universeCode: string }) {
   }, [showResults]);
 
   return (
-    <div ref={searchRef} className="relative mt-6 max-w-2xl">
+    <div ref={searchRef} data-presentation={isLanding ? "landing" : undefined} className="relative mt-6 max-w-2xl">
       <label htmlFor="home-v2-search" className="mb-2 block text-control font-semibold text-ink">
         우리 단지 찾기
       </label>
       <form action="/ranking" className="flex items-center gap-2 rounded-xl border border-[var(--ko-border)] bg-surface px-4 py-2 focus-within:border-accent focus-within:ring-1 focus-within:ring-[var(--ko-focus)]">
         <input type="hidden" name="universe" value={universeCode} />
         <input
+          ref={inputRef}
           id="home-v2-search"
           name="q"
           value={query}
@@ -206,6 +221,25 @@ export function HomeV2Search({ universeCode }: { universeCode: string }) {
       <p className="mt-2 text-caption leading-copy text-muted">
         2자 이상 · 공개 랭킹과 관측 준비 후보를 구분해 표시합니다.
       </p>
+      {isLanding && examples.length > 0 ? (
+        <div data-search-examples role="group" aria-label="공개 단지 검색 예시" className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-caption text-muted">예시</span>
+          {examples.map((example) => (
+            <button
+              key={example.complexId}
+              type="button"
+              onClick={() => {
+                setQuery(example.name);
+                setState(INITIAL_STATE);
+                inputRef.current?.focus();
+              }}
+              className="rounded-full border border-[var(--ko-border)] px-3 py-2 text-control font-semibold text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ko-focus)]"
+            >
+              {example.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {showResults ? (
         <div
@@ -232,6 +266,7 @@ export function HomeV2Search({ universeCode }: { universeCode: string }) {
                 <Link
                   key={item.complexId}
                   href={rankingHref(item)}
+                  data-result-kind={isLanding ? "ranked" : undefined}
                   className="flex items-center justify-between gap-4 border-b border-[var(--ko-border)] py-3 last:border-b-0 hover:text-accent"
                 >
                   <span className="min-w-0">
@@ -242,9 +277,17 @@ export function HomeV2Search({ universeCode }: { universeCode: string }) {
                       {item.locationLabel || "지역 확인 중"}
                     </span>
                   </span>
-                  <span className="shrink-0 font-mono tabular-nums text-xs text-muted">
-                    #{item.rank}
-                  </span>
+                  {isLanding ? (
+                    <span data-search-metrics className="shrink-0 text-right tabular-nums">
+                      <span className="block text-caption text-muted">추정 시총</span>
+                      <strong className="block text-lg font-bold text-ink">{formatKrwCompact(item.marketCapKrw)}</strong>
+                      <span className="block text-control font-semibold text-accent">{getUniverseLabel(item.universeCode || "KOREA_ALL")} · {item.rank.toLocaleString("ko-KR")}위</span>
+                    </span>
+                  ) : (
+                    <span className="shrink-0 font-mono tabular-nums text-xs text-muted">
+                      #{item.rank}
+                    </span>
+                  )}
                 </Link>
               ))}
               {clarificationChoices.length ? <p className="ko-copy py-2 text-sm text-muted">{state.message}</p> : null}
@@ -254,6 +297,7 @@ export function HomeV2Search({ universeCode }: { universeCode: string }) {
               {discoveryItems.map((item) => (
                 <div
                   key={item.discoveryId}
+                  data-result-kind={isLanding ? "discovery" : undefined}
                   className="flex items-center justify-between gap-4 border-b border-dashed border-[var(--ko-border)] py-3 last:border-b-0"
                 >
                   <span className="min-w-0">
@@ -270,8 +314,10 @@ export function HomeV2Search({ universeCode }: { universeCode: string }) {
                 </div>
               ))}
               {!rankedItems.length && !discoveryItems.length && !clarificationChoices.length ? (
-                <p className="py-4 text-xs text-muted">
-                  {state.message || "일치하는 공개 결과가 없습니다."}
+                <p data-search-empty={isLanding ? true : undefined} className="py-4 text-xs text-muted">
+                  {state.message || (isLanding
+                    ? "일치하는 공개 결과를 아직 찾지 못했어요. 단지명과 지역 이름을 함께 입력해 보세요."
+                    : "일치하는 공개 결과가 없습니다.")}
                 </p>
               ) : null}
               <Link href={fullSearchHref} className="ko-text-link mt-3 block text-sm font-semibold text-accent">전체 랭킹에서 검색 이어보기 ↗</Link>

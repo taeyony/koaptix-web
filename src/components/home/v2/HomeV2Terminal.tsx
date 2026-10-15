@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 
 import type { HomeIndexChartPayload } from "../../../lib/koaptix/queries";
 import { LAUNCH_COPY } from "../BetaDisclosure";
@@ -75,6 +76,13 @@ export function HomeV2Terminal({
               </div>
             </div>
             <p className="mt-3 ko-copy max-w-copy text-sm leading-copy text-muted">단지의 공표 순위와 주간 순위 변화를 확인하세요.</p>
+            <Link href="/play" prefetch={false} data-testid="home-play-entry" className="mt-5 flex max-w-2xl flex-col justify-between gap-3 rounded-2xl border border-accent bg-[var(--ko-accent-soft)] p-4 transition hover:border-[var(--ko-ink)] sm:flex-row sm:items-center">
+              <span>
+                <strong className="block text-xl font-bold leading-heading text-ink">우리 아파트, 전국 몇 등?</strong>
+                <span className="mt-1 block text-sm leading-copy text-muted">전국 TOP 5부터 우리 단지 검색까지</span>
+              </span>
+              <span className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl bg-[var(--ko-accent)] px-5 py-2 text-control font-bold text-[var(--ko-bg)] sm:shrink-0 sm:self-auto">지금 확인하기 <span aria-hidden="true">↗</span></span>
+            </Link>
             <HomeV2Search key={universeCode} universeCode={universeCode} />
             <div className="mt-6 flex flex-wrap items-baseline gap-x-5 gap-y-2">
               <p className="text-caption font-semibold text-muted">전국 별도 집계 참고 합계</p>

@@ -27,6 +27,7 @@ export function HomeV2Navigation({ universeCode }: { universeCode: string }) {
       <div className="mx-auto flex max-w-home flex-wrap items-center gap-x-5 gap-y-2 py-4">
         <Link href="/" className="shrink-0 text-control font-bold tracking-label text-ink">KOAPTIX</Link>
         <div className="order-last flex min-w-0 flex-1 basis-full items-center gap-5 overflow-x-auto text-control font-semibold md:order-none md:basis-auto">
+          <Link href="/play" prefetch={false} className="shrink-0 rounded-lg bg-[var(--ko-accent-soft)] px-3 py-2 font-bold text-accent hover:underline">우리 아파트 몇 등? ↗</Link>
           <Link href={`/ranking?universe=${encodeURIComponent(universeCode)}`} className="shrink-0 py-1 text-muted hover:text-accent">랭킹</Link>
           {sections.map(({ id, label }) => (
             <a key={id} href={`#${id}`} aria-current={active === id ? "location" : undefined}

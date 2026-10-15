@@ -9,7 +9,7 @@ export function ComplexShareRedirect({
   complexId: string;
 }) {
   const router = useRouter();
-  const targetUrl = `/?complexId=${encodeURIComponent(complexId)}`;
+  const targetUrl = `/ranking?universe=KOREA_ALL&complexId=${encodeURIComponent(complexId)}`;
 
   useEffect(() => {
     router.replace(targetUrl);
@@ -25,7 +25,7 @@ export function ComplexShareRedirect({
           단지 보드로 이동 중
         </h1>
         <p className="mt-3 text-sm leading-6 text-white/55">
-          잠시 후 메인 보드 위에서 해당 단지 바텀 시트가 자동으로 열린다.
+          잠시 후 랭킹 화면에서 해당 단지의 상세 정보가 열립니다.
         </p>
         <a
           href={targetUrl}
