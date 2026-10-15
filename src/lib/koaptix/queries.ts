@@ -565,6 +565,7 @@ export async function getLatestRankBoard(
   universeCode: KnownUniverseCode | string = DEFAULT_UNIVERSE_CODE,
   limit: number = HOME_TACTICAL_RANK_BOARD_LIMIT,
   selection?: { complexId: string },
+  options?: { timeoutMs?: number },
 ): Promise<DbLatestRankBoardWeeklyRow[]> {
   if (selection && !/^[1-9]\d*$/.test(selection.complexId)) throw new Error("Invalid public complex ID");
   const supabase = createServerSupabase();
@@ -583,10 +584,13 @@ export async function getLatestRankBoard(
     safeUniverseCode,
   );
 
-  const latestBoardAttemptTimeoutMs =
+  const defaultAttemptTimeoutMs =
     safeUniverseCode === DEFAULT_UNIVERSE_CODE
       ? LATEST_RANK_BOARD_TIMEOUT_MS_KOREA
       : LATEST_RANK_BOARD_TIMEOUT_MS_REGIONAL;
+  const latestBoardAttemptTimeoutMs = typeof options?.timeoutMs === "number" && Number.isFinite(options.timeoutMs)
+    ? Math.max(defaultAttemptTimeoutMs, Math.min(4000, options.timeoutMs))
+    : defaultAttemptTimeoutMs;
   let lastError: { code?: string | null; message?: string | null } | null =
     null;
 

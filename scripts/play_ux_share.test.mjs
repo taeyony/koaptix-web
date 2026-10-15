@@ -29,6 +29,7 @@ const fixture = {
 
 function publicReader(row = fixture) {
   const calls = [];
+  const timeouts = [];
   const builder = { then: resolve => Promise.resolve({ data: [row], error: null }).then(resolve) };
   for (const method of ["select", "eq", "order", "limit", "gte", "lte"]) builder[method] = (...args) => { calls.push([method, ...args]); return builder; };
   const currentness = moduleFrom(read("src/lib/koaptix/currentness.ts"));
@@ -41,12 +42,24 @@ function publicReader(row = fixture) {
     resolveServiceUniverseCode: code => code, buildRankBoardRetryLimits: limit => [limit],
     LATEST_RANK_BOARD_TIMEOUT_MS_KOREA: 1800, LATEST_RANK_BOARD_TIMEOUT_MS_REGIONAL: 1100,
     PUBLISHED_UNIVERSE_SERVICE_VIEW: "v_koaptix_latest_board_read_model_published",
-    withLocalQueryTimeout: async query => query, normalizeComplexId: id => Number(id),
+    withLocalQueryTimeout: async (query, timeout) => { timeouts.push(timeout); return query; }, normalizeComplexId: id => Number(id),
     requireUniformUniverseServicePublication: currentness.requireUniformUniverseServicePublication,
     toNullableNumber: value => value == null ? null : Number(value),
   });
-  return { getLatestRankBoard, calls };
+  return { getLatestRankBoard, calls, timeouts };
 }
+
+test("SEO timeout is bounded without changing the existing reader defaults", async () => {
+  const ordinary = publicReader();
+  await ordinary.getLatestRankBoard("KOREA_ALL", 5);
+  assert.equal(ordinary.timeouts[0], 1800);
+  const regional = publicReader({ ...fixture, universe_code: "SGG_11710" });
+  await regional.getLatestRankBoard("SGG_11710", 1, { complexId: "5037" });
+  assert.equal(regional.timeouts[0], 1100);
+  const bounded = publicReader();
+  await bounded.getLatestRankBoard("KOREA_ALL", 1, { complexId: "5037" }, { timeoutMs: 50000 });
+  assert.equal(bounded.timeouts[0], 4000);
+});
 
 test("share data reuses the published reader, with bounded ID/rank selection and its real date", async () => {
   const { getLatestRankBoard, calls } = publicReader();

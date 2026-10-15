@@ -48,6 +48,7 @@ test("SEO uses the existing bounded public reader and rejects unavailable scopes
   assert.equal((await pages.getPublicPageComplex("5037", "KOREA_ALL")).rank_all, 2);
   assert.deepEqual(calls[0].slice(0, 2), ["KOREA_ALL", 1]);
   assert.equal(calls[0][2].complexId, "5037");
+  assert.equal(calls[0][3].timeoutMs, 4000);
   assert.equal(await pages.getPublicPageComplex("5037", "SGG_99999"), null);
   assert.equal(await pages.getPublicPageComplex("../5037", "KOREA_ALL"), null);
   assert.equal(calls.length, 1);

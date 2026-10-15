@@ -24,7 +24,7 @@ export function isPublicPageRow(row: DbLatestRankBoardWeeklyRow) {
 export const getPublicPageBoard = cache(async (code: string, limit: number) => {
   const scope = resolveUniverseRequest(code, { capability: "ranking" });
   if (scope.universeUnavailable) return [];
-  try { return (await getLatestRankBoard(scope.requestedUniverseCode, Math.min(1000, limit))).filter(isPublicPageRow); }
+  try { return (await getLatestRankBoard(scope.requestedUniverseCode, Math.min(1000, limit), undefined, { timeoutMs: 4000 })).filter(isPublicPageRow); }
   catch { return []; }
 });
 
@@ -32,7 +32,7 @@ export const getPublicPageComplex = cache(async (id: string, code: string) => {
   const scope = resolveUniverseRequest(code, { capability: "ranking" });
   if (scope.universeUnavailable || !/^[1-9]\d*$/.test(id)) return null;
   try {
-    const [row] = await getLatestRankBoard(scope.requestedUniverseCode, 1, { complexId: id });
+    const [row] = await getLatestRankBoard(scope.requestedUniverseCode, 1, { complexId: id }, { timeoutMs: 4000 });
     return row && isPublicPageRow(row) ? row : null;
   } catch { return null; }
 });
