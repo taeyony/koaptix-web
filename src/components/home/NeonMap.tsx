@@ -4,6 +4,7 @@ import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState }
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getMapGeocodeQueries, mapChangeLabel } from "../../lib/koaptix/mapPresentation";
+import { getDistrictRankingHref } from "../../lib/koaptix/districtRankingHref";
 import { Map, CustomOverlayMap, ZoomControl, useKakaoLoader } from "react-kakao-maps-sdk";
 import type { DiscoveryCandidate, RankingItem } from "../../lib/koaptix/types";
 import type {
@@ -1200,6 +1201,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
     if (!currentDistrict) return null;
     return baseMapData.find((data) => data.name === currentDistrict) ?? null;
   }, [baseMapData, currentDistrict]);
+  const districtRankingHref = currentDistrict ? getDistrictRankingHref(currentDistrict, currentUniverseCode) : null;
 
   useEffect(() => {
     if (selectedDistrictDataFromAll) {
@@ -2361,7 +2363,7 @@ export function NeonMap({ items }: { items: RankingItem[] }) {
         </details>
         {currentDistrict ? <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-cyan-500/40 p-3">
           <strong>{currentDistrict}</strong>
-          <Link className="ko-text-link" href={"/ranking?" + new URLSearchParams({ universe: currentUniverseCode, district: currentDistrict })}>이 지역 랭킹 보기 ↗</Link>
+          {districtRankingHref ? <Link className="ko-text-link" href={districtRankingHref}>이 지역 랭킹 보기 ↗</Link> : <span>이 지역의 공개 랭킹 연결을 확인하지 못했어요.</span>}
           {selectedDistrictDataFromAll?.primaryComplexId ? <Link className="ko-text-link" href={"/ranking?" + new URLSearchParams({ universe: currentUniverseCode, complexId: selectedDistrictDataFromAll.primaryComplexId })}>{selectedDistrictDataFromAll.primaryComplexName} 상세 ↗</Link> : null}
         </div> : <p className="mt-2 font-semibold text-cyan-300">원을 누르면 해당 지역의 랭킹과 대표 단지를 확인할 수 있어요.</p>}
       </div>

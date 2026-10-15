@@ -192,9 +192,11 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
   };
   const watchlistById = new Map([...nationalItems, ...items].map((item) => [item.complexId, item]));
   function toggleComparison(item: RankingItem) {
-    setComparisonItems((previous) => previous.some((row) => row.complexId === item.complexId)
-      ? previous.filter((row) => row.complexId !== item.complexId)
-      : [...previous.slice(-1), item]);
+    const next = comparisonItems.some((row) => row.complexId === item.complexId)
+      ? comparisonItems.filter((row) => row.complexId !== item.complexId)
+      : [...comparisonItems.slice(-1), item];
+    setComparisonItems(next);
+    setComparisonOpen(next.length === 2);
   }
   function detailHref(item: RankingItem) {
     return `/ranking?${new URLSearchParams({ universe: item.universeCode || universeCode, complexId: item.complexId })}`;
@@ -236,8 +238,8 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
           <UniverseSelector value={universeCode} options={universeOptions} density="compact" onChange={(code) => router.push(`/?universe=${encodeURIComponent(code)}#koaptix-500`)} />
         </div>
         {universeUnavailable ? <p className="py-6 text-sm text-muted">이 지역의 랭킹은 아직 준비 중이에요. 다른 지역도 찾아보세요.</p> : null}
-        {comparisonItems.length ? <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-muted">
-          <span>비교 선택 {comparisonItems.length}/2 · {comparisonItems.map((item) => item.name).join(" · ")}</span>
+        {comparisonItems.length ? <div className="sticky top-4 z-20 mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-accent bg-surface p-3 text-control text-ink">
+          <span role="status">비교 선택 {comparisonItems.length}/2 · {comparisonItems.map((item) => item.name).join(" · ")}{comparisonItems.length === 1 ? " · 다른 단지의 ‘비교’를 누르면 비교창이 열려요." : ""}</span>
           <button type="button" disabled={comparisonItems.length !== 2} onClick={() => setComparisonOpen(true)} className="border-b border-accent pb-1 font-semibold text-accent disabled:cursor-not-allowed disabled:opacity-40">두 단지 비교</button>
           <button type="button" onClick={() => setComparisonItems([])} className="text-muted">선택 지우기</button>
         </div> : null}
@@ -280,6 +282,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
           ) : null}
           {visibleItems.map((item) => {
             const bookmarked = bookmarks.includes(item.complexId);
+            const comparing = comparisonItems.some((row) => row.complexId === item.complexId);
             return (
               <div
                 key={item.complexId}
@@ -321,7 +324,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
                 >
                   {bookmarked ? "◆" : "◇"}
                 </button>
-                <button type="button" onClick={() => toggleComparison(item)} aria-label={`${item.name} 비교 선택`} aria-pressed={comparisonItems.some((row) => row.complexId === item.complexId)} className="ko-icon-button text-control font-semibold text-accent">비교</button>
+                <button type="button" onClick={() => toggleComparison(item)} aria-label={`${item.name} 비교 ${comparing ? "선택 취소" : "선택"}`} aria-pressed={comparing} className={`ko-icon-button text-control font-semibold ${comparing ? "border border-accent bg-[var(--ko-selected-neutral)] text-ink" : "text-accent"}`}>{comparing ? "✓" : "비교"}</button>
               </div>
             );
           })}

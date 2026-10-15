@@ -69,6 +69,9 @@ function getComplexName(item: unknown): string {
 }
 
 function getLocationText(item: unknown): string {
+  const district = readString(item, ["sigunguName", "sigungu_name"]);
+  const dong = readString(item, ["legalDongName", "legal_dong_name"]);
+  if (district || dong) return [district, dong].filter(Boolean).join(" ");
   return readString(item, ["locationLabel", "district_name"]) ?? "-";
 }
 
@@ -161,11 +164,11 @@ function buildMetricRows(leftItem: unknown, rightItem: unknown): MetricDefinitio
       compare: "higher",
     },
     {
-      label: "이번 주 시가총액 변화",
+      label: "주간 순위 변화",
       leftValue: leftMomentum,
       rightValue: rightMomentum,
-      displayLeft: formatSigned(leftMomentum),
-      displayRight: formatSigned(rightMomentum),
+      displayLeft: leftMomentum === null ? "비교 자료 없음" : `${formatSigned(leftMomentum)}계단`,
+      displayRight: rightMomentum === null ? "비교 자료 없음" : `${formatSigned(rightMomentum)}계단`,
       compare: "higher",
     },
     {

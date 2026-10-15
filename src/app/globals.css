@@ -517,6 +517,53 @@ body {
   flex-direction: column;
 }
 
+.ko-ticker-viewport {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.ko-ticker-viewport[data-stopped="true"] {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.ko-ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ko-ticker-scroll linear infinite;
+}
+
+.ko-ticker-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  flex: 0 0 auto;
+  min-width: 100vw;
+}
+
+.ko-ticker-item {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--ko-space-3);
+  min-height: var(--ko-hit-target);
+  margin-inline-end: var(--ko-space-6);
+  padding-inline-end: var(--ko-space-6);
+  border-inline-end: 1px solid var(--ko-border);
+  white-space: nowrap;
+}
+
+@keyframes ko-ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ko-ticker-track { animation: none; }
+  .ko-ticker-copy { display: none; }
+  .ko-ticker-viewport { overflow-x: auto; }
+}
+
 .ko-comparison-sheet > div:first-child {
   flex-shrink: 0;
 }

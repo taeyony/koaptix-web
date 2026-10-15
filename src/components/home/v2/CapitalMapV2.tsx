@@ -6,7 +6,8 @@ import southKoreaMap from "@svg-maps/south-korea";
 
 import { HomeV2SectionHeading } from "./HomeV2SectionHeading";
 import { getRankingUniverseRegistry, getUniverseLabel } from "../../../lib/koaptix/universes";
-import { parseDistrictIdentity, resolveSidoFromUniverseCode } from "../RankingBoardClient";
+import { getDistrictRankingHref } from "../../../lib/koaptix/districtRankingHref";
+import { resolveSidoFromUniverseCode } from "../../../lib/koaptix/districtIdentity";
 
 type MapItem = {
   name: string;
@@ -123,24 +124,7 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
     state.status === "ready" ? (state.payload.items ?? []).slice(0, 7) : [];
   const maxTotal = Math.max(1, ...regions.map((item) => item.totalMarketCap));
   function regionHref(region: MapItem): string | null {
-    const sidoLabel = selectedSido ? getUniverseLabel(selectedSido).replace(/\s+전체$/, "") : null;
-    const regionName = sidoLabel && !parseDistrictIdentity(region.name)?.sido ? `${sidoLabel} ${region.name}` : region.name;
-    const district = parseDistrictIdentity(regionName);
-    if (!district?.sido) return null;
-    const candidates = getRankingUniverseRegistry().filter((item) =>
-      item.scope === "SIGUNGU" &&
-      parseDistrictIdentity(item.label)?.sigungu === district.sigungu &&
-      resolveSidoFromUniverseCode(item.code) === district.sido,
-    );
-    if (candidates.length === 1) {
-      return `/ranking?universe=${encodeURIComponent(candidates[0].code)}`;
-    }
-    if (region.isBoardBacked && resolveSidoFromUniverseCode(universeCode) === district.sido) {
-      return `/ranking?${new URLSearchParams({ universe: universeCode, district: regionName })}`;
-    }
-    const macro = enabledUniverses.find((item) => item.scope === "MACRO" && resolveSidoFromUniverseCode(item.code) === district.sido);
-    if (macro) return `/ranking?${new URLSearchParams({ universe: macro.code, district: regionName })}`;
-    return null;
+    return getDistrictRankingHref(region.name, universeCode);
   }
 
   return (
