@@ -10,11 +10,12 @@ function row(id = 168423, rank = 176, universe = "KOREA_ALL", date = "2026-08-31
   return { ...identity, snapshot_date: date, universe_code: universe, complex_id: id, apt_name_ko: "현대힐스테이트3단지",
     rank_all: rank, market_cap_krw: 1128304999930, market_cap_trillion_krw: 1.12830499993, sigungu_name: "서구", legal_dong_name: "화정동" };
 }
-type Input = { direct?: DbLatestRankBoardRow[]; joined?: DbLatestRankBoardRow[]; names?: object[]; aliases?: object[]; error?: string };
+type Input = { direct?: DbLatestRankBoardRow[]; joined?: DbLatestRankBoardRow[]; names?: object[]; aliases?: object[]; fuzzyNames?: object[]; error?: string };
 function client(input: Input = {}) {
   const calls: Array<{ table: string; method: string; args: unknown[] }> = [];
   class Builder {
     byIds = false;
+    abbreviated = false;
     constructor(readonly table: string) {}
     call(method: string, args: unknown[]) { calls.push({ table: this.table, method, args }); return this; }
     select(...args: unknown[]) { return this.call("select", args); }
@@ -23,10 +24,10 @@ function client(input: Input = {}) {
     gte(...args: unknown[]) { return this.call("gte", args); }
     lte(...args: unknown[]) { return this.call("lte", args); }
     order(...args: unknown[]) { return this.call("order", args); }
-    ilike(...args: unknown[]) { return this.call("ilike", args); }
+    ilike(...args: unknown[]) { if (String(args[1]).slice(1, -1).includes("%")) this.abbreviated = true; return this.call("ilike", args); }
     limit(...args: unknown[]) { return this.call("limit", args); }
     then(resolve: (value: unknown) => unknown) {
-      const data = this.table === "apt_complex" ? input.names ?? [] : this.table === "complex_name_alias" ? input.aliases ?? [] : this.byIds ? input.joined ?? [] : input.direct ?? [];
+      const data = this.table === "apt_complex" ? (this.abbreviated ? input.fuzzyNames : input.names) ?? [] : this.table === "complex_name_alias" ? input.aliases ?? [] : this.byIds ? input.joined ?? [] : input.direct ?? [];
       return Promise.resolve({ data, error: input.error === this.table ? { message: "Provider detail" } : null }).then(resolve);
     }
   }
@@ -41,8 +42,38 @@ test("an existing alias finds a published rank beyond the initial 80 without cha
   assert.equal(result.length, 1);
   assert.deepEqual({ ...result[0], searchText: undefined }, { ...original, searchText: undefined });
   assert.equal(result[0].searchText, "유니버시아드힐스테이트");
-  assert.ok(calls.some(c => c.method === "ilike" && c.args[0] === "alias_name_norm" && c.args[1] === "%유니버시아드힐스테이트%"));
+  assert.ok(calls.some(c => c.method === "ilike" && c.args[0] === "alias_name_norm" && c.args[1] === "%유니버시아드%"));
+  assert.ok(calls.some(c => c.method === "ilike" && c.args[0] === "alias_name_norm" && c.args[1] === "%힐스테이트%"));
   assert.ok(calls.some(c => c.method === "in" && c.args[0] === "complex_id" && JSON.stringify(c.args[1]) === "[\"168423\"]"));
+});
+
+test("a compact omitted-middle name uses a bounded fallback without inventing an alias", async () => {
+  const source = { ...row(170167, 157, "GWANGJU_ALL", "2026-07-03"), apt_name_ko: "수완진아리채1차" };
+  const { db, calls } = client({ fuzzyNames: [{ complex_id: 170167, apt_name_ko: source.apt_name_ko }], joined: [source] });
+  const result = await loadPublishedNameMatches(db, "수완리채", ["GWANGJU_ALL"]);
+  assert.equal(result[0].apt_name_ko, "수완진아리채1차");
+  assert.equal(result[0].market_cap_krw, source.market_cap_krw);
+  assert.ok(calls.some(c => c.method === "ilike" && c.args[1] === "%수완%리채%"));
+  assert.equal(calls.filter(c => c.method === "from").length, 7);
+  const unrelated = client({ fuzzyNames: [{ complex_id: 170167, apt_name_ko: "수림완성아파트리채" }], joined: [source] });
+  assert.deepEqual(await loadPublishedNameMatches(unrelated.db, "수완리채", ["GWANGJU_ALL"]), []);
+});
+
+test("omitted middle words match all remaining words in one actual name", async () => {
+  const source = { ...row(170167, 157, "GWANGJU_ALL", "2026-07-03"), apt_name_ko: "수완진아리채1차" };
+  for (const query of ["수완 리채", "리채 수완", "수완 진아 리채"]) {
+    const { db, calls } = client({ names: [{ complex_id: 170167, apt_name_ko: source.apt_name_ko }], joined: [source] });
+    assert.equal((await loadPublishedNameMatches(db, query, ["GWANGJU_ALL"]))[0].complex_id, 170167);
+    assert.ok(calls.some(c => c.method === "ilike" && c.args[0] === "apt_name_norm" && c.args[1] === "%수완%"));
+    assert.ok(calls.some(c => c.method === "ilike" && c.args[0] === "apt_name_norm" && c.args[1] === "%리채%"));
+  }
+});
+
+test("partial words cannot match different aliases or introduce unrelated published rows", async () => {
+  const source = { ...row(), apt_name_ko: "다른아파트" };
+  const { db } = client({ aliases: [{ complex_id: 168423, alias_name: "수완아파트" }, { complex_id: 168423, alias_name: "진아리채" }], joined: [source] });
+  assert.deepEqual(await loadPublishedNameMatches(db, "수완 리채", ["KOREA_ALL"]), []);
+  await assert.rejects(loadPublishedNameMatches(client({ direct: [source] }).db, "수완 리채", ["KOREA_ALL"]), /Invalid/);
 });
 
 test("a master or alias match without a published row cannot acquire a rank or cap", async () => {

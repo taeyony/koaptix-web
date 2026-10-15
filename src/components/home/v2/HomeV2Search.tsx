@@ -12,6 +12,7 @@ import { readCurrentSearchClarificationResult } from "../CommandPalette";
 import { DISCOVERY_SEARCH_REQUEST_TIMEOUT_MS } from "../../../lib/koaptix/discoverySearch";
 import { formatKrwCompact } from "../../../lib/formatters";
 import { getUniverseLabel } from "../../../lib/koaptix/universes";
+import { SearchProgress } from "../SearchProgress";
 
 type HomeV2SearchProps = {
   universeCode: string;
@@ -201,10 +202,12 @@ export function HomeV2Search({
           onChange={(event) => {
             const nextQuery = event.target.value;
             setQuery(nextQuery);
-            setState(INITIAL_STATE);
+            setState(nextQuery.trim().length >= 2 ? { status: "loading", payload: null, message: null } : INITIAL_STATE);
           }}
           placeholder="단지명 또는 시군구를 입력하세요"
           autoComplete="off"
+          aria-controls="home-v2-search-results"
+          aria-busy={state.status === "loading"}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               setQuery("");
@@ -247,6 +250,7 @@ export function HomeV2Search({
           role="region"
           aria-label="검색 결과"
           aria-live="polite"
+          aria-busy={state.status === "loading"}
           style={{
             top: popupLayout.above ? "auto" : "calc(100% + var(--ko-space-1))",
             bottom: popupLayout.above ? "calc(100% + 8px)" : "auto",
@@ -255,7 +259,7 @@ export function HomeV2Search({
           className="absolute left-0 right-0 z-30 overflow-y-auto overscroll-contain border border-[var(--ko-border)] bg-surface p-3 shadow-[0_18px_45px_rgba(15,23,42,0.13)]"
         >
           {state.status === "loading" ? (
-            <p className="py-4 text-xs text-muted">검색 중…</p>
+            <SearchProgress />
           ) : null}
           {state.status === "error" ? (
             <p className="py-4 text-xs text-down">{state.message}</p>

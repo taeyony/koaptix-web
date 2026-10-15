@@ -1,4 +1,5 @@
 "use client";
+import { SearchProgress } from "./SearchProgress";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -1103,9 +1104,7 @@ export function CommandPalette({
                   {universeBoundaryMessage}
                 </div>
               ) : currentIsSearching ? (
-                <div className="rounded-2xl border border-slate-800 bg-black/20 px-5 py-8 text-center text-slate-400">
-                  검색 중...
-                </div>
+                <div aria-busy="true" className="rounded-2xl border border-[var(--ko-border)] bg-surface py-3"><SearchProgress /></div>
               ) : currentSearchError ? (
                 <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-5 py-8 text-center text-rose-300">
                   {currentSearchError}

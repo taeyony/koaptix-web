@@ -1,4 +1,5 @@
 "use client";
+import { SearchProgress } from "./SearchProgress";
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
@@ -584,7 +585,7 @@ export function ComplexDetailSheet({
                       className={`min-h-11 rounded-lg border border-[var(--ko-border)] px-3 py-2 text-control font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ko-accent)] ${chartSource === entry.value ? "bg-[var(--ko-accent-soft)] text-accent" : "text-muted hover:bg-[var(--ko-accent-soft)]"}`}>{entry.label}</button>
                   ))}
                 </div>
-                <p className="mt-2 text-caption text-muted">조회 시작: {KOAPTIX_OFFICIAL_BASE_DATE} · {chartLoading ? "이력을 확인하고 있습니다." : chartRange?.basis === "reference" ? "가용 거래로 다시 계산한 참고 이력입니다." : chartRange?.basis === "restored-local-review" ? "로컬 복구 검토 · 실사이트 미반영" : "실제 저장된 공개 이력만 표시합니다."}</p>
+                <p className="mt-2 text-caption text-muted">요청 범위: {KOAPTIX_OFFICIAL_BASE_DATE} 이후 · {chartLoading ? "이력을 확인하고 있습니다." : chartRange?.basis === "reference" ? "가용 거래로 다시 계산한 참고 이력입니다." : chartRange?.basis === "restored-local-review" ? "로컬 복구 검토 · 실사이트 미반영" : "실제 저장된 공개 이력만 표시합니다."}</p>
                 {chartRange?.referenceUnavailable ? <p role="status" className="mt-3 text-caption text-[var(--ko-warning)]">이 단지는 참고 이력의 검증 조건을 충족하지 않아 기존 공표 기록을 표시합니다.</p> : null}
                 {chartRange?.basis === "restored-local-review" || chartRange?.basis === "reference" ? (
                   <div role="status" className="mt-3 rounded-xl border border-[var(--ko-border)] bg-[var(--ko-accent-soft)] px-3 py-3 text-caption text-muted">
@@ -597,9 +598,9 @@ export function ComplexDetailSheet({
                 ) : null}
                 {chartRange?.availableFrom && chartRange.availableTo ? (
                   <div className="mt-3 rounded-xl border border-[var(--ko-border)] px-3 py-2 text-caption text-muted">
-                    <p>보유 이력: {chartRange.availableFrom} ~ {chartRange.availableTo}</p>
+                    <p className="font-semibold text-ink">실제 표시 가능: {chartRange.availableFrom} ~ {chartRange.availableTo}</p>
                     {chartRange.availableFrom > chartRange.requestedStartDate ? (
-                      <p className="mt-1 text-[var(--ko-warning)]">조회 시작일부터의 전체 이력이 아직 준비되지 않았습니다. 첫 이력 이전 구간은 비워 둡니다.</p>
+                      <p className="mt-1 text-[var(--ko-warning)]">{KOAPTIX_OFFICIAL_BASE_DATE}부터 첫 이력 전까지는 검증된 과거 계산값이 없어 표시하지 않습니다. 조회 기간을 바꿔도 없는 값은 채워지지 않습니다.</p>
                     ) : null}
                   </div>
                 ) : null}
@@ -608,7 +609,7 @@ export function ComplexDetailSheet({
                 {chartError ? (
                   <div role="status" className="rounded-2xl border border-[var(--ko-border)] px-4 py-4 text-sm text-down">시총 이력을 불러오지 못했습니다. 잠시 후 상세 화면을 다시 열어 주세요.</div>
                 ) : chartLoading ? (
-                  <div role="status" aria-label="시총 이력 불러오는 중" className="flex h-[260px] items-center justify-center rounded-2xl bg-[var(--ko-accent-soft)] text-sm text-muted">시총 이력을 불러오고 있습니다.</div>
+                  <div aria-busy="true" className="flex h-[260px] items-center justify-center rounded-2xl bg-[var(--ko-accent-soft)]"><SearchProgress label="시총 이력을 불러오고 있어요" /></div>
                 ) : (
                   <ComplexHistoryMiniChart key={`${chartComplexId}:${chartPeriod}:${chartSource}`} data={chartData} period={chartPeriod} requestedStartDate={chartRange?.requestedStartDate} basis={chartRange?.basis} />
                 )}

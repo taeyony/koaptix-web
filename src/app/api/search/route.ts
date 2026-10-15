@@ -36,6 +36,7 @@ import {
 } from "../../../lib/koaptix/discoverySearch";
 import { hydrateDiscoveryRegionFallbacks } from "../../../lib/koaptix/discoverySearch.server";
 import { loadPublishedNameMatches, type PublishedNameSearchRow } from "../../../lib/koaptix/publishedNameSearch.server";
+import { matchesComplexNameQuery } from "../../../lib/koaptix/nameSearch";
 import {
   buildBoundedKoreaRankAuthoritySeedPlan,
   fetchBoundedKoreaRankAuthorityRows,
@@ -1382,6 +1383,7 @@ function getSearchSourceLimit() {
 }
 
 type RegionalNameCompanionIntent = {
+  nameQuery: string;
   normalizedNameTerms: string[];
   normalizedLocationTerms: string[];
   candidateUniverseCodes: string[];
@@ -1641,6 +1643,7 @@ function scoreItemSearchMatch(item: RankingItem, q: string) {
   );
 
   if (nameScore !== null) return nameScore;
+  if (!strictRegionIntent && fields.name.some(name => matchesComplexNameQuery(name, q))) return 780;
 
   const regionScore = scoreFieldMatch(
     fields.region,
@@ -1853,6 +1856,7 @@ function buildRegionalNameCompanionIntent(
   );
 
   return {
+    nameQuery: locationTokens.length ? nameTokens.join(" ") : trimmed,
     normalizedNameTerms,
     normalizedLocationTerms: getUniqueNormalizedTerms(locationTokens),
     candidateUniverseCodes:
@@ -1969,7 +1973,8 @@ function scoreRegionalNameCompanionItem(
     item,
     intent.normalizedNameTerms,
   );
-  if (nameScore === null) return null;
+  const resolvedNameScore = nameScore ?? (getSearchTextFields(item).name.some(name => matchesComplexNameQuery(name, intent.nameQuery)) ? 880 : null);
+  if (resolvedNameScore === null) return null;
 
   const locationScore = scoreRegionalNameCompanionLocationMatch(
     item,
@@ -1978,7 +1983,7 @@ function scoreRegionalNameCompanionItem(
   );
   if (locationScore === null) return null;
 
-  return nameScore + locationScore;
+  return resolvedNameScore + locationScore;
 }
 
 function getRegionAuxiliaryFallbackSearchTerms(q: string, universeCode: string) {
@@ -2257,7 +2262,7 @@ async function loadRegionalNameCompanionItems(
   const enabledCodes = intent.candidateUniverseCodes.filter(code => !resolveUniverseRequest(code, { capability: "search" }).universeUnavailable);
   let namedRows: PublishedNameSearchRow[];
   try {
-    namedRows = preloadedRows ?? await loadPublishedNameMatches(createDiscoverySupabase(), intent.normalizedNameTerms[0], enabledCodes);
+    namedRows = preloadedRows ?? await loadPublishedNameMatches(createDiscoverySupabase(), intent.nameQuery, enabledCodes);
   } catch {
     console.info("[API /api/search] regional named publication lookup unavailable");
     return [];
