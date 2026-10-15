@@ -21,7 +21,7 @@ const ComplexHistoryMiniChart = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[220px] w-full animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]" />
+      <div className="h-[260px] w-full animate-pulse rounded-2xl bg-[var(--ko-accent-soft)]" />
     ),
   }
 );
@@ -40,6 +40,13 @@ type ToastState = {
   message: string;
   tone: "success" | "error";
 } | null;
+
+type ChartState = {
+  complexId: string;
+  points: HistoryChartPoint[];
+  loading: boolean;
+  error: string | null;
+};
 
 function formatMarketCapKrw(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "-";
@@ -121,17 +128,6 @@ function formatYear(value: number | null | undefined): string {
   return `${value}년`;
 }
 
-function formatUpdatedAt(value: string | null | undefined): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-}
-
 function Metric({
   label,
   value,
@@ -195,15 +191,17 @@ export function ComplexDetailSheet({
   const [toast, setToast] = useState<ToastState>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [chartData, setChartData] = useState<HistoryChartPoint[]>([]);
-  const [chartLoading, setChartLoading] = useState(false);
-  const [chartError, setChartError] = useState<string | null>(null);
+  const [chartState, setChartState] = useState<ChartState | null>(null);
 
   const chartAbortRef = useRef<AbortController | null>(null);
   const chartCacheRef = useRef<Record<string, HistoryChartPoint[]>>({});
   const activeComplexId =
     item?.complexId ?? detail?.complexId ?? fallbackComplexId ?? null;
   const chartComplexId = item?.complexId ?? detail?.complexId ?? null;
+  const matchingChart = chartState?.complexId === chartComplexId ? chartState : null;
+  const chartData = matchingChart?.points ?? [];
+  const chartLoading = chartComplexId != null && (matchingChart?.loading ?? true);
+  const chartError = matchingChart?.error ?? null;
 
   useEffect(() => {
     if (!open) return;
@@ -244,9 +242,7 @@ export function ComplexDetailSheet({
     const cached = chartCacheRef.current[complexId];
 
     if (cached) {
-      setChartData(cached);
-      setChartError(null);
-      setChartLoading(false);
+      setChartState({ complexId, points: cached, loading: false, error: null });
       return;
     }
 
@@ -254,9 +250,7 @@ export function ComplexDetailSheet({
     const controller = new AbortController();
     chartAbortRef.current = controller;
 
-    setChartData([]);
-    setChartError(null);
-    setChartLoading(true);
+    setChartState({ complexId, points: [], loading: true, error: null });
 
     (async () => {
       const response = await fetch(
@@ -264,21 +258,24 @@ export function ComplexDetailSheet({
         { method: "GET", signal: controller.signal, cache: "no-store" }
       );
       const payload = await response.json();
+      if (controller.signal.aborted) return;
       if (!response.ok) throw new Error(payload.error ?? "히스토리 차트를 불러오지 못했다.");
 
       const series = Array.isArray(payload.data?.series) ? payload.data.series : [];
-      const nextData = Array.isArray(series[0]?.points) ? (series[0].points as HistoryChartPoint[]) : [];
+      const matchingSeries = series.find((entry: { complexId?: string }) => String(entry.complexId) === complexId);
+      const nextData = Array.isArray(matchingSeries?.points) ? (matchingSeries.points as HistoryChartPoint[]) : [];
 
       chartCacheRef.current[complexId] = nextData;
-      setChartData(nextData);
+      setChartState({ complexId, points: nextData, loading: false, error: null });
     })()
       .catch((fetchError) => {
-        if (fetchError instanceof DOMException && fetchError.name === "AbortError") return;
-        setChartData([]);
-        setChartError(fetchError instanceof Error ? fetchError.message : "히스토리 차트를 불러오지 못했다.");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setChartLoading(false);
+        if (controller.signal.aborted) return;
+        setChartState({
+          complexId,
+          points: [],
+          loading: false,
+          error: fetchError instanceof Error ? fetchError.message : "히스토리 차트를 불러오지 못했다.",
+        });
       });
 
     return () => controller.abort();
@@ -337,9 +334,9 @@ export function ComplexDetailSheet({
             aria-labelledby="complex-detail-title"
             data-testid="complex-detail-sheet"
             data-complex-id={activeComplexId ?? ""}
-            className="absolute inset-x-0 bottom-0 z-[1001] max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
+            className="absolute inset-x-0 bottom-0 z-[1001] flex max-h-[90dvh] flex-col overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[840px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
           >
-            <div className="border-b border-white/5 bg-[#0b1118] px-4 pb-4 pt-3 md:px-5 md:pt-4">
+            <div className="shrink-0 border-b border-white/5 bg-[#0b1118] px-4 pb-4 pt-3 md:px-5 md:pt-4">
               <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/10 md:hidden" />
 
               <div className="flex items-start justify-between gap-3">
@@ -363,7 +360,7 @@ export function ComplexDetailSheet({
               </div>
             </div>
 
-            <div className="max-h-[calc(85vh-100px)] overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
+            <div className="min-h-0 overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
               {error ? (
                 <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-sm text-rose-200">
                   {error}
@@ -430,9 +427,9 @@ export function ComplexDetailSheet({
           aria-labelledby="complex-detail-title"
           data-testid="complex-detail-sheet"
           data-complex-id={activeComplexId ?? ""}
-          className="absolute inset-x-0 bottom-0 z-[1001] max-h-[85vh] overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[640px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
+          className="absolute inset-x-0 bottom-0 z-[1001] flex max-h-[90dvh] flex-col overflow-hidden rounded-t-3xl border border-cyan-400/15 bg-[#0b1118] shadow-[0_-10px_50px_rgba(0,0,0,0.45)] md:left-1/2 md:top-1/2 md:bottom-auto md:w-[840px] md:max-w-[92vw] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-3xl"
         >
-          <div className="border-b border-white/5 bg-[#0b1118] px-4 pb-4 pt-3 md:px-5 md:pt-4">
+          <div className="shrink-0 border-b border-white/5 bg-[#0b1118] px-4 pb-4 pt-3 md:px-5 md:pt-4">
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/10 md:hidden" />
 
             <div className="flex items-start justify-between gap-3">
@@ -465,7 +462,7 @@ export function ComplexDetailSheet({
                   aria-label="공유하기"
                 >
                   <ShareIcon />
-                  <span>{sharePending ? "공유 중..." : "공유하기"}</span>
+                  <span className="hidden sm:inline">{sharePending ? "공유 중..." : "공유하기"}</span>
                 </button>
 
                 <button
@@ -480,14 +477,14 @@ export function ComplexDetailSheet({
             </div>
           </div>
 
-          <div className="max-h-[calc(85vh-100px)] overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
+          <div className="min-h-0 overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
             {error ? (
               <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
                 {error}
               </div>
             ) : null}
 
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
               <Metric
                 label="현재 순위"
                 value={rank != null ? `#${formatPlainNumber(rank)}` : "-"}
@@ -521,59 +518,56 @@ export function ComplexDetailSheet({
               />
             </div>
 
-            <BetaDisclosure variant="detail" className="mt-3" />
-
-            <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">
-              <div className="border-b border-white/5 px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
+            <section aria-label="공개 시총 이력" className="mt-4 overflow-hidden rounded-2xl border border-[var(--ko-border)] bg-surface">
+              <div className="px-4 pb-3 pt-4 sm:px-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-caption uppercase tracking-label text-cyan-300/70">회복 관측 지표</p>
-                    <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">52주 최고가 회복률</h4>
-                    <p className="mt-1 text-xs text-white/45">이전 고점과 현재 추정치 사이의 거리를 보여주는 참고 지표입니다.</p>
+                    <p className="text-caption font-semibold uppercase tracking-label text-accent">CAP FLOW HISTORY</p>
+                    <h4 className="mt-1 text-xl font-bold text-ink">시가총액 변화 추이</h4>
+                    <p className="mt-2 text-sm text-muted">저장된 시총을 주간으로 표시합니다. 관측 사이의 변동은 확인할 수 없습니다.</p>
                   </div>
-                  <span className={`shrink-0 text-xs font-semibold tabular-nums ${recoveryTone(recoveryRate52w)}`}>
-                    {recoveryRate52w != null ? `${recoveryRate52w.toFixed(1)}%` : "-"}
-                  </span>
+                  <span className="shrink-0 rounded-full bg-[var(--ko-accent-soft)] px-3 py-1 text-caption font-semibold text-accent">주간 이력</span>
                 </div>
               </div>
-
-              <div className="grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:px-4">
-                <RecoveryGauge recoveryRate={recoveryRate52w} />
-                <div className="grid grid-cols-1 gap-3">
-                  <Metric label="52주 최고 시총" value={highMarketCap52w != null ? formatMarketCapKrw(highMarketCap52w) : "-"} />
-                  <Metric label="현재-고점 갭" value={formatRecoveryGap(recoveryRate52w)} tone={recoveryTone(recoveryRate52w)} />
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">
-              <div className="border-b border-white/5 px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-caption uppercase tracking-label text-cyan-300/70">CAP FLOW HISTORY</p>
-                    <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">최근 6개월 시가총액 흐름</h4>
-                    <p className="mt-1 text-xs text-white/45">주간 점 기준으로 노이즈를 걷어낸 모멘텀 라인</p>
-                  </div>
-                  <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-caption uppercase tracking-label text-white/60">
-                    Weekly View
-                  </span>
-                </div>
-              </div>
-
-              <div className="px-3 py-3 sm:px-4">
+              <div className="px-3 pb-4 sm:px-4">
                 {chartError ? (
-                  <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-4 text-sm text-rose-200">{chartError}</div>
+                  <div role="status" className="rounded-2xl border border-[var(--ko-border)] px-4 py-4 text-sm text-down">공개 시총 이력을 불러오지 못했습니다. 잠시 후 상세 화면을 다시 열어 주세요.</div>
                 ) : chartLoading ? (
-                  <div className="h-[220px] w-full animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]" />
-                ) : chartData.length > 0 ? (
-                  <ComplexHistoryMiniChart data={chartData} />
+                  <div role="status" aria-label="시총 이력 불러오는 중" className="flex h-[260px] items-center justify-center rounded-2xl bg-[var(--ko-accent-soft)] text-sm text-muted">시총 이력을 불러오고 있습니다.</div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-copy text-white/55">
-                    최근 6개월 시총 흐름을 계산할 스냅샷 데이터가 아직 충분하지 않습니다.
-                  </div>
+                  <ComplexHistoryMiniChart key={chartComplexId} data={chartData} />
                 )}
               </div>
-            </div>
+            </section>
+
+            <BetaDisclosure variant="detail" className="mt-4" />
+
+            {highMarketCap52w != null || recoveryRate52w != null ? (
+              <div className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/15 bg-[#071018]">
+                <div className="border-b border-white/5 px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-caption uppercase tracking-label text-cyan-300/70">회복 관측 지표</p>
+                      <h4 className="mt-1 text-sm font-semibold text-white sm:text-base">52주 최고 시총 대비 회복률</h4>
+                      <p className="mt-1 text-xs text-white/45">이전 고점과 현재 추정치 사이의 거리를 보여주는 참고 지표입니다.</p>
+                    </div>
+                    <span className={`shrink-0 text-xs font-semibold tabular-nums ${recoveryTone(recoveryRate52w)}`}>
+                      {recoveryRate52w != null ? `${recoveryRate52w.toFixed(1)}%` : "-"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:px-4">
+                  <RecoveryGauge recoveryRate={recoveryRate52w} />
+                  <div className="grid grid-cols-1 gap-3">
+                    <Metric label="52주 최고 시총" value={highMarketCap52w != null ? formatMarketCapKrw(highMarketCap52w) : "-"} />
+                    <Metric label="현재-고점 갭" value={formatRecoveryGap(recoveryRate52w)} tone={recoveryTone(recoveryRate52w)} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-4 text-caption text-muted">52주 회복률은 비교할 공개 이력이 준비되면 표시합니다.</p>
+            )}
 
             <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-2">
               {loading && !detail ? (
@@ -606,8 +600,8 @@ export function ComplexDetailSheet({
                   {ageYears != null ? (
                     <DetailRow label="연식" value={`${ageYears}년차`} />
                   ) : null}
-                  {detail?.updatedAt ? (
-                    <DetailRow label="상세 정보 갱신일" value={formatUpdatedAt(detail.updatedAt)} />
+                  {chartData.length > 0 ? (
+                    <DetailRow label="공개 시총 이력 최종 기준일" value={chartData[chartData.length - 1].snapshotDate} />
                   ) : null}
                 </>
               )}

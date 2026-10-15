@@ -19,10 +19,16 @@ type ComplexHistoryMiniChartProps = {
   series?: HistoryChartSeries[];
 };
 
-const DEFAULT_COLORS = ["#22d3ee", "#e879f9", "#34d399", "#f59e0b"];
-const MIN_CHART_HEIGHT = 220;
+const DEFAULT_COLORS = [
+  "var(--ko-accent)",
+  "var(--ko-purple)",
+  "var(--ko-up)",
+  "var(--ko-warning)",
+];
+const MIN_CHART_HEIGHT = 260;
 
 function formatMarketCapCompact(value: number): string {
+  if (value === 0) return "0";
   if (!Number.isFinite(value) || value <= 0) return "-";
 
   const TRILLION = 1_000_000_000_000;
@@ -49,14 +55,11 @@ function formatMarketCapFull(value: number): string {
 function buildSingleSeries(data?: HistoryChartPoint[]): HistoryChartSeries[] {
   if (!data || data.length === 0) return [];
 
-  const trend = data[data.length - 1].value - data[0].value;
-  const color = trend >= 0 ? "#22d3ee" : "#e879f9";
-
   return [
     {
       key: "series_0",
-      name: "Market Cap",
-      color,
+      name: "추정 시가총액",
+      color: DEFAULT_COLORS[0],
       points: data,
     },
   ];
@@ -120,6 +123,8 @@ export function ComplexHistoryMiniChart({
   const [isMounted, setIsMounted] = useState(false);
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const [chartBox, setChartBox] = useState({ width: 0, height: 0 });
+  const isSingleObservation = normalizedSeries.length === 1 && mergedData.length === 1;
+  const hasTimeline = mergedData.length > 0 && !isSingleObservation;
 
   useEffect(() => {
     setIsMounted(true);
@@ -158,12 +163,28 @@ export function ComplexHistoryMiniChart({
       observer.disconnect();
       window.removeEventListener("resize", updateBox);
     };
-  }, [isMounted]);
+  }, [isMounted, hasTimeline]);
 
   if (normalizedSeries.length === 0 || mergedData.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm leading-copy text-white/55">
-        최근 6개월 시총 흐름을 계산할 스냅샷 데이터가 아직 충분하지 않습니다.
+        조회 기간에 공개된 시총 이력이 없습니다. 현재 시총만으로 과거 추이를 만들 수 없습니다.
+      </div>
+    );
+  }
+
+  if (isSingleObservation) {
+    const point = normalizedSeries[0].points[0];
+    return (
+      <div className="rounded-2xl border border-[var(--ko-border)] bg-surface p-4 sm:p-5">
+        <p className="text-caption font-semibold text-accent">공개 이력 1개 · 추이 비교 대기</p>
+        <dl className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 tabular-nums">
+          <dt className="text-sm text-muted"><time dateTime={point.snapshotDate}>{point.snapshotDate}</time></dt>
+          <dd className="text-lg font-bold text-ink">{formatMarketCapFull(point.value)}</dd>
+        </dl>
+        <p className="mt-3 text-sm text-muted">
+          공개 이력이 한 시점뿐입니다. 서로 다른 두 날짜 이상의 이력이 있어야 변화 추이를 볼 수 있습니다.
+        </p>
       </div>
     );
   }
@@ -173,31 +194,26 @@ export function ComplexHistoryMiniChart({
   const renderHeight = Math.max(chartBox.height, MIN_CHART_HEIGHT);
   const hasSparseStepSeries =
     mergedData.length >= 4 && distinctValueCount > 0 && distinctValueCount <= 3;
+  const firstDate = String(mergedData[0].snapshotDate);
+  const lastDate = String(mergedData[mergedData.length - 1].snapshotDate);
 
   return (
-    <div className="relative w-full min-w-0 overflow-hidden rounded-2xl border border-white/8 bg-black/25 [background-image:linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:24px_24px]">
-      <div
-        className="pointer-events-none absolute inset-0 opacity-80"
-        style={{
-          background:
-            normalizedSeries.length > 1
-              ? "radial-gradient(circle at top left, rgba(34,211,238,0.10), transparent 34%), radial-gradient(circle at top right, rgba(232,121,249,0.10), transparent 34%)"
-              : `radial-gradient(circle at top right, ${normalizedSeries[0].color}22, transparent 40%)`,
-        }}
-      />
-
-      <div className="relative border-b border-white/6 px-3 py-2.5">
-        <div className="flex flex-wrap gap-2">
+    <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-[var(--ko-border)] bg-surface text-ink">
+      <div className="border-b border-[var(--ko-border)] px-3 py-3 sm:px-4">
+        <p className="text-caption tabular-nums text-muted">
+          <time dateTime={firstDate}>{firstDate}</time> ~ <time dateTime={lastDate}>{lastDate}</time>
+          {" · "}주간 표시 {mergedData.length}개
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
           {normalizedSeries.map((entry) => (
             <span
               key={entry.key}
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-caption uppercase tracking-label text-white/75"
+              className="inline-flex items-center gap-2 text-caption font-semibold text-ink"
             >
               <span
                 className="h-2 w-2 rounded-full"
                 style={{
                   backgroundColor: entry.color,
-                  boxShadow: `0 0 14px ${entry.color}`,
                 }}
               />
               <span>{entry.name}</span>
@@ -208,10 +224,12 @@ export function ComplexHistoryMiniChart({
 
       <div
         ref={chartContainerRef}
-        className="relative h-[220px] min-h-[220px] w-full min-w-0 overflow-hidden px-1 py-2"
+        role="group"
+        aria-label={`${firstDate}부터 ${lastDate}까지 공개 시총 이력 차트`}
+        className="h-[260px] min-h-[260px] w-full min-w-0 overflow-hidden"
       >
         {!canRenderMeasuredChart ? (
-          <div className="h-full min-h-[220px] w-full animate-pulse rounded-xl border border-white/8 bg-white/[0.02]" />
+          <div className="h-full w-full animate-pulse bg-[var(--ko-accent-soft)]" />
         ) : (
           <LineChart
             width={renderWidth}
@@ -244,7 +262,7 @@ export function ComplexHistoryMiniChart({
 
             <Tooltip
               cursor={{
-                stroke: "rgba(255,255,255,0.16)",
+                stroke: "var(--ko-border)",
                 strokeWidth: 1,
               }}
               contentStyle={{
@@ -274,15 +292,13 @@ export function ComplexHistoryMiniChart({
                 name={entry.name}
                 stroke={entry.color}
                 strokeWidth={2.5}
-                dot={false}
-                connectNulls
+                dot={{ r: 2.5, fill: entry.color, strokeWidth: 0 }}
+                connectNulls={false}
+                isAnimationActive={false}
                 activeDot={{
                   r: 4,
                   fill: entry.color,
                   strokeWidth: 0,
-                }}
-                style={{
-                  filter: `drop-shadow(0 0 10px ${entry.color}88)`,
                 }}
                 strokeDasharray={index % 2 === 1 ? "5 4" : undefined}
               />
@@ -292,10 +308,34 @@ export function ComplexHistoryMiniChart({
       </div>
 
       {hasSparseStepSeries ? (
-        <div className="relative border-t border-white/6 px-3 py-2 text-caption leading-copy text-white/50">
-          관측 가능한 시총 값이 적어 선이 계단처럼 보일 수 있습니다.
+        <div className="border-t border-[var(--ko-border)] px-3 py-3 text-caption text-muted sm:px-4">
+          표시된 이력의 서로 다른 금액은 {distinctValueCount}개입니다. 같은 값의 반복을 매주 새로운 계산으로 해석하지 마세요.
         </div>
       ) : null}
+      <details className="border-t border-[var(--ko-border)] px-3 py-3 sm:px-4">
+        <summary className="cursor-pointer text-control font-semibold text-accent underline underline-offset-4">
+          날짜별 시총 값 보기
+        </summary>
+        <div className="mt-3 max-h-64 overflow-auto" tabIndex={0} role="region" aria-label="날짜별 공개 시총 값">
+          <table className="w-full text-left text-sm tabular-nums">
+            <caption className="sr-only">공개 시총 이력의 날짜별 저장 값</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="py-2 pr-3 text-caption text-muted">기준일</th>
+                {normalizedSeries.map((entry) => <th scope="col" key={entry.key} className="py-2 text-right text-caption text-muted">{entry.name}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {mergedData.map((point) => (
+                <tr key={String(point.snapshotDate)} className="border-t border-[var(--ko-border)]">
+                  <th scope="row" className="py-3 pr-3 font-medium"><time dateTime={String(point.snapshotDate)}>{point.snapshotDate}</time></th>
+                  {normalizedSeries.map((entry) => <td key={entry.key} className="py-3 text-right">{point[entry.key] != null ? formatMarketCapFull(Number(point[entry.key])) : "—"}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
   );
 }
