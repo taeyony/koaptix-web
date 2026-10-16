@@ -245,6 +245,8 @@ export function mapComplexDetailRow(
     marketCapKrw,
     marketCapTrillionKrw,
 
+    publication: row.publication,
+
     sigunguName,
     legalDongName,
     locationLabel,

@@ -7,23 +7,23 @@ import { createClient } from "@supabase/supabase-js";
 import {
   DEFAULT_UNIVERSE_CODE,
   getUniverseLabel,
+  resolveUniverseRequest,
   resolveServiceUniverseCode,
   type KnownUniverseCode,
 } from "./universes";
 
 import type {
-  DbComplexDetailSheetBaseRow,
   DbComplexDetailSheetWeeklyRow,
   DbComplexChartHistoryRow,
   DbLatestRankBoardRow,
   DbLatestRankBoardWeeklyRow,
   DbRankHistoryRow,
-  RankMovement,
 } from "./types";
 import { requireUniformUniverseServicePublication } from "./currentness";
 import { buildCommonRankComparisons, previousWeekDate, type CommonRankSourceRow } from "./weeklyRankComparison";
 import { hasComparableCapEvidence, type CapSnapshotEvidence, type CapComponentEvidence } from "./weeklyCapComparison";
 import { parsePublicAddress, isLegalDongName } from "./districtIdentity";
+import { assemblePublicComplexDetail, type ComplexBasicRow } from "./complexDetail";
 import {
   KOAPTIX_OFFICIAL_BASE_DATE,
   KOAPTIX_PUBLIC_EXPOSURE_BLOCKED,
@@ -68,15 +68,6 @@ type RegionDimRawRow = {
   full_name_ko: string | null;
 };
 
-type WeeklyDerivedPayload = {
-  history_snapshot_date: string | null;
-  previous_rank_all: number | null;
-  rank_delta_7d: number | null;
-  market_cap_delta_7d: number | null;
-  market_cap_delta_pct_7d: number | null;
-  rank_movement: RankMovement;
-};
-
 export type ExactWeeklyMarketCapComparison = {
   history_snapshot_date: string;
   market_cap_delta_7d: number;
@@ -100,16 +91,6 @@ function createServerSupabase() {
   });
 }
 
-function toNumber(value: number | string | null | undefined, fallback = 0): number {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : fallback;
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
 
 export function toNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") {
@@ -161,40 +142,6 @@ function extractComplexIds(rows: DbLatestRankBoardRow[]): number[] {
       return Number.isFinite(parsed) ? parsed : null;
     })
     .filter((value): value is number => value !== null);
-}
-
-function buildWeeklyDeltaPayload(
-  currentRank: number,
-  currentMarketCap: number,
-  previous: DbRankHistoryRow | null
-): WeeklyDerivedPayload {
-  if (!previous) {
-    return {
-      history_snapshot_date: null,
-      previous_rank_all: null,
-      rank_delta_7d: null,
-      market_cap_delta_7d: null,
-      market_cap_delta_pct_7d: null,
-      rank_movement: "NEW",
-    };
-  }
-
-  const previousRank = toNumber(previous.rank_all, currentRank);
-  const rankDelta7d = previousRank - currentRank;
-
-  const rankMovement: WeeklyDerivedPayload["rank_movement"] =
-    rankDelta7d > 0 ? "UP" : rankDelta7d < 0 ? "DOWN" : "SAME";
-
-  return {
-    history_snapshot_date: previous.snapshot_date ?? null,
-    previous_rank_all: previousRank,
-    rank_delta_7d: rankDelta7d,
-    // This detail path has no matching calculation evidence. The dated public
-    // board reader supplies capital differences only after verification.
-    market_cap_delta_7d: null,
-    market_cap_delta_pct_7d: null,
-    rank_movement: rankMovement,
-  };
 }
 
 function parseSigunguFromAddress(address: string | null | undefined): {
@@ -361,33 +308,6 @@ export async function getExactWeeklyMarketCapComparisonMap(
   } catch (error) {
     console.warn("[KOAPTIX] exact weekly market-cap lookup failed:", error);
     return new Map();
-  }
-}
-
-async function fetchWeeklyComparisonByComplexId(
-  supabase: ReturnType<typeof createServerSupabase>,
-  complexId: string | number
-): Promise<DbRankHistoryRow | null> {
-  const anchorDate = await getWeeklyAnchorDate(supabase);
-  const targetDate = shiftSeoulDateString(anchorDate, -7);
-  const floorDate = shiftSeoulDateString(targetDate, -14);
-
-  try {
-    const { data, error } = await supabase
-      .from("complex_rank_history")
-      .select("snapshot_date, complex_id, market_cap_krw, rank_all")
-      .eq("complex_id", normalizeComplexId(complexId))
-      .gte("snapshot_date", floorDate)
-      .lte("snapshot_date", targetDate)
-      .order("snapshot_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) throw error;
-    return (data ?? null) as DbRankHistoryRow | null;
-  } catch (error) {
-    console.warn("[KOAPTIX] weekly comparison detail lookup failed:", error);
-    return null;
   }
 }
 
@@ -735,6 +655,7 @@ export async function getLatestRankBoard(
       }
 
       const liveRows = result.data ?? [];
+      if (selection && liveRows.length === 0) return [];
       const identity = requireUniformUniverseServicePublication(
         liveRows,
         safeUniverseCode,
@@ -778,50 +699,27 @@ export async function getLatestRankBoard(
 }
 
 export async function getComplexDetailById(
-  complexId: string | number
+  complexId: string | number,
+  universeCode: string = DEFAULT_UNIVERSE_CODE,
+  snapshotDate?: string | null,
 ): Promise<DbComplexDetailSheetWeeklyRow | null> {
+  const scope = resolveUniverseRequest(universeCode, { capability: "ranking" });
+  if (scope.universeUnavailable || !/^[1-9]\d*$/.test(String(complexId))) return null;
+  const [published] = await getLatestRankBoard(scope.requestedUniverseCode, 1, { complexId: String(complexId) }, { timeoutMs: 4000 });
+  if (!published) return null;
+  if (snapshotDate && published.snapshot_date !== snapshotDate) throw new Error("DETAIL_PUBLICATION_CHANGED");
+
   const supabase = createServerSupabase();
-
-  const { data, error } = await supabase
-    .from("v_koaptix_complex_detail_sheet")
-    .select(
-      `
-        complex_id,
-        apt_name_ko,
-        rank_all,
-        market_cap_krw,
-        market_cap_trillion_krw,
-        sigungu_name,
-        legal_dong_name,
-        household_count,
-        approval_year,
-        building_count,
-        parking_count,
-        updated_at
-      `
-    )
-    .eq("complex_id", normalizeComplexId(complexId))
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`Failed to fetch complex detail: ${error.message}`);
-  }
-
-  const liveRow = (data ?? null) as DbComplexDetailSheetBaseRow | null;
-  if (!liveRow) return null;
-
-  const [previous, regionFallback] = await Promise.all([
-    fetchWeeklyComparisonByComplexId(supabase, complexId),
+  const [{ data, error }, regionFallback] = await Promise.all([
+    withLocalQueryTimeout(supabase.from("apt_complex")
+      .select("complex_id,household_count,total_household_count,build_year,legal_dong_name,address_jibun,updated_at")
+      .eq("complex_id", normalizeComplexId(complexId))
+      .maybeSingle(), 4000, "COMPLEX_BASIC_LOOKUP_TIMEOUT"),
     fetchRegionFallbackByComplexId(supabase, complexId),
   ]);
 
-  const currentRank = toNumber(liveRow.rank_all, 0);
-  const currentMarketCap = toNumber(
-    liveRow.market_cap_krw,
-    liveRow.market_cap_trillion_krw != null
-      ? Math.round(toNumber(liveRow.market_cap_trillion_krw, 0) * 1_000_000_000_000)
-      : 0
-  );
+  if (error) throw new Error("COMPLEX_BASIC_LOOKUP_FAILED");
+  const liveRow = assemblePublicComplexDetail(published, (data ?? null) as ComplexBasicRow | null);
 
   const resolvedSigungu = liveRow.sigungu_name ?? regionFallback?.sigungu_name ?? null;
   const resolvedDong = isLegalDongName(liveRow.legal_dong_name) ? liveRow.legal_dong_name : regionFallback?.umd_nm ?? null;
@@ -835,7 +733,7 @@ export async function getComplexDetailById(
     sigungu_name: resolvedSigungu,
     sigungu_full_name: resolvedSigunguFull,
     legal_dong_name: resolvedDong,
-    address_jibun: regionFallback?.address_jibun ?? null,
+    address_jibun: liveRow.address_jibun ?? regionFallback?.address_jibun ?? null,
     location_search_label: [
       resolvedSigunguFull,
       resolvedSigungu,
@@ -844,7 +742,6 @@ export async function getComplexDetailById(
     ]
       .filter(Boolean)
       .join(" "),
-    ...buildWeeklyDeltaPayload(currentRank, currentMarketCap, previous),
   } as DbComplexDetailSheetWeeklyRow;
 }
 

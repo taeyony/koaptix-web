@@ -30,7 +30,7 @@ const fixture = {
 function publicReader(row = fixture) {
   const calls = [];
   const timeouts = [];
-  const builder = { then: resolve => Promise.resolve({ data: [row], error: null }).then(resolve) };
+  const builder = { then: resolve => Promise.resolve({ data: Array.isArray(row) ? row : [row], error: null }).then(resolve) };
   for (const method of ["select", "eq", "order", "limit", "gte", "lte"]) builder[method] = (...args) => { calls.push([method, ...args]); return builder; };
   const currentness = moduleFrom(read("src/lib/koaptix/currentness.ts"));
   const source = read("src/lib/koaptix/queries.ts");
@@ -81,6 +81,11 @@ test("share data fails closed on wrong ID, publication scope, rank or missing ca
   const invalid = publicReader();
   await assert.rejects(invalid.getLatestRankBoard("KOREA_ALL", 1, { complexId: "../5037" }));
   assert.equal(invalid.calls.length, 0);
+});
+
+test("an absent selected public complex is an empty result, while an empty board still fails identity validation", async () => {
+  assert.equal((await publicReader([]).getLatestRankBoard("KOREA_ALL", 1, { complexId: "5037" })).length, 0);
+  await assert.rejects(publicReader([]).getLatestRankBoard("KOREA_ALL", 5));
 });
 
 test("share metadata names the complex, actual public date and scope; missing data never invents metrics", async () => {

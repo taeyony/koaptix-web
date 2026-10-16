@@ -19,6 +19,11 @@ export type KoaptixUniverseServicePublicationIdentity =
     surface_code: "UNIVERSE_SERVICE";
   };
 
+export type ComplexDetailPublication = KoaptixUniverseServicePublicationIdentity & {
+  snapshot_date: string;
+  universe_code: string;
+};
+
 export type WeeklyDeltaWindow = "7d";
 
 export type RankMovement = "NEW" | "UP" | "DOWN" | "SAME";
@@ -61,6 +66,7 @@ export type DbRankHistoryRow = {
 };
 
 export type DbComplexDetailSheetBaseRow = {
+  publication: ComplexDetailPublication;
   address_jibun?: string | null;
   complex_id: number | string | null;
   apt_name_ko: string | null;
@@ -252,6 +258,7 @@ export type RankingItem = {
 export type PublishedRankingItem = RankingItem &
   KoaptixUniverseServicePublicationIdentity;
 export type ComplexDetail = {
+  publication: ComplexDetailPublication;
   complexId: string;
   name: string;
   rank: number;

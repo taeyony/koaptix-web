@@ -267,7 +267,7 @@ test("TOP1000 V1 preserves authoritative weekly movement and exact-date cap sema
   const exactCapHelper = sourceBetween(
     queries,
     "export async function getExactWeeklyMarketCapComparisonMap(",
-    "async function fetchWeeklyComparisonByComplexId(",
+    "export async function fetchRegionFallbackMap(",
   );
   assert.match(exactCapHelper, /shiftSeoulDateString\(normalizedBoardDate, -7\)/);
   assert.match(exactCapHelper, /\.eq\("snapshot_date", previousSnapshotDate\)/);
@@ -350,6 +350,7 @@ test("common-cohort reader requires complete pages and the same exact-week publi
         if (name === "./weeklyRankComparison") return weeklyComparison;
         if (name === "./weeklyCapComparison") return capComparison;
         if (name === "./districtIdentity") return districtIdentity;
+        if (name === "./complexDetail") return {};
         if (name === "./universes") return {};
         if (name === "../../types/koaptix") return indexContract;
         throw new Error("Unexpected comparison dependency: " + name);
@@ -429,6 +430,7 @@ function loadIndexHistoryFixture() {
       if (name === "./weeklyRankComparison") return {};
       if (name === "./weeklyCapComparison") return capComparison;
       if (name === "./districtIdentity") return districtIdentity;
+      if (name === "./complexDetail") return {};
       if (name === "../../types/koaptix") return indexContract;
       throw new Error("Unexpected history dependency: " + name);
     },

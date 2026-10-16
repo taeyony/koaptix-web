@@ -20,6 +20,7 @@ import { KOAPTIX_OFFICIAL_BASE_DATE } from "../../types/koaptix";
 import { getUniverseLabel } from "../../lib/koaptix/universes";
 import { commonRankDelta, commonRankTransition, needsMarketCapReview } from "../../lib/koaptix/weeklyRankComparison";
 import { publicComplexName } from "../../lib/koaptix/rankingPresentation";
+import { publicDetailMetrics } from "../../lib/koaptix/complexDetail";
 
 const ComplexHistoryMiniChart = dynamic(
   () =>
@@ -128,7 +129,7 @@ function formatRecoveryGap(value: number | null | undefined): string {
 
 function formatCount(value: number | null | undefined): string {
   if (value == null) return "-";
-  return `${new Intl.NumberFormat("ko-KR").format(value)}개`;
+  return `${new Intl.NumberFormat("ko-KR").format(value)}세대`;
 }
 
 function formatPlainNumber(value: number | null | undefined): string {
@@ -422,30 +423,25 @@ export function ComplexDetailSheet({
     return createPortal(emptyContent, document.body);
   }
 
-  const sourceName = detail?.name ?? item?.name ?? "단지 상세 정보";
+  const sourceName = item?.name ?? detail?.name ?? "단지 상세 정보";
   const title = publicComplexName(sourceName);
   const location = (detail?.locationLabel ?? item?.locationLabel) || "위치 정보 없음";
-  const rank = detail?.rank ?? item?.rank ?? null;
-  const marketCap = detail?.marketCapKrw ?? item?.marketCapKrw ?? 0;
-  const rankDelta7d = detail?.rankDelta7d ?? item?.rankDelta7d;
-  const marketCapDelta7d = detail?.marketCapDelta7d ?? item?.marketCapDelta7d;
-  const marketCapDeltaPct7d = detail?.marketCapDeltaPct7d ?? item?.marketCapDeltaPct7d;
-  const historySnapshotDate = detail?.historySnapshotDate ?? item?.historySnapshotDate;
-  const highMarketCap52w = detail?.highMarketCap52w ?? item?.highMarketCap52w;
-  const recoveryRate52w = detail?.recoveryRate52w ?? item?.recoveryRate52w;
+  const { rank, marketCap, rankDelta7d, marketCapDelta7d, marketCapDeltaPct7d,
+    historySnapshotDate, highMarketCap52w, recoveryRate52w } = publicDetailMetrics(item, detail);
   const tierBadges = item?.tierBadges?.slice(0, 2) ?? [];
   const weeklyComparisonAvailable =
-    detail?.weeklyComparisonAvailable ??
-    (historySnapshotDate != null &&
+    historySnapshotDate != null &&
       (rankDelta7d != null ||
         marketCapDelta7d != null ||
-        marketCapDeltaPct7d != null));
+        marketCapDeltaPct7d != null);
   const usesCommonComparison = Boolean(item && "weeklyRankComparison" in item);
   const displayRankDelta7d = usesCommonComparison && item ? commonRankDelta(item) : weeklyComparisonAvailable
-    ? detail?.rankDelta7dNullable ?? rankDelta7d ?? 0
+    ? rankDelta7d ?? null
     : null;
-  const displayMarketCapDelta7d = item?.marketCapDelta7d ?? detail?.marketCapDelta7dNullable ?? null;
-  const displayMarketCapDeltaPct7d = item?.marketCapDeltaPct7d ?? detail?.marketCapDeltaPct7dNullable ?? null;
+  const displayMarketCapDelta7d = marketCapDelta7d ?? null;
+  const displayMarketCapDeltaPct7d = marketCapDeltaPct7d ?? null;
+  const snapshotDate = item?.snapshotDate ?? detail?.publication.snapshot_date;
+  const universeCode = item?.universeCode ?? detail?.publication.universe_code ?? "KOREA_ALL";
   const householdCount = detail?.householdCount ?? item?.households ?? null;
   const approvalYear = detail?.approvalYear ?? item?.buildYear ?? null;
   const ageYears = detail?.ageYears ?? item?.ageYears ?? null;
@@ -481,7 +477,7 @@ export function ComplexDetailSheet({
                 <p className="mt-1 truncate text-sm text-white/50 sm:text-control">
                   {location}
                 </p>
-                {item?.snapshotDate ? <p className="mt-1 text-caption text-muted">{getUniverseLabel(item.universeCode || "KOREA_ALL")} 공개 순위 · {item.snapshotDate} 기준</p> : null}
+                {snapshotDate ? <p className="mt-1 text-caption text-muted">{getUniverseLabel(universeCode)} 공개 순위 · {snapshotDate} 기준</p> : null}
 
                 {tierBadges.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -530,7 +526,7 @@ export function ComplexDetailSheet({
           <div className="min-h-0 overflow-y-auto px-4 pb-6 pt-4 sm:px-5">
             {error ? (
               <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
-                {item ? "추가 상세 정보는 아직 제공되지 않습니다. 아래에서 공개된 순위를 확인해 주세요." : error}
+                {error}{item ? " 아래 순위와 시총은 현재 보고 있던 공개 기록이에요." : ""}
               </div>
             ) : null}
 

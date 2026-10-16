@@ -56,7 +56,6 @@ interface RankingBoardClientProps {
   presentation?: "default" | "home-flagship" | "weekly-movement-full-board";
 }
 
-type ApiEnvelope<T> = T | { data?: T | null } | null;
 type UniverseCodeValue = string;
 
 type RankingsApiResponse = {
@@ -309,8 +308,9 @@ function buildRankingPayload(
   };
 }
 
-const COMPLEX_DETAIL_API = (id: string) =>
-  `/api/complex-detail?complexId=${encodeURIComponent(id)}`;
+const COMPLEX_DETAIL_API = (id: string, universe: string, snapshotDate: string | null) =>
+  `/api/complex-detail?${new URLSearchParams({ complexId: id, universe_code: universe,
+    ...(snapshotDate ? { snapshot_date: snapshotDate } : {}) })}`;
 
 const KOREA_ALL_HOME_BOARD_LIMIT = 12;
 const RANKING_DISCOVERY_SEARCH_LIMIT = 8;
@@ -351,28 +351,6 @@ function resolveBoardUniverseCode(input?: string | null) {
   return resolveUniverseRequest(input).requestedUniverseCode;
 }
 
-async function readApiData<T>(
-  input: string,
-  signal: AbortSignal,
-): Promise<T | null> {
-  const response = await fetch(input, {
-    method: "GET",
-    cache: "no-store",
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status} ${input}`);
-  }
-
-  const json = (await response.json()) as ApiEnvelope<T>;
-
-  if (json && typeof json === "object" && "data" in json) {
-    return (json.data ?? null) as T | null;
-  }
-
-  return (json ?? null) as T | null;
-}
 
 function hasValidClarificationChoices(
   value: unknown,
@@ -1159,58 +1137,6 @@ export function RankingBoardClient({
     else setIsComparisonOpen(false);
   }, [comparisonItems.length]);
 
-  useEffect(() => {
-    if (!selectedComplexId) {
-      setComplexDetail(null);
-      setIsComplexDetailLoading(false);
-      setComplexDetailError(null);
-      return;
-    }
-
-    const controller = new AbortController();
-    let cancelled = false;
-
-    const loadComplexDetail = async () => {
-      setComplexDetail(null);
-      setComplexDetailError(null);
-      setIsComplexDetailLoading(true);
-
-      try {
-        const detailPayload = await readApiData<ComplexDetail>(
-          COMPLEX_DETAIL_API(selectedComplexId),
-          controller.signal,
-        );
-
-        if (cancelled) return;
-
-        if (!detailPayload) {
-          setComplexDetail(null);
-          setComplexDetailError("Detail unavailable");
-          return;
-        }
-
-        setComplexDetail(detailPayload);
-        setComplexDetailError(null);
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        if (!cancelled) {
-          setComplexDetail(null);
-          setComplexDetailError("Detail unavailable");
-        }
-        console.warn("[RankingBoardClient] detail fetch warn", error);
-      } finally {
-        if (!cancelled) setIsComplexDetailLoading(false);
-      }
-    };
-
-    void loadComplexDetail();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [selectedComplexId]);
-
   const clearDistrict = useCallback(() => {
     replaceUrlParams((params) => {
       params.delete("district");
@@ -1415,12 +1341,55 @@ export function RankingBoardClient({
     const scopeLabel = getUniverseLabel(boardUniverseCode).replace(/\s*전체$/, "");
     return `${scopeLabel} ${districtQueryLocal}`.trim();
   }, [boardUniverseCode, districtQueryLocal]);
-  const selectedItem =
-    presentationBoardItems.find((i) => i.complexId === selectedComplexId) ??
-    items.find((i) => i.complexId === selectedComplexId) ??
-    null;
-  const selectedDetail =
-    complexDetail?.complexId === selectedComplexId ? complexDetail : null;
+  const selectedItem = presentationBoardItems.find((i) => i.complexId === selectedComplexId) ?? null;
+  const selectedDetailDate = selectedItem?.snapshotDate ??
+    (boardDeliveryMeta.renderedUniverseCode === boardUniverseCode ? boardDeliveryMeta.latestBoardDate : null);
+  const selectedDetail = complexDetail?.complexId === selectedComplexId &&
+    complexDetail.publication.universe_code === boardUniverseCode &&
+    (!selectedDetailDate || complexDetail.publication.snapshot_date === selectedDetailDate) ? complexDetail : null;
+
+  useEffect(() => {
+    if (!selectedComplexId) {
+      setComplexDetail(null);
+      setIsComplexDetailLoading(false);
+      setComplexDetailError(null);
+      return;
+    }
+    const controller = new AbortController();
+    let cancelled = false;
+    const loadComplexDetail = async () => {
+      setComplexDetail(null);
+      setComplexDetailError(null);
+      setIsComplexDetailLoading(true);
+      try {
+        const response = await fetch(COMPLEX_DETAIL_API(selectedComplexId, boardUniverseCode, selectedDetailDate), {
+          method: "GET", cache: "no-store", signal: controller.signal,
+        });
+        const payload = await response.json() as { data?: ComplexDetail; error?: string };
+        if (cancelled) return;
+        if (!response.ok || !payload.data) {
+          setComplexDetailError(response.status === 404
+            ? "선택한 지역의 공개 랭킹에서 이 단지의 기본정보 연결을 확인하지 못했어요."
+            : response.status === 409 ? "공개 기준일이 바뀌었어요. 랭킹을 새로고침해 주세요."
+            : "기본정보를 불러오지 못했어요. 잠시 후 다시 열어 주세요.");
+          return;
+        }
+        const detail = payload.data;
+        if (detail.complexId !== selectedComplexId || detail.publication?.universe_code !== boardUniverseCode ||
+            (selectedDetailDate && detail.publication.snapshot_date !== selectedDetailDate)) {
+          setComplexDetailError("선택한 지역·기준일의 정보와 일치하지 않아 기본정보를 표시하지 않았어요.");
+          return;
+        }
+        setComplexDetail(detail);
+      } catch {
+        if (!cancelled && !controller.signal.aborted) setComplexDetailError("기본정보 연결이 지연되고 있어요. 잠시 후 다시 열어 주세요.");
+      } finally {
+        if (!cancelled) setIsComplexDetailLoading(false);
+      }
+    };
+    void loadComplexDetail();
+    return () => { cancelled = true; controller.abort(); };
+  }, [selectedComplexId, boardUniverseCode, selectedDetailDate]);
   const isSuppressingStaleBoard =
     staleBoardUniverseCode !== null &&
     boardItems.length > 0 &&
