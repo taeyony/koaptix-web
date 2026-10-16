@@ -10,9 +10,10 @@ import { HomeV2SectionHeading } from "./HomeV2SectionHeading";
 import UniverseSelector from "../UniverseSelector";
 import ComparisonSheet from "../ComparisonSheet";
 import { getHomeUniverseRegistry } from "../../../lib/koaptix/universes";
-import { formatMarketCapMovement, formatRankMovement, selectMovementHighlights } from "../../../lib/koaptix/rankingPresentation";
-import { commonRankDelta, commonRankTransition, needsMarketCapReview } from "../../../lib/koaptix/weeklyRankComparison";
+import { formatRankMovement, selectMovementHighlights } from "../../../lib/koaptix/rankingPresentation";
+import { commonRankDelta } from "../../../lib/koaptix/weeklyRankComparison";
 import { HomeV2MovementTicker } from "./HomeV2MovementTicker";
+import { HomeV2Insights } from "./HomeV2Insights";
 
 type RankingsPayload = {
   ok?: boolean;
@@ -173,7 +174,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
       [...items]
         .filter((item) => (commonRankDelta(item) ?? 0) > 0)
         .sort((a, b) => (commonRankDelta(b) ?? 0) - (commonRankDelta(a) ?? 0))
-        .slice(0, 2),
+        .slice(0, 3),
     [items],
   );
   const falling = useMemo(
@@ -181,20 +182,13 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
       [...items]
         .filter((item) => (commonRankDelta(item) ?? 0) < 0)
         .sort((a, b) => (commonRankDelta(a) ?? 0) - (commonRankDelta(b) ?? 0))
-        .slice(0, 2),
+        .slice(0, 3),
     [items],
   );
   const tickerItems = useMemo(() => {
     const cardIds = new Set([...rising, ...falling].map(item => item.complexId));
     return selectMovementHighlights(items.filter(item => !cardIds.has(item.complexId)), boardDate, "common");
   }, [items, boardDate, rising, falling]);
-  const knownMovement = items.filter((item) => Number.isFinite(commonRankDelta(item)));
-  const movementCounts = {
-    rising: knownMovement.filter((item) => (commonRankDelta(item) ?? 0) > 0)
-      .length,
-    falling: knownMovement.filter((item) => (commonRankDelta(item) ?? 0) < 0)
-      .length,
-  };
   const watchlistById = new Map([...nationalItems, ...items].map((item) => [item.complexId, item]));
   function toggleComparison(item: RankingItem) {
     const next = comparisonItems.some((row) => row.complexId === item.complexId)
@@ -343,118 +337,21 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
         ) : null}
       </section>
 
-      <section data-testid="movement-highlights" className="order-4 border-b border-[var(--ko-border)] py-8 lg:order-4 lg:border-b-0 lg:border-l lg:pl-7">
-        {rising.length || falling.length ? <>
-        <HomeV2SectionHeading
-          title="같은 단지끼리 순위가 바뀐 곳"
-          note="전주·금주 공통 단지 안에서 비교한 순위예요."
-        />
-        <p className="mt-3 text-caption text-muted">{state.metadata?.weeklyRankComparison?.previousSnapshotDate} → {boardDate} · 공통 {state.metadata?.weeklyRankComparison?.commonComplexCount?.toLocaleString("ko-KR")}개 · 상승·하락 각 최대 2개</p>
-        <div className="mt-6 grid grid-cols-2 gap-5 lg:grid-cols-1 lg:gap-6">
-          {[
-            { label: "순위 상승", items: rising, tone: "text-up" },
-            { label: "순위 하락", items: falling, tone: "text-down" },
-          ].map((group) => (
-            <div key={group.label}>
-              <p
-                className={`text-caption font-semibold uppercase tracking-label ${group.tone}`}
-              >
-                {group.label}
-              </p>
-              <div className="mt-3 space-y-3">
-                {group.items.length ? (
-                  group.items.map((item) => (
-                    <Link href={detailHref(item)}
-                      key={item.complexId}
-                      className="block rounded-lg border border-[var(--ko-border)] p-3 text-sm transition hover:border-accent"
-                    >
-                      <span className="block font-semibold text-ink">
-                        {item.name}
-                      </span>
-                      <span
-                        className={`mt-2 block tabular-nums font-semibold ${group.tone}`}
-                      >
-                        {formatRankMovement(commonRankDelta(item))}
-                      </span>
-                      <span className="mt-1 block text-caption tabular-nums text-muted">{commonRankTransition(item) ?? `현재 ${item.rank.toLocaleString("ko-KR")}위`}</span>
-                      <span className="mt-1 block text-caption tabular-nums text-muted">{formatMarketCapMovement(item.marketCapDeltaPct7d)}</span>
-                      {needsMarketCapReview(item) ? <span className="mt-1 block text-caption font-semibold text-muted">큰 변동 · 계산 입력 확인 필요</span> : null}
-                    </Link>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted">
-                    {`이 공개 랭킹에서 ${group.label}한 단지가 없어요.`}
-                  </p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="ko-copy mt-4 text-caption text-muted">비교 순위는 현재 공표 순위와 별개예요. 시총은 거래 외에 계산 입력 변경의 영향도 받아요. ±30% 이상은 확인 필요 표시를 붙여요.</p>
-        <div className="mt-4 flex flex-wrap gap-5 text-control text-accent"><Link className="ko-text-link" href={`${rankingHref}&sort=rank-up`}>순위가 많이 오른 순으로 보기 ↗</Link><Link className="ko-text-link" href={`${rankingHref}&sort=cap-up`}>시총 증가율순으로 보기 ↗</Link></div>
-        </> : <details>
-          <summary className="cursor-pointer text-control font-semibold text-ink">이번 주 순위가 많이 바뀐 단지 · {state.status === "loading" && !universeUnavailable ? "공개 자료 확인 중" : state.status === "error" || universeUnavailable ? "공개 자료를 불러오지 못했어요" : knownMovement.length ? "순위 변화 없음" : "지난주 비교 자료 준비 중"}</summary>
-          <p className="ko-copy mt-3 text-sm text-muted">공통 단지 전체를 확인한 뒤 비교해요. 비교 자료를 불러오지 못하면 기존 공표 순위의 차이로 대신 표시하지 않아요.</p>
-        </details>}
-      </section>
-
-      <section
-        id="insights"
-        tabIndex={-1}
-        className="order-5 py-7 lg:order-5 lg:col-span-2 lg:pr-8"
-      >
-        {knownMovement.length ? <>
-        <HomeV2SectionHeading
-          title="같은 단지끼리 주간 순위 비교"
-          note={`${universeLabel} · 현재 TOP1000 중 비교 가능한 단지`}
-        />
-        <div className="mt-5 grid grid-cols-3 divide-x divide-slate-200/70 py-3">
-          {[
-            { label: "순위 상승 ▲", value: movementCounts.rising, tone: "text-up" },
-            {
-              label: "그대로",
-              value:
-                knownMovement.length -
-                movementCounts.rising -
-                movementCounts.falling,
-              tone: "text-muted",
-            },
-            { label: "순위 하락 ▼", value: movementCounts.falling, tone: "text-down" },
-          ].map((metric) => (
-            <div
-              key={metric.label}
-              className="px-4 text-center first:pl-0 last:pr-0"
-            >
-              <p className={`font-mono tabular-nums text-xl font-semibold ${metric.tone}`}>
-                {state.status === "ready" && knownMovement.length
-                  ? metric.value
-                  : "—"}
-              </p>
-              <p className="mt-1.5 text-caption tracking-label text-muted">
-                {metric.label}
-              </p>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 text-caption leading-copy text-muted">
-          {state.status === "ready" ? `${state.metadata.weeklyRankComparison?.previousSnapshotDate ?? "전주"} → ${boardDate} · 양쪽에 모두 있던 ${state.metadata.weeklyRankComparison?.commonComplexCount?.toLocaleString("ko-KR") ?? "확인 중"}개 내 순위를 비교해요. 현재 TOP${items.length} 중 ${knownMovement.length}개를 요약했어요.` : universeUnavailable ? "이 지역의 랭킹은 아직 공개되지 않았어요." : state.status === "error" ? "랭킹을 불러오지 못해 순위 변화를 보여드릴 수 없어요." : "공개 랭킹의 주간 변화를 확인하고 있습니다."} 지역 전체의 집값 변화를 뜻하지 않아요.
-        </p>
-        {state.status === "ready" && knownMovement.length && !movementCounts.rising && !movementCounts.falling ? <p className="mt-2 text-caption text-muted">비교할 수 있는 단지들의 순위는 지난주와 같아요.</p> : null}
-        <div className="mt-4 flex flex-wrap gap-5 text-control font-semibold text-accent">
-          <Link className="ko-text-link" href={`${rankingHref}&movement=up`}>순위 상승 단지 보기 ↗</Link>
-          <Link className="ko-text-link" href={`${rankingHref}&movement=down`}>순위 하락 단지 보기 ↗</Link>
-          <Link className="ko-text-link" href={rankingHref}>전체 랭킹에서 확인 ↗</Link>
-        </div>
-        </> : <details>
-          <summary className="cursor-pointer text-control font-semibold text-ink">이번 주 순위 변화 요약 · {state.status === "loading" && !universeUnavailable ? "공개 자료 확인 중" : state.status === "error" || universeUnavailable ? "공개 자료를 불러오지 못했어요" : "지난주 비교 자료 준비 중"}</summary>
-          <p className="ko-copy mt-3 text-sm text-muted">지난주와 비교할 수 있는 단지만, 순위가 오른·그대로인·내린 단지로 나눠 보여드려요. 비교 자료가 없는 단지는 ‘그대로’로 세지 않습니다.</p>
-        </details>}
-      </section>
+      <HomeV2Insights
+        items={items}
+        rising={rising}
+        falling={falling}
+        comparison={state.metadata?.weeklyRankComparison}
+        snapshotDate={boardDate}
+        status={universeUnavailable ? "unavailable" : state.status}
+        universeCode={universeCode}
+        universeLabel={universeLabel}
+      />
 
       <section
         id="watchlist"
         tabIndex={-1}
-        className="order-6 border-t border-[var(--ko-border)] py-7 lg:order-6 lg:border-l lg:pl-8"
+        className="order-6 border-t border-[var(--ko-border)] py-7 lg:order-4 lg:border-l lg:pl-8"
       >
         <HomeV2SectionHeading title="관심목록" note={`이 브라우저에만 저장${isLoaded ? ` · ${bookmarks.length}개` : ""}`} />
         {storageUnavailable ? <p role="status" className="mt-3 text-caption text-muted">브라우저 저장소를 사용할 수 없어 새로고침 후에는 변경 사항이 유지되지 않을 수 있습니다.</p> : null}
