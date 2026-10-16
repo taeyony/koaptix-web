@@ -12,7 +12,7 @@ function load(path, deps = {}) {
   return module.exports;
 }
 const share = load("src/lib/koaptix/complexShare.ts");
-const sorting = load("src/lib/koaptix/rankingPresentation.ts");
+const sorting = load("src/lib/koaptix/rankingPresentation.ts", { "./weeklyRankComparison": load("src/lib/koaptix/weeklyRankComparison.ts") });
 const universes = load("src/lib/koaptix/universes.ts");
 const identity = load("src/lib/koaptix/districtIdentity.ts");
 const fixture = { complex_id: 5037, apt_name_ko: "잠실엘스", rank_all: 2, market_cap_krw: 18915350000802, universe_code: "KOREA_ALL", snapshot_date: "2026-08-31", published_at: "2026-10-15T00:22:12Z" };

@@ -76,24 +76,18 @@ export function HomeV2Terminal({
               </div>
             </div>
             <p className="mt-3 ko-copy max-w-copy text-sm leading-copy text-muted">단지 전체의 추정 가치를 기준으로, 우리 아파트 순위와 이번 주 변화를 확인해 보세요.</p>
-            <Link href="/play" prefetch={false} data-testid="home-play-entry" className="mt-5 flex max-w-2xl flex-col justify-between gap-3 rounded-2xl border border-accent bg-[var(--ko-accent-soft)] p-4 transition hover:border-[var(--ko-ink)] sm:flex-row sm:items-center">
-              <span>
-                <strong className="block text-xl font-bold leading-heading text-ink">우리 아파트, 전국 몇 등?</strong>
-                <span className="mt-1 block text-sm leading-copy text-muted">전국 TOP 5부터 우리 단지 검색까지</span>
-              </span>
-              <span className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-xl bg-[var(--ko-accent)] px-5 py-2 text-control font-bold text-[var(--ko-bg)] sm:shrink-0 sm:self-auto">지금 확인하기 <span aria-hidden="true">↗</span></span>
-            </Link>
             <HomeV2Search key={universeCode} universeCode={universeCode} />
+            <Link href="/play" prefetch={false} data-testid="home-play-entry" className="ko-text-link mt-3 inline-flex min-h-10 items-center text-caption font-semibold">처음이라면? 전국 TOP 5부터 둘러보기 ↗</Link>
             <div className="mt-6 flex flex-wrap items-baseline gap-x-5 gap-y-2">
               <p className="text-caption font-semibold text-muted">전국 집계 단지의 추정 가치 합계</p>
               <p className="break-words font-mono tabular-nums text-4xl font-medium tracking-number text-ink">
                 {hasAggregateScope ? totalMarketCapLabel ?? "—" : "—"}
               </p>
             </div>
-            <p className="mt-2 text-sm leading-copy text-muted" data-testid="aggregate-scope">{hasAggregateScope ? `${currentnessDate} 기준 · 별도로 집계한 ${aggregateComplexCount!.toLocaleString("ko-KR")}개 단지 · 아래 랭킹·지도와 포함 범위가 달라요` : scopeSummary} · 대한민국 전체 주택의 총액이 아닙니다.</p>
+            <p className="mt-2 text-caption leading-copy text-muted" data-testid="aggregate-scope">{hasAggregateScope ? `${currentnessDate} 기준 · ${aggregateComplexCount!.toLocaleString("ko-KR")}개 별도 집계 · 아래 랭킹과 대상 다름` : scopeSummary}</p>
             <div className="mt-5 flex flex-wrap items-center gap-4">
               <FormulaExplainer title="합계와 순위, 어떻게 계산하나요?" triggerLabel="계산 방법 보기" className="text-ink" scopeSummary={scopeSummary} />
-              <p className="ko-caption max-w-copy text-caption leading-copy text-muted">{LAUNCH_COPY.compactBeta}</p>
+              <span className="text-caption font-semibold text-muted">추정값 · 공개 테스트 중</span>
             </div>
           </div>
 
@@ -119,6 +113,7 @@ export function HomeV2Terminal({
         <div className="mx-auto flex max-w-home flex-col justify-between gap-3 text-caption uppercase tracking-label text-muted sm:flex-row">
           <span>KOAPTIX / 우리 아파트 순위 찾기</span>
           <span>{LAUNCH_COPY.representativeMetric}</span>
+          <p className="max-w-copy normal-case leading-copy">{LAUNCH_COPY.compactBeta} 합계는 포함 단지 전체의 추정 가치이며, 대한민국 전체 주택 총액이나 집 한 채의 가격이 아닙니다.</p>
         </div>
       </footer>
     </main>

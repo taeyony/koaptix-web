@@ -22,6 +22,7 @@ import type { UniverseOption } from "../../lib/koaptix/universes";
 import { useBookmarks } from "../../hooks/useBookmarks";
 import ComparisonSheet from "./ComparisonSheet";
 import { parseRankingSort, sortRankingItems, type RankingSort } from "../../lib/koaptix/rankingPresentation";
+import { commonRankMovement } from "../../lib/koaptix/weeklyRankComparison";
 import { parseComparisonIds, isComparisonDate } from "../../lib/koaptix/complexShare";
 import { matchesStructuredDistrict } from "../../lib/koaptix/districtIdentity";
 export { parseDistrictIdentity, resolveSidoFromUniverseCode } from "../../lib/koaptix/districtIdentity";
@@ -176,6 +177,9 @@ function parseMovementFilter(value?: string | null): MovementFilterKey {
 }
 
 function normalizeRankMovement(item: RankingItem): RankMovement | null {
+  if ("weeklyRankComparison" in item) {
+    return commonRankMovement(item);
+  }
   const value = item.rankMovement ?? item.rank_movement;
   if (value === "NEW" || value === "UP" || value === "DOWN" || value === "SAME") {
     return value;
@@ -341,7 +345,7 @@ const RANKINGS_API = (
 ) =>
   // Canonical contract: both tactical (/api/rankings) and TOP1000
   // (/api/ranking) use universe_code in API requests.
-  `${apiBasePath}?universe_code=${encodeURIComponent(universeCode)}&limit=${limit}`;
+  `${apiBasePath}?universe_code=${encodeURIComponent(universeCode)}&limit=${limit}${apiBasePath === "/api/ranking" ? "&comparison=common" : ""}`;
 
 function resolveBoardUniverseCode(input?: string | null) {
   return resolveUniverseRequest(input).requestedUniverseCode;
@@ -1595,7 +1599,7 @@ export function RankingBoardClient({
 
               {isWeeklyMovementFullBoard && (
                 <p className="mt-1 text-caption font-semibold uppercase tracking-label text-cyan-300">
-                  공개된 순위를 지난주와 비교해요
+                  전주·금주에 모두 있던 단지 안에서 순위를 비교해요. 현재 공표 순위와는 별개예요.
                 </p>
               )}
 

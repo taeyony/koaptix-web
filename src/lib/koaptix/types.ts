@@ -169,6 +169,23 @@ export type DbComplexDetailSheetWeeklyRow =
     recovery_rate_52w?: number | string | null;
   };
 
+export type WeeklyRankComparison = {
+  currentRank: number;
+  previousRank: number;
+  delta: number;
+  cohortSize: number;
+  previousSnapshotDate: string;
+};
+
+export type WeeklyRankComparisonMetadata = {
+  status: "ready" | "unavailable";
+  basis: "COMMON_COMPLEXES";
+  snapshotDate: string;
+  previousSnapshotDate: string;
+  currentPublishedCount: number | null;
+  commonComplexCount: number | null;
+};
+
 export type RankingItem = {
   complexId: string;
   name: string;
@@ -196,6 +213,7 @@ export type RankingItem = {
 
   historySnapshotDate?: string | null;
   rankDelta7d: number | null;
+  weeklyRankComparison?: WeeklyRankComparison | null;
   rank_delta_w?: number | null;
 
   marketCapDelta7d?: number | null;

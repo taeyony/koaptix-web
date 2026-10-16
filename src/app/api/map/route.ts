@@ -133,7 +133,7 @@ type MapDistrictItem = {
 };
 
 type MapAggregationMetadata = {
-  aggregationBasis: typeof MAP_AGGREGATION_BASIS;
+  aggregationBasis: typeof MAP_AGGREGATION_BASIS | "PUBLISHED_TOP1000";
   isCompleteDistrictTotal: false;
   aggregationGrain: typeof MAP_AGGREGATION_GRAIN;
   sourceRowLimit: number;
@@ -183,6 +183,7 @@ type ComplexRegionMapRow = {
 type ComplexScopeMeta = {
   fullLabel: string | null;
   shortLabel: string | null;
+  districtName?: string | null;
 };
 
 // 🚨 지차장 지시 A: 로그 다이어트용 헬퍼 및 상수 추가 🚨
@@ -352,6 +353,8 @@ function extractComplexIds(rows: any[]): number[] {
 async function fetchComplexScopeMetaMap(
   supabase: ReturnType<typeof createServerSupabase>,
   complexIds: number[],
+  recoverMasterRegions = false,
+  missingDistrictIds: string[] = [],
 ): Promise<Map<string, ComplexScopeMeta>> {
   if (complexIds.length === 0) return new Map();
 
@@ -374,6 +377,29 @@ async function fetchComplexScopeMetaMap(
       if (!key || result.has(key)) continue;
 
       result.set(key, getScopeMetaByPrefix(resolveScopePrefix(row)));
+    }
+
+    if (recoverMasterRegions) {
+      // Reuse the existing apt_complex.region_id -> region_dim fallback used by
+      // the query layer. Never infer a province from an ambiguous district name.
+      const missing = complexIds.filter(id => !result.get(String(id))?.shortLabel || missingDistrictIds.includes(String(id)));
+      if (missing.length) {
+        const masters = await supabase.from("apt_complex").select("complex_id,region_id").in("complex_id", missing);
+        const regionIds = [...new Set((masters.data ?? []).map(row => row.region_id).filter(id => id != null))];
+        if (!masters.error && regionIds.length) {
+          const regions = await supabase.from("region_dim").select("region_id,region_code,region_name_ko").eq("region_type", "sigungu").in("region_id", regionIds);
+          if (!regions.error) {
+            const byId = new Map((regions.data ?? []).map(row => [row.region_id, row]));
+            for (const row of masters.data ?? []) {
+              const region = byId.get(row.region_id);
+              if (!region || !/^\d{5}$/.test(String(region.region_code))) continue;
+              const existing = result.get(String(row.complex_id));
+              const fallback = getScopeMetaByPrefix(String(region.region_code).slice(0, 2));
+              result.set(String(row.complex_id), { ...(existing?.shortLabel ? existing : fallback), districtName: region.region_name_ko });
+            }
+          }
+        }
+      }
     }
 
     return result;
@@ -411,7 +437,7 @@ function buildDistrictIdentity(
   scopeMeta: ComplexScopeMeta | null,
 ) {
   const district =
-    typeof row.sigungu_name === "string" ? row.sigungu_name.trim() : "";
+    (typeof row.sigungu_name === "string" ? row.sigungu_name.trim() : "") || scopeMeta?.districtName || "";
 
   if (!district) {
     if (isSggUniverseRequest(universeCode)) {
@@ -555,6 +581,7 @@ async function rowsToMapPayload(
     renderedLimit: number;
     source: "live_latest";
     includeChanges: boolean;
+    completeTop1000?: boolean;
   },
 ): Promise<MapPayload> {
   const comparisonsPromise = options.includeChanges
@@ -564,7 +591,7 @@ async function rowsToMapPayload(
   const complexIds = extractComplexIds(rows);
   const scopeMetaMap =
     universeCode === DEFAULT_UNIVERSE_CODE
-      ? await fetchComplexScopeMetaMap(supabase, complexIds)
+      ? await fetchComplexScopeMetaMap(supabase, complexIds, options.completeTop1000, rows.filter(row => !row.sigungu_name?.trim()).map(row => String(row.complex_id)))
       : new Map<string, ComplexScopeMeta>();
 
   const grouped = new Map<
@@ -592,11 +619,15 @@ async function rowsToMapPayload(
 
     const scopeMeta = complexId ? scopeMetaMap.get(complexId) ?? null : null;
 
-    const { groupKey, displayName, query } = buildDistrictIdentity(
+    const districtIdentity = buildDistrictIdentity(
       row,
       universeCode,
       scopeMeta,
     );
+    const unresolved = options.completeTop1000 && (!districtIdentity.groupKey || (universeCode === DEFAULT_UNIVERSE_CODE && !scopeMeta?.shortLabel));
+    const { groupKey, displayName, query } = unresolved
+      ? { groupKey: "unclassified", displayName: "지역 확인 중", query: "" }
+      : districtIdentity;
 
     if (!groupKey || !displayName) continue;
     const members = membersByGroup.get(groupKey) ?? [];
@@ -755,6 +786,10 @@ async function rowsToMapPayload(
     requestedLimit: options.requestedLimit,
     renderedLimit: options.renderedLimit,
     ...buildMapAggregationMetadata(options.renderedLimit, rows.length),
+    ...(options.completeTop1000 ? {
+      aggregationBasis: "PUBLISHED_TOP1000" as const,
+      unclassifiedCount: items.find(item => item.name === "지역 확인 중")?.count ?? 0,
+    } : {}),
     resultCount: items.length,
     mapScopeLabel: getUniverseLabel(universeCode),
     isFallback: Boolean(fallbackIdentity),
@@ -774,6 +809,7 @@ async function fetchMapPayloadFromLatestBoard(
   universeCode: string,
   requestedLimit: number,
   includeChanges: boolean,
+  completeTop1000 = false,
 ): Promise<MapPayload> {
   const retryLimits = getRetryLimits(requestedLimit);
   let lastError: unknown = new Error("MAP_FAILED");
@@ -798,19 +834,21 @@ async function fetchMapPayloadFromLatestBoard(
             rank_all,
             rank_delta_w,
             market_cap_krw
-          `,
+          `, completeTop1000 ? { count: "exact" } : undefined,
         )
         .eq("surface_code", "UNIVERSE_SERVICE")
         .eq("universe_code", universeCode)
         .order("rank_all", { ascending: true })
         .limit(attemptLimit);
+      if (completeTop1000) queryPromise.gte("rank_all", 1).lte("rank_all", 1000);
 
       const queryResult = await withTimeout<{
         data: any[] | null;
         error: { message: string } | null;
+        count?: number | null;
       }>(
         queryPromise,
-        universeCode === DEFAULT_UNIVERSE_CODE
+        completeTop1000 ? 4000 : universeCode === DEFAULT_UNIVERSE_CODE
           ? LATEST_MAP_TIMEOUT_MS_KOREA
           : LATEST_MAP_TIMEOUT_MS_REGIONAL,
       );
@@ -818,6 +856,9 @@ async function fetchMapPayloadFromLatestBoard(
       const { data, error } = queryResult;
       if (error) throw error;
       const rows = data ?? [];
+      if (completeTop1000 && (queryResult.count !== rows.length || rows.length === 0 || new Set(rows.map(row => String(row.complex_id))).size !== rows.length || rows.some((row, i) => Number(row.rank_all) !== i + 1 || !Number.isSafeInteger(Number(row.market_cap_krw)) || Number(row.market_cap_krw) <= 0))) {
+        throw new Error("Incomplete published TOP1000 aggregation");
+      }
       const identity = requireUniformUniverseServicePublication(
         rows,
         universeCode,
@@ -828,6 +869,7 @@ async function fetchMapPayloadFromLatestBoard(
         renderedLimit: attemptLimit,
         source: "live_latest",
         includeChanges,
+        completeTop1000,
       });
     } catch (error) {
       lastError = error;
@@ -855,12 +897,14 @@ async function fetchMapPayload(
   universeCode: string,
   requestedLimit: number,
   includeChanges: boolean,
+  completeTop1000 = false,
 ): Promise<MapPayload> {
   return fetchMapPayloadFromLatestBoard(
     supabase,
     universeCode,
     requestedLimit,
     includeChanges,
+    completeTop1000,
   );
 }
 
@@ -896,7 +940,8 @@ export async function GET(request: NextRequest) {
 
   const universeCode = universeResolution.renderedUniverseCode;
 
-  const limit = parseLimit(
+  const completeTop1000 = searchParams.get("aggregation") === "top1000";
+  const limit = completeTop1000 ? 1000 : parseLimit(
     searchParams.get("limit"),
     getDefaultMapLimit(universeCode),
     20,
@@ -905,7 +950,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = createServerSupabase();
-    const payload = await fetchMapPayload(supabase, universeCode, limit, searchParams.get("include_changes") === "1");
+    const payload = await fetchMapPayload(supabase, universeCode, limit, !completeTop1000 && searchParams.get("include_changes") === "1", completeTop1000);
 
     return NextResponse.json(
       {

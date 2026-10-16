@@ -44,6 +44,9 @@ type MapPayload = {
   requestedUniverseCode?: string;
   renderedUniverseCode?: string;
   renderedLimit?: number;
+  aggregationBasis?: string;
+  sourceRowsUsed?: number;
+  unclassifiedCount?: number;
   resultCount?: number;
   snapshot_date?: string | null;
   reason?: string | null;
@@ -79,9 +82,9 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
     if (universeUnavailable) return;
     const controller = new AbortController();
     let active = true;
-    const timeout = window.setTimeout(() => controller.abort(), 5_000);
+    const timeout = window.setTimeout(() => controller.abort(), 10_000);
 
-    void fetch(`/api/map?universe_code=${encodeURIComponent(universeCode)}`, { cache: "no-store", signal: controller.signal })
+    void fetch(`/api/map?universe_code=${encodeURIComponent(universeCode)}&aggregation=top1000`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const payload = (await response.json()) as MapPayload;
         if (
@@ -89,7 +92,8 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
           payload.ok !== true ||
           payload.requestedUniverseCode !== universeCode ||
           payload.renderedUniverseCode !== universeCode ||
-          !Array.isArray(payload.items)
+          !Array.isArray(payload.items) || payload.aggregationBasis !== "PUBLISHED_TOP1000" ||
+          payload.items.reduce((sum, item) => sum + item.count, 0) !== payload.sourceRowsUsed
         ) {
           throw new Error(
             "선택한 지역의 공개 분포를 불러오지 못했습니다.",
@@ -242,7 +246,8 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
       </div>
       {state.status === "ready" ? (
         <p className="mt-5 text-caption leading-copy text-muted">
-          공개 랭킹 단지 {state.payload.renderedLimit ?? "—"}개의 시가총액을 지역별로 더했어요. 지역 전체 아파트의 합계는 아닙니다.
+          공개 TOP{state.payload.sourceRowsUsed ?? "—"} 전체의 지역별 합계 · 상위 7개 지역 표시 · 지역 전체 아파트의 합계는 아니에요.
+          {state.payload.unclassifiedCount ? ` 지역 확인 중 ${state.payload.unclassifiedCount}개도 집계에 포함했어요.` : ""}
           {state.payload.snapshot_date
             ? ` · ${state.payload.snapshot_date} 기준`
             : ""}

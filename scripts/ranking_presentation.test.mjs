@@ -5,10 +5,14 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
 const path = new URL("../src/lib/koaptix/rankingPresentation.ts", import.meta.url);
+const comparison = { exports: {} };
+runInNewContext(ts.transpileModule(readFileSync(new URL("../src/lib/koaptix/weeklyRankComparison.ts", import.meta.url), "utf8"), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText, { module: comparison, exports: comparison.exports });
 const module = { exports: {} };
 runInNewContext(ts.transpileModule(readFileSync(path, "utf8"), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
-}).outputText, { module, exports: module.exports });
+}).outputText, { module, exports: module.exports, require: name => { assert.equal(name, "./weeklyRankComparison"); return comparison.exports; } });
 const { formatRankMovement, formatMarketCapMovement, formatRankTransition, selectMovementHighlights } = module.exports;
 
 test("rank gains and capital losses remain separate, with explicit units", () => {

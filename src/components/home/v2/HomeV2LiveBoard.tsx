@@ -5,12 +5,13 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useBookmarks } from "../../../hooks/useBookmarks";
-import type { RankingItem } from "../../../lib/koaptix/types";
+import type { RankingItem, WeeklyRankComparisonMetadata } from "../../../lib/koaptix/types";
 import { HomeV2SectionHeading } from "./HomeV2SectionHeading";
 import UniverseSelector from "../UniverseSelector";
 import ComparisonSheet from "../ComparisonSheet";
 import { getHomeUniverseRegistry } from "../../../lib/koaptix/universes";
-import { formatMarketCapMovement, formatRankMovement, formatRankTransition, selectMovementHighlights } from "../../../lib/koaptix/rankingPresentation";
+import { formatMarketCapMovement, formatRankMovement, selectMovementHighlights } from "../../../lib/koaptix/rankingPresentation";
+import { commonRankDelta, commonRankTransition, needsMarketCapReview } from "../../../lib/koaptix/weeklyRankComparison";
 import { HomeV2MovementTicker } from "./HomeV2MovementTicker";
 
 type RankingsPayload = {
@@ -23,6 +24,7 @@ type RankingsPayload = {
   latestBoardDate?: string | null;
   reason?: string | null;
   items?: RankingItem[];
+  weeklyRankComparison?: WeeklyRankComparisonMetadata;
 };
 
 type BoardState =
@@ -97,7 +99,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
     let active = true;
     const timeout = window.setTimeout(() => controller.abort(), 15_000);
 
-    void fetch(`/api/ranking?universe=${encodeURIComponent(universeCode)}&limit=1000`, {
+    void fetch(`/api/ranking?universe=${encodeURIComponent(universeCode)}&limit=1000&comparison=common`, {
       cache: "no-store",
       signal: controller.signal,
     })
@@ -147,7 +149,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
 
   const items = state.items;
   const boardDate = state.status === "ready" ? state.metadata.latestBoardDate ?? state.metadata.snapshot_date ?? null : null;
-  const tickerItems = useMemo(() => selectMovementHighlights(items, boardDate), [items, boardDate]);
+  const tickerItems = useMemo(() => selectMovementHighlights(items, boardDate, "common"), [items, boardDate]);
   const needsNationalWatchlist = isLoaded && bookmarks.length > 0 && universeCode !== "KOREA_ALL";
   const watchlistPending = needsNationalWatchlist && nationalWatchlistState === "pending";
   const watchlistError = state.status === "error" || (needsNationalWatchlist && nationalWatchlistState === "error");
@@ -156,7 +158,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
     const controller = new AbortController();
     let active = true;
     const timeout = window.setTimeout(() => controller.abort(), 15_000);
-    void fetch("/api/ranking?universe=KOREA_ALL&limit=1000", { cache: "no-store", signal: controller.signal })
+    void fetch("/api/ranking?universe=KOREA_ALL&limit=1000&comparison=common", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const payload = (await response.json()) as RankingsPayload;
         if (!response.ok || payload.ok !== true || payload.requestedUniverseCode !== "KOREA_ALL" || payload.renderedUniverseCode !== "KOREA_ALL" || !Array.isArray(payload.items)) throw new Error("watchlist_read_failed");
@@ -170,24 +172,24 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
   const rising = useMemo(
     () =>
       [...items]
-        .filter((item) => (item.rankDelta7d ?? 0) > 0)
-        .sort((a, b) => (b.rankDelta7d ?? 0) - (a.rankDelta7d ?? 0))
-        .slice(0, 3),
+        .filter((item) => (commonRankDelta(item) ?? 0) > 0)
+        .sort((a, b) => (commonRankDelta(b) ?? 0) - (commonRankDelta(a) ?? 0))
+        .slice(0, 2),
     [items],
   );
   const falling = useMemo(
     () =>
       [...items]
-        .filter((item) => (item.rankDelta7d ?? 0) < 0)
-        .sort((a, b) => (a.rankDelta7d ?? 0) - (b.rankDelta7d ?? 0))
-        .slice(0, 3),
+        .filter((item) => (commonRankDelta(item) ?? 0) < 0)
+        .sort((a, b) => (commonRankDelta(a) ?? 0) - (commonRankDelta(b) ?? 0))
+        .slice(0, 2),
     [items],
   );
-  const knownMovement = items.filter((item) => Number.isFinite(item.rankDelta7d));
+  const knownMovement = items.filter((item) => Number.isFinite(commonRankDelta(item)));
   const movementCounts = {
-    rising: knownMovement.filter((item) => (item.rankDelta7d ?? 0) > 0)
+    rising: knownMovement.filter((item) => (commonRankDelta(item) ?? 0) > 0)
       .length,
-    falling: knownMovement.filter((item) => (item.rankDelta7d ?? 0) < 0)
+    falling: knownMovement.filter((item) => (commonRankDelta(item) ?? 0) < 0)
       .length,
   };
   const watchlistById = new Map([...nationalItems, ...items].map((item) => [item.complexId, item]));
@@ -230,9 +232,11 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
         </div>
 
         <p className="mt-3 text-caption leading-copy text-muted" data-testid="home-ranking-scope">
-          {state.status === "ready" ? `랭킹 기준일 ${state.metadata.latestBoardDate ?? state.metadata.snapshot_date ?? "확인 중"} · 공개된 ${items.length.toLocaleString("ko-KR")}개 단지 중 상위 ${Math.min(8, items.length)}개 표시` : universeUnavailable ? "선택한 지역의 랭킹은 아직 공개되지 않았어요." : "랭킹의 기준 날짜와 포함된 단지를 확인하고 있어요."}
-          {" · 위 합계와 포함된 단지가 달라요."}
+          {state.status === "ready" ? `랭킹 기준일 ${state.metadata.latestBoardDate ?? state.metadata.snapshot_date ?? "확인 중"} · 공개 TOP${items.length.toLocaleString("ko-KR")} · 상위 ${Math.min(8, items.length)}개 표시` : universeUnavailable ? "선택한 지역의 랭킹은 아직 공개되지 않았어요." : "랭킹의 기준 날짜와 포함된 단지를 확인하고 있어요."}
         </p>
+        {state.status === "ready" && state.metadata.weeklyRankComparison?.status === "unavailable" ? (
+          <p className="mt-3 text-caption text-muted" role="status">공통 단지 전체를 확인하지 못해 주간 비교는 잠시 비워 뒀어요. 현재 공표 순위는 그대로 볼 수 있어요.</p>
+        ) : null}
 
         <div className="home-v2-region-selector mt-6">
           <UniverseSelector value={universeCode} options={universeOptions} density="compact" onChange={(code) => router.push(`/?universe=${encodeURIComponent(code)}#koaptix-500`)} />
@@ -250,7 +254,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
             <span>아파트</span>
             <span>지역</span>
             <span className="text-right">추정 시가총액</span>
-            <span className="text-right">주간 순위 변화</span>
+            <span className="text-right">주간 비교 · 공통 단지</span>
             <span />
             <span>비교</span>
           </div>
@@ -306,9 +310,9 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
                   {marketCapLabel(item)}
                 </span>
                 <span
-                  className={`hidden text-right font-mono tabular-nums text-xs font-semibold md:block ${movementTone(item.rankDelta7d)}`}
+                  className={`hidden text-right font-mono tabular-nums text-xs font-semibold md:block ${movementTone(commonRankDelta(item))}`}
                 >
-                  {formatRankMovement(item.rankDelta7d)}
+                  {formatRankMovement(commonRankDelta(item))}
                 </span>
                 <button
                   type="button"
@@ -339,9 +343,10 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
       <section className="order-4 border-b border-[var(--ko-border)] py-8 lg:order-4 lg:border-b-0 lg:border-l lg:pl-7">
         {rising.length || falling.length ? <>
         <HomeV2SectionHeading
-          title="이번 주 순위가 많이 바뀐 단지"
-          note="시가총액 순위의 변화예요. 금액 변화와 구분해 보세요."
+          title="같은 단지끼리 순위가 바뀐 곳"
+          note="전주·금주 공통 단지 안에서 비교한 순위예요."
         />
+        <p className="mt-3 text-caption text-muted">{state.metadata?.weeklyRankComparison?.previousSnapshotDate} → {boardDate} · 공통 {state.metadata?.weeklyRankComparison?.commonComplexCount?.toLocaleString("ko-KR")}개 · 상승·하락 각 최대 2개</p>
         <div className="mt-6 grid grid-cols-2 gap-5 lg:grid-cols-1 lg:gap-6">
           {[
             { label: "순위 상승", items: rising, tone: "text-up" },
@@ -366,11 +371,11 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
                       <span
                         className={`mt-2 block tabular-nums font-semibold ${group.tone}`}
                       >
-                        {formatRankMovement(item.rankDelta7d)}
+                        {formatRankMovement(commonRankDelta(item))}
                       </span>
-                      <span className="mt-1 block text-caption tabular-nums text-muted">{formatRankTransition(item) ?? `현재 ${item.rank.toLocaleString("ko-KR")}위`}</span>
+                      <span className="mt-1 block text-caption tabular-nums text-muted">{commonRankTransition(item) ?? `현재 ${item.rank.toLocaleString("ko-KR")}위`}</span>
                       <span className="mt-1 block text-caption tabular-nums text-muted">{formatMarketCapMovement(item.marketCapDeltaPct7d)}</span>
-                      {item.historySnapshotDate && item.snapshotDate ? <span className="mt-2 block text-caption text-muted">{item.historySnapshotDate} → {item.snapshotDate}</span> : null}
+                      {needsMarketCapReview(item) ? <span className="mt-1 block text-caption font-semibold text-muted">큰 변동 · 계산 입력 확인 필요</span> : null}
                     </Link>
                   ))
                 ) : (
@@ -382,11 +387,11 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
             </div>
           ))}
         </div>
-        <p className="ko-copy mt-4 text-caption text-muted">순위는 비교 대상 단지 구성의 영향도 받아요. 시총 변화는 단지 전체의 추정 가치 변화이며, 집 한 채의 가격 변동률과 달라요.</p>
+        <p className="ko-copy mt-4 text-caption text-muted">비교 순위는 현재 공표 순위와 별개예요. 시총은 거래 외에 계산 입력 변경의 영향도 받아요. ±30% 이상은 확인 필요 표시를 붙여요.</p>
         <div className="mt-4 flex flex-wrap gap-5 text-control text-accent"><Link className="ko-text-link" href={`${rankingHref}&sort=rank-up`}>순위가 많이 오른 순으로 보기 ↗</Link><Link className="ko-text-link" href={`${rankingHref}&sort=cap-up`}>시총 증가율순으로 보기 ↗</Link></div>
         </> : <details>
           <summary className="cursor-pointer text-control font-semibold text-ink">이번 주 순위가 많이 바뀐 단지 · {state.status === "loading" && !universeUnavailable ? "공개 자료 확인 중" : state.status === "error" || universeUnavailable ? "공개 자료를 불러오지 못했어요" : knownMovement.length ? "순위 변화 없음" : "지난주 비교 자료 준비 중"}</summary>
-          <p className="ko-copy mt-3 text-sm text-muted">지난주와 비교할 자료가 있으면 순위가 오른·내린 단지를 보여드려요. 자료가 없는 경우와 순위가 그대로인 경우는 구분합니다. 집값의 상승·하락을 뜻하지 않아요.</p>
+          <p className="ko-copy mt-3 text-sm text-muted">공통 단지 전체를 확인한 뒤 비교해요. 비교 자료를 불러오지 못하면 기존 공표 순위의 차이로 대신 표시하지 않아요.</p>
         </details>}
       </section>
 
@@ -397,8 +402,8 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
       >
         {knownMovement.length ? <>
         <HomeV2SectionHeading
-          title="이번 주 순위 변화 요약"
-          note={`${universeLabel} · 공개 랭킹 최대 1,000개 기준`}
+          title="같은 단지끼리 주간 순위 비교"
+          note={`${universeLabel} · 현재 TOP1000 중 비교 가능한 단지`}
         />
         <div className="mt-5 grid grid-cols-3 divide-x divide-slate-200/70 py-3">
           {[
@@ -429,7 +434,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
           ))}
         </div>
         <p className="mt-3 text-caption leading-copy text-muted">
-          {state.status === "ready" ? `${state.metadata.latestBoardDate ?? state.metadata.snapshot_date ?? "기준일 확인 중"} 기준 · ${universeLabel} 공개 단지 ${items.length}개 중 주간 비교 가능 ${knownMovement.length}개입니다.` : universeUnavailable ? "이 지역의 랭킹은 아직 공개되지 않았어요." : state.status === "error" ? "랭킹을 불러오지 못해 순위 변화를 보여드릴 수 없어요." : "공개 랭킹의 주간 변화를 확인하고 있습니다."} 지역 전체의 집값 변화를 뜻하지 않아요.
+          {state.status === "ready" ? `${state.metadata.weeklyRankComparison?.previousSnapshotDate ?? "전주"} → ${boardDate} · 양쪽에 모두 있던 ${state.metadata.weeklyRankComparison?.commonComplexCount?.toLocaleString("ko-KR") ?? "확인 중"}개 내 순위를 비교해요. 현재 TOP${items.length} 중 ${knownMovement.length}개를 요약했어요.` : universeUnavailable ? "이 지역의 랭킹은 아직 공개되지 않았어요." : state.status === "error" ? "랭킹을 불러오지 못해 순위 변화를 보여드릴 수 없어요." : "공개 랭킹의 주간 변화를 확인하고 있습니다."} 지역 전체의 집값 변화를 뜻하지 않아요.
         </p>
         {state.status === "ready" && knownMovement.length && !movementCounts.rising && !movementCounts.falling ? <p className="mt-2 text-caption text-muted">비교할 수 있는 단지들의 순위는 지난주와 같아요.</p> : null}
         <div className="mt-4 flex flex-wrap gap-5 text-control font-semibold text-accent">

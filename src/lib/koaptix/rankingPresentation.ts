@@ -1,4 +1,5 @@
 import type { RankingItem } from "./types";
+import { commonRankDelta } from "./weeklyRankComparison";
 
 const integerFormat = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 });
 const percentFormat = new Intl.NumberFormat("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -12,6 +13,7 @@ export function parseRankingSort(value: string | null | undefined): RankingSort 
 export function sortRankingItems(items: readonly RankingItem[], sort: RankingSort): RankingItem[] {
   const value = (item: RankingItem): number | null => {
     if (sort === "rank") return item.rank;
+    if (sort.startsWith("rank-") && "weeklyRankComparison" in item) return commonRankDelta(item);
     if (!item.snapshotDate || !item.historySnapshotDate ||
       new Date(item.snapshotDate + "T00:00:00Z").getTime() - new Date(item.historySnapshotDate + "T00:00:00Z").getTime() !== 7 * 86_400_000) return null;
     const delta = sort.startsWith("cap-") ? item.marketCapDeltaPct7d : item.rankDelta7d;
@@ -45,8 +47,11 @@ export function formatRankTransition(item: Pick<RankingItem, "previousRankAll" |
 }
 
 /** Present only the existing published values for the selected board/date. */
-export function selectMovementHighlights(items: readonly RankingItem[], snapshotDate: string | null): RankingItem[] {
+export function selectMovementHighlights(items: readonly RankingItem[], snapshotDate: string | null, basis: "published" | "common" = "published"): RankingItem[] {
   if (!snapshotDate) return [];
+  if (basis === "common") return items.filter(item => item.snapshotDate === snapshotDate && commonRankDelta(item) !== null &&
+    (commonRankDelta(item) !== 0 || (typeof item.marketCapDeltaPct7d === "number" && Number.isFinite(item.marketCapDeltaPct7d) && item.marketCapDeltaPct7d !== 0)))
+    .sort((a, b) => Math.abs(commonRankDelta(b) ?? 0) - Math.abs(commonRankDelta(a) ?? 0) || a.rank - b.rank).slice(0, 8);
   return items
     .filter(item => item.snapshotDate === snapshotDate && typeof item.historySnapshotDate === "string" &&
       /^\d{4}-\d{2}-\d{2}$/.test(item.historySnapshotDate) &&

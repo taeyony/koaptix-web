@@ -21,6 +21,7 @@ import type {
   RankMovement,
 } from "./types";
 import { requireUniformUniverseServicePublication } from "./currentness";
+import { buildCommonRankComparisons, previousWeekDate, type CommonRankSourceRow } from "./weeklyRankComparison";
 import {
   KOAPTIX_OFFICIAL_BASE_DATE,
   KOAPTIX_PUBLIC_EXPOSURE_BLOCKED,
@@ -557,6 +558,52 @@ function buildRankBoardRetryLimits(
 const HOME_TACTICAL_RANK_BOARD_LIMIT = 20;
 const PUBLISHED_UNIVERSE_SERVICE_VIEW =
   "v_koaptix_latest_board_read_model_published";
+
+/** Read the complete current population, pinned to the caller's publication.
+ * Stored exact-week predecessors are reused; no price/eligibility recalculation.
+ */
+export async function getCommonWeeklyRankComparisons(currentRows: DbLatestRankBoardRow[]) {
+  const identity = requireUniformUniverseServicePublication(currentRows);
+  const supabase = createServerSupabase();
+  const pageSize = 1000;
+  const readPage = (offset: number) => withLocalQueryTimeout(
+    supabase.from(PUBLISHED_UNIVERSE_SERVICE_VIEW)
+      .select("generation_id,publication_version,publication_event_id,published_at,surface_code,snapshot_date,universe_code,complex_id,rank_all,previous_rank_all", { count: "exact" })
+      .eq("surface_code", "UNIVERSE_SERVICE").eq("universe_code", identity.universe_code)
+      .eq("generation_id", identity.generation_id).eq("publication_version", identity.publication_version)
+      .eq("snapshot_date", identity.snapshot_date).order("rank_all", { ascending: true })
+      .range(offset, offset + pageSize - 1),
+    4000, "COMMON_RANK_POPULATION_TIMEOUT",
+  );
+  const [first, currentness] = await Promise.all([
+    readPage(0),
+    withLocalQueryTimeout(supabase.from("v_koaptix_latest_board_publication_currentness")
+      .select("generation_id,publication_version,publication_event_id,published_at,surface_code,snapshot_date,universe_code,source_previous_snapshot_date,row_count")
+      .eq("surface_code", "UNIVERSE_SERVICE").eq("universe_code", identity.universe_code)
+      .eq("generation_id", identity.generation_id).eq("publication_version", identity.publication_version).maybeSingle(),
+    4000, "COMMON_RANK_CURRENTNESS_TIMEOUT"),
+  ]);
+  const pages = [first];
+  if (first.error || first.count == null || first.count < 1 || first.count > 20_000) throw new Error("Common rank population unavailable");
+  if (currentness.error || !currentness.data || Number(currentness.data.row_count) !== first.count || currentness.data.source_previous_snapshot_date !== previousWeekDate(identity.snapshot_date)) {
+    throw new Error("Exact weekly population provenance unavailable");
+  }
+  // At most three requests at once; never calculate from a truncated population.
+  for (let offset = pageSize; offset < first.count; offset += pageSize * 3) {
+    const offsets = [offset, offset + pageSize, offset + pageSize * 2].filter(value => value < first.count!);
+    pages.push(...await Promise.all(offsets.map(readPage)));
+  }
+  if (pages.some(page => page.error || page.count !== first.count)) throw new Error("Incomplete common rank pages");
+  const rows = pages.flatMap(page => page.data ?? []);
+  const selected = requireUniformUniverseServicePublication([...currentRows, currentness.data, ...rows], identity.universe_code);
+  if (selected.generation_id !== identity.generation_id) throw new Error("Common rank publication changed");
+  const byId = new Map(rows.map(row => [String(row.complex_id), row]));
+  if (currentRows.some(row => {
+    const other = byId.get(String(row.complex_id));
+    return !other || Number(other.rank_all) !== Number(row.rank_all) || Number(other.previous_rank_all) !== Number(row.previous_rank_all);
+  })) throw new Error("Common rank input mismatch");
+  return buildCommonRankComparisons(rows.map(row => ({ ...row, source_previous_snapshot_date: currentness.data!.source_previous_snapshot_date })) as CommonRankSourceRow[], first.count, identity.snapshot_date);
+}
 
 /**
  * Home initial SSR seed path.

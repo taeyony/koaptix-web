@@ -5,6 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 import { ModuleKind, transpileModule } from "typescript";
 import * as indexContract from "../src/types/koaptix";
+import * as weeklyComparison from "../src/lib/koaptix/weeklyRankComparison";
 
 import {
   requirePublicationIdentity,
@@ -203,8 +204,10 @@ test("rank readers use the published surface and forbid independent latest label
       /v_koaptix_rank_latest_dynamic|v_koaptix_latest_board_compat/,
       `${name} identity-less fallback`,
     );
+    const rankSource = name === "queries" ? source.replace(sourceBetween(source,
+      "export async function getCommonWeeklyRankComparisons(", "export async function getLatestRankBoard("), "") : source;
     assert.doesNotMatch(
-      source,
+      rankSource,
       /v_koaptix_latest_board_publication_currentness/,
       `${name} later identity-label query`,
     );
@@ -322,6 +325,37 @@ test("rank routes have private no-store and no cross-request rank caches", () =>
   }
 });
 
+test("common-cohort reader requires complete pages and the same exact-week publication", async () => {
+  const rows = Array.from({ length: 1001 }, (_, i) => serviceRow({ complex_id: i + 1, rank_all: i + 1, previous_rank_all: 1001 - i }));
+  async function run(mode: "valid" | "partial" | "pointer-flip" | "metadata-flip" | "wrong-week") {
+    const metadata = currentnessRow("UNIVERSE_SERVICE", { row_count: rows.length, source_previous_snapshot_date: mode === "wrong-week" ? "2026-07-23" : "2026-07-24", ...(mode === "metadata-flip" ? { generation_id: GENERATION_G2 } : {}) });
+    const client = { from() { return {
+      select() { return this; }, eq() { return this; }, order() { return this; },
+      async maybeSingle() { return { data: metadata, error: null }; },
+      async range(start: number, end: number) {
+        const data = mode === "partial" && start > 0 ? [] : rows.slice(start, end + 1).map(row => mode === "pointer-flip" && start > 0 ? { ...row, generation_id: GENERATION_G2 } : row);
+        return { data, count: rows.length, error: null };
+      },
+    }; } };
+    const moduleRef = { exports: {} as Pick<typeof import("../src/lib/koaptix/queries"), "getCommonWeeklyRankComparisons"> };
+    runInNewContext(transpileModule(readSource("src/lib/koaptix/queries.ts"), { compilerOptions: { module: ModuleKind.CommonJS } }).outputText, {
+      module: moduleRef, exports: moduleRef.exports, setTimeout, clearTimeout,
+      process: { env: { NEXT_PUBLIC_SUPABASE_URL: "https://test.invalid", NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-only" } },
+      require(name: string) {
+        if (name === "@supabase/supabase-js") return { createClient: () => client };
+        if (name === "./currentness") return { requireUniformUniverseServicePublication };
+        if (name === "./weeklyRankComparison") return weeklyComparison;
+        if (name === "./universes") return {};
+        if (name === "../../types/koaptix") return indexContract;
+        throw new Error("Unexpected comparison dependency: " + name);
+      },
+    });
+    return moduleRef.exports.getCommonWeeklyRankComparisons(rows.slice(0, 2) as import("../src/lib/koaptix/types").DbLatestRankBoardRow[]);
+  }
+  assert.equal((await run("valid")).commonComplexCount, 1001);
+  for (const mode of ["partial", "pointer-flip", "metadata-flip", "wrong-week"] as const) await assert.rejects(run(mode));
+});
+
 test("currentness endpoint returns sanitized DB publication state with deploy state", () => {
   const source = readSource("src/app/api/currentness/route.ts");
   assert.match(source, /v_koaptix_latest_board_publication_currentness/);
@@ -387,6 +421,7 @@ function loadIndexHistoryFixture() {
       if (name === "@supabase/supabase-js") return { createClient: () => client };
       if (name === "./universes") return { DEFAULT_UNIVERSE_CODE: "KOREA_ALL", resolveServiceUniverseCode: (code: string) => code, getUniverseLabel: () => "대한민국 전체" };
       if (name === "./currentness") return {};
+      if (name === "./weeklyRankComparison") return {};
       if (name === "../../types/koaptix") return indexContract;
       throw new Error("Unexpected history dependency: " + name);
     },

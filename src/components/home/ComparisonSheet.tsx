@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { buildComparisonSharePath, isComparisonDate } from "../../lib/koaptix/complexShare";
 import { resolveUniverseRequest, getUniverseLabel } from "../../lib/koaptix/universes";
+import { commonRankDelta } from "../../lib/koaptix/weeklyRankComparison";
+import type { RankingItem } from "../../lib/koaptix/types";
 
 type ComparisonSheetProps = {
   open: boolean;
@@ -88,7 +90,8 @@ function getMarketCap(item: unknown): number | null {
   return readNumber(item, ["marketCapTrillionKrw", "total_market_cap"]);
 }
 
-function getWeeklyMomentum(item: unknown): number | null {
+function getWeeklyMomentum(item: unknown, common = false): number | null {
+  if (common) return commonRankDelta(toRecord(item) as Pick<RankingItem, "snapshotDate" | "weeklyRankComparison">);
   return readNumber(item, ["rankDelta7d", "weekly_momentum"]);
 }
 
@@ -148,8 +151,14 @@ function getWinnerSide(leftValue: number | null, rightValue: number | null, comp
 function buildMetricRows(leftItem: unknown, rightItem: unknown): MetricDefinition[] {
   const leftMarketCap = getMarketCap(leftItem);
   const rightMarketCap = getMarketCap(rightItem);
-  const leftMomentum = getWeeklyMomentum(leftItem);
-  const rightMomentum = getWeeklyMomentum(rightItem);
+  const common = "weeklyRankComparison" in toRecord(leftItem) || "weeklyRankComparison" in toRecord(rightItem);
+  const leftComparison = toRecord(toRecord(leftItem).weeklyRankComparison);
+  const rightComparison = toRecord(toRecord(rightItem).weeklyRankComparison);
+  const sameCohort = !common || (toRecord(leftItem).snapshotDate === toRecord(rightItem).snapshotDate &&
+    toRecord(leftItem).universeCode === toRecord(rightItem).universeCode &&
+    leftComparison.previousSnapshotDate === rightComparison.previousSnapshotDate && leftComparison.cohortSize === rightComparison.cohortSize);
+  const leftMomentum = sameCohort ? getWeeklyMomentum(leftItem, common) : null;
+  const rightMomentum = sameCohort ? getWeeklyMomentum(rightItem, common) : null;
   const leftRecovery = getRecovery52w(leftItem);
   const rightRecovery = getRecovery52w(rightItem);
   const leftHouseholds = getHouseholds(leftItem);
@@ -167,7 +176,7 @@ function buildMetricRows(leftItem: unknown, rightItem: unknown): MetricDefinitio
       compare: "higher",
     },
     {
-      label: "주간 순위 변화",
+      label: common ? "주간 비교 · 공통 단지 내" : "공표 순위 차이",
       leftValue: leftMomentum,
       rightValue: rightMomentum,
       displayLeft: leftMomentum === null ? "비교 자료 없음" : `${formatSigned(leftMomentum)}계단`,

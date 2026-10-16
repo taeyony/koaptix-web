@@ -2,6 +2,7 @@
 
 import { formatMarketCapKrw } from "../../lib/formatters";
 import type { RankMovement, RankingItem } from "../../lib/koaptix/types";
+import { commonRankDelta, commonRankMovement, commonRankTransition, needsMarketCapReview } from "../../lib/koaptix/weeklyRankComparison";
 
 interface RankingCardProps {
   item: RankingItem;
@@ -20,6 +21,9 @@ type RankingItemWeeklyMeta = {
 };
 
 function getAuthoritativeMovement(item: RankingItem): RankMovement | null {
+  if ("weeklyRankComparison" in item) {
+    return commonRankMovement(item);
+  }
   const value = item.rankMovement ?? item.rank_movement;
   if (value === "NEW" || value === "UP" || value === "DOWN" || value === "SAME") {
     return value;
@@ -105,21 +109,22 @@ export function RankingCard({
   if (variant === "full-board") {
     const movement = getAuthoritativeMovement(item);
     const previousRank = item.previousRankAll ?? item.previous_rank_all ?? null;
-    const rankDelta =
+    const rankDelta = "weeklyRankComparison" in item ? commonRankDelta(item) :
       typeof item.rankDelta7d === "number"
         ? item.rankDelta7d
         : typeof item.rank_delta_w === "number"
           ? item.rank_delta_w
           : null;
-    const movementContext =
-      movement === "NEW"
+    const movementContext = "weeklyRankComparison" in item
+      ? commonRankTransition(item) ?? "공통 단지 비교 자료 없음"
+      : movement === "NEW"
         ? `현재 ${item.rank}위`
         : previousRank !== null
           ? `이전 ${previousRank}위 → 현재 ${item.rank}위`
           : `현재 ${item.rank}위`;
     const movementLabel =
       movement === "NEW"
-        ? "새로 진입"
+        ? "weeklyRankComparison" in item ? "전주 대상에 없던 단지" : "새로 진입"
         : movement === "SAME"
           ? "순위 그대로"
           : movement === "UP"
@@ -233,6 +238,7 @@ export function RankingCard({
                   title={`${previousSnapshotDate} → ${currentSnapshotDate}`}
                 >
                   {formatSignedWeeklyPercent(weeklyCapPercent)}
+                  {needsMarketCapReview(item) ? <span className="block font-medium text-muted">큰 시총 변동 · 계산 입력 확인 필요</span> : null}
                 </p>
               )}
             </div>
@@ -242,7 +248,7 @@ export function RankingCard({
               data-testid="ranking-weekly-rank-movement"
             >
               <p className="text-caption font-semibold uppercase tracking-label opacity-70">
-                이번 주 순위 변화
+                {"weeklyRankComparison" in item ? "주간 비교 · 공통 단지 내" : "공표 순위 차이"}
               </p>
               <p className="mt-1 truncate text-caption font-medium tabular-nums opacity-80 sm:text-xs">
                 {movementContext}

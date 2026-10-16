@@ -15,6 +15,7 @@ import {
 } from "../../../lib/koaptix/universes";
 import {
   getExactWeeklyMarketCapComparisonMap,
+  getCommonWeeklyRankComparisons,
   getLatestRankBoard,
   toNullableNumber,
 } from "../../../lib/koaptix/queries";
@@ -26,6 +27,7 @@ import type {
   PublishedRankingItem,
   RankMovement,
   RankingItem,
+  WeeklyRankComparisonMetadata,
 } from "../../../lib/koaptix/types";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +61,7 @@ type RankingApiResponse = {
   };
   count: number;
   items: PublishedRankingItem[];
+  weeklyRankComparison?: WeeklyRankComparisonMetadata;
   message?: string;
 };
 
@@ -509,9 +512,13 @@ export async function GET(request: NextRequest) {
 
     const identity = requireUniformUniverseServicePublication(rows, universeCode);
     const latestBoardDate = deriveLatestBoardDate(rows);
-    const weeklyCapComparisonByComplexId = latestBoardDate
-      ? await getExactWeeklyMarketCapComparisonMap(latestBoardDate, rows)
-      : new Map();
+    const includeCommonComparison = request.nextUrl.searchParams.get("comparison") === "common";
+    const [weeklyCapComparisonByComplexId, commonComparison] = await Promise.all([
+      latestBoardDate ? getExactWeeklyMarketCapComparisonMap(latestBoardDate, rows) : Promise.resolve(new Map()),
+      includeCommonComparison
+        ? getCommonWeeklyRankComparisons(rows).catch(() => null)
+        : Promise.resolve(null),
+    ]);
     const rowsWithWeeklyCap = rows.map((row) => {
       const complexId = row.complex_id == null ? "" : String(row.complex_id);
       const comparison = weeklyCapComparisonByComplexId.get(complexId);
@@ -528,7 +535,7 @@ export async function GET(request: NextRequest) {
     const fallbackMode = deriveFallbackMode(source);
     const fallbackUsed = fallbackMode !== "none";
     const items = rowsWithWeeklyCap
-      .map((row) => toRankingItem(row, universeCode))
+      .map((row) => ({ ...toRankingItem(row, universeCode), ...(includeCommonComparison ? { weeklyRankComparison: commonComparison?.comparisons.get(String(row.complex_id)) ?? null } : {}) }))
       .filter((item) => matchesTier(item, tier))
       .filter((item) => matchesQuery(item, q));
 
@@ -547,6 +554,16 @@ export async function GET(request: NextRequest) {
       fallbackUsed,
       degraded: fallbackUsed,
       latestBoardDate,
+      ...(includeCommonComparison && latestBoardDate ? {
+        weeklyRankComparison: {
+          status: commonComparison ? "ready" as const : "unavailable" as const,
+          basis: "COMMON_COMPLEXES" as const,
+          snapshotDate: latestBoardDate,
+          previousSnapshotDate: new Date(new Date(latestBoardDate + "T00:00:00Z").getTime() - 7 * 86_400_000).toISOString().slice(0, 10),
+          currentPublishedCount: commonComparison?.currentPublishedCount ?? null,
+          commonComplexCount: commonComparison?.commonComplexCount ?? null,
+        },
+      } : {}),
       filters: {
         q,
         tier,

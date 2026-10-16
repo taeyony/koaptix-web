@@ -18,6 +18,7 @@ import type {
 } from "../../lib/koaptix/types";
 import { KOAPTIX_OFFICIAL_BASE_DATE } from "../../types/koaptix";
 import { getUniverseLabel } from "../../lib/koaptix/universes";
+import { commonRankDelta, commonRankTransition, needsMarketCapReview } from "../../lib/koaptix/weeklyRankComparison";
 
 const ComplexHistoryMiniChart = dynamic(
   () =>
@@ -441,7 +442,8 @@ export function ComplexDetailSheet({
       (rankDelta7d != null ||
         marketCapDelta7d != null ||
         marketCapDeltaPct7d != null));
-  const displayRankDelta7d = weeklyComparisonAvailable
+  const usesCommonComparison = Boolean(item && "weeklyRankComparison" in item);
+  const displayRankDelta7d = usesCommonComparison && item ? commonRankDelta(item) : weeklyComparisonAvailable
     ? detail?.rankDelta7dNullable ?? rankDelta7d ?? 0
     : null;
   const displayMarketCapDelta7d = weeklyComparisonAvailable
@@ -545,7 +547,7 @@ export function ComplexDetailSheet({
               />
               <Metric label="추정 시가총액" value={formatMarketCapKrw(marketCap)} />
               <Metric
-                label="이번 주 순위 변화"
+                label={usesCommonComparison ? "주간 비교 · 공통 단지 내" : "공표 순위 차이"}
                 value={
                   displayRankDelta7d != null
                     ? formatRankDelta(displayRankDelta7d)
@@ -572,6 +574,8 @@ export function ComplexDetailSheet({
               />
             </div>
 
+            <p className="mt-3 text-caption text-muted">{usesCommonComparison && item ? `${commonRankTransition(item) ?? "공통 단지 비교 자료 없음"} · ${item.weeklyRankComparison?.previousSnapshotDate ?? "전주 확인 중"} → ${item.snapshotDate ?? "기준일 확인 중"}` : "공표 순위 차이는 포함 단지 구성 변경의 영향도 받아요. 공통 단지끼리 비교한 주간 순위와 다를 수 있어요."}</p>
+            {needsMarketCapReview({ marketCapDeltaPct7d: displayMarketCapDeltaPct7d }) ? <p className="mt-2 text-caption font-semibold text-muted">큰 시총 변동 · 거래 외에 세대수 등 계산 입력의 변화도 확인이 필요해요.</p> : null}
             <section aria-label={chartRange?.basis === "reference" ? "다시 계산한 과거 시가총액" : chartRange?.basis === "restored-local-review" ? "시총 재구성 검토" : "공개 시총 이력"} className="mt-4 overflow-hidden rounded-2xl border border-[var(--ko-border)] bg-surface">
               <div className="px-4 pb-3 pt-4 sm:px-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
