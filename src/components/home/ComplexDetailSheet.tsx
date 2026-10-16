@@ -21,6 +21,7 @@ import { getUniverseLabel } from "../../lib/koaptix/universes";
 import { commonRankDelta, commonRankTransition, needsMarketCapReview } from "../../lib/koaptix/weeklyRankComparison";
 import { publicComplexName } from "../../lib/koaptix/rankingPresentation";
 import { publicDetailMetrics } from "../../lib/koaptix/complexDetail";
+import { MyHomeActions } from "./MyHomeActions";
 
 const ComplexHistoryMiniChart = dynamic(
   () =>
@@ -529,6 +530,9 @@ export function ComplexDetailSheet({
                 {error}{item ? " 아래 순위와 시총은 현재 보고 있던 공개 기록이에요." : ""}
               </div>
             ) : null}
+
+            {activeComplexId ? <div className="mb-5"><MyHomeActions complexId={activeComplexId} name={title} locationLabel={location} universeCode={universeCode}
+              publication={item ? { ...item, snapshot_date: item.snapshotDate, universe_code: item.universeCode } : detail?.publication} /></div> : null}
 
             <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
               <Metric

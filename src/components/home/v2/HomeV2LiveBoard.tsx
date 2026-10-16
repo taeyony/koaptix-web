@@ -14,6 +14,8 @@ import { formatRankMovement, selectMovementHighlights } from "../../../lib/koapt
 import { commonRankDelta } from "../../../lib/koaptix/weeklyRankComparison";
 import { HomeV2MovementTicker } from "./HomeV2MovementTicker";
 import { HomeV2Insights } from "./HomeV2Insights";
+import { HomeV2MyHome } from "./HomeV2MyHome";
+import { readMyHomeBoard } from "../../../lib/koaptix/myHomeRanking";
 
 type RankingsPayload = {
   ok?: boolean;
@@ -90,8 +92,9 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
     metadata: null,
     error: null,
   });
-  const { bookmarks, bookmarkDetails, toggleBookmark, isLoaded, storageUnavailable } = useBookmarks();
+  const { bookmarks, bookmarkDetails, toggleBookmark, isLoaded, storageUnavailable, primaryComplexId, setPrimaryBookmark } = useBookmarks();
   const [nationalItems, setNationalItems] = useState<RankingItem[]>([]);
+  const [nationalPayload, setNationalPayload] = useState<RankingsPayload | null>(null);
   const [nationalWatchlistState, setNationalWatchlistState] = useState<"pending" | "ready" | "error">("pending");
 
   useEffect(() => {
@@ -162,12 +165,12 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
       .then(async (response) => {
         const payload = (await response.json()) as RankingsPayload;
         if (!response.ok || payload.ok !== true || payload.requestedUniverseCode !== "KOREA_ALL" || payload.renderedUniverseCode !== "KOREA_ALL" || !Array.isArray(payload.items)) throw new Error("watchlist_read_failed");
-        if (active) { setNationalItems(payload.items); setNationalWatchlistState("ready"); }
+        if (active) { setNationalItems(payload.items); setNationalPayload(payload); setNationalWatchlistState("ready"); }
       })
       .catch(() => { if (active) setNationalWatchlistState("error"); })
       .finally(() => window.clearTimeout(timeout));
     return () => { active = false; window.clearTimeout(timeout); controller.abort(); };
-  }, [needsNationalWatchlist]);
+  }, [needsNationalWatchlist, retryKey]);
   const visibleItems = items.slice(0, 8);
   const rising = useMemo(
     () =>
@@ -190,6 +193,18 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
     return selectMovementHighlights(items.filter(item => !cardIds.has(item.complexId)), boardDate, "common");
   }, [items, boardDate, rising, falling]);
   const watchlistById = new Map([...nationalItems, ...items].map((item) => [item.complexId, item]));
+  const selectedMyHomeBoard = useMemo(() => {
+    if (state.status !== "ready") return null;
+    try { return readMyHomeBoard(state.metadata, universeCode); } catch { return null; }
+  }, [state, universeCode]);
+  const nationalMyHomeBoard = useMemo(() => {
+    if (universeCode === "KOREA_ALL") return selectedMyHomeBoard;
+    if (nationalWatchlistState !== "ready") return null;
+    try { return readMyHomeBoard(nationalPayload, "KOREA_ALL"); } catch { return null; }
+  }, [universeCode, selectedMyHomeBoard, nationalWatchlistState, nationalPayload]);
+  const nationalMyHomeStatus = universeCode === "KOREA_ALL"
+    ? state.status === "ready" && !selectedMyHomeBoard ? "error" : state.status
+    : nationalWatchlistState === "pending" ? "loading" : nationalMyHomeBoard ? "ready" : "error";
   function toggleComparison(item: RankingItem) {
     const next = comparisonItems.some((row) => row.complexId === item.complexId)
       ? comparisonItems.filter((row) => row.complexId !== item.complexId)
@@ -208,6 +223,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
         tabIndex={-1}
         className="order-1 border-t border-[var(--ko-border)] py-8 lg:order-1 lg:col-span-3"
       >
+        <HomeV2MyHome nationalBoard={nationalMyHomeBoard} nationalStatus={nationalMyHomeStatus} selectedBoard={selectedMyHomeBoard} onRetryNational={() => { setState({ status: "loading", items: [], metadata: null, error: null }); setNationalWatchlistState("pending"); setNationalPayload(null); setRetryKey(value => value + 1); }} />
         <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
           <div>
             <p className="text-caption font-semibold tracking-label text-muted">
@@ -372,7 +388,10 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
                   <p className="mt-1 truncate text-caption text-muted">
                     {item ? locationLabel(item) : detail?.locationLabel || "지역 확인 중"}
                   </p>
-                  {!item ? <p className="mt-1 text-caption text-muted">{watchlistPending || state.status === "loading" ? "공개 랭킹 확인 중" : watchlistError ? "공개 랭킹을 불러오지 못했습니다." : "현재 공개 TOP1000에 없는 저장 항목입니다."}</p> : null}
+                  {!item ? <p className="mt-1 text-caption text-muted">{watchlistPending || state.status === "loading" ? "공개 랭킹 확인 중" : watchlistError ? "공개 랭킹을 불러오지 못했습니다." : "불러온 공개 랭킹에서 확인하지 못했어요."}</p> : null}
+                  <button type="button" disabled={primaryComplexId === id} onClick={() => setPrimaryBookmark(id, { name: item?.name || detail?.name || `저장한 단지 ${id}`, locationLabel: item ? locationLabel(item) : detail?.locationLabel || "", universeCode: item?.universeCode || detail?.universeCode })} className="mt-2 inline-flex min-h-10 items-center text-caption font-semibold text-accent underline underline-offset-4 disabled:no-underline">
+                    {primaryComplexId === id ? "✓ 내 아파트" : "내 아파트로 지정"}
+                  </button>
                 </div>
                 <span className="shrink-0 font-mono tabular-nums text-xs text-muted">
                   {item ? marketCapLabel(item) : "—"}

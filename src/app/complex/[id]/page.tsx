@@ -7,6 +7,7 @@ import { resolveUniverseRequest } from "../../../lib/koaptix/universes";
 import { formatKrwCompact } from "../../../lib/formatters";
 import FormulaExplainer from "../../../components/home/FormulaExplainer";
 import { ThemeToggle } from "../../../components/home/ThemeToggle";
+import { MyHomeActions } from "../../../components/home/MyHomeActions";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,7 @@ export default async function ComplexSharePage({
               { label: "세대수", value: Number.isSafeInteger(households) && households > 0 ? `${households.toLocaleString("ko-KR")}세대` : "확인 중" }].map(metric =>
                 <div key={metric.label} className="rounded-2xl border border-[var(--ko-border)] bg-surface p-5"><dt className="text-control text-muted">{metric.label}</dt><dd className="mt-3 text-2xl font-bold tabular-nums">{metric.value}</dd></div>)}
           </dl>
+          <MyHomeActions complexId={resolvedParams.id} name={row.apt_name_ko ?? "내 아파트"} locationLabel={[row.sigungu_name, row.legal_dong_name].filter(Boolean).join(" ")} universeCode={code} publication={row} />
           <p className="mt-6 max-w-copy text-body leading-copy text-muted">실제 거래와 면적별 세대수를 바탕으로 계산한 단지 전체의 추정 가치예요. 집 한 채의 가격이나 실제 자금 유입액을 뜻하지 않습니다.</p>
           <div className="mt-6"><FormulaExplainer /></div>
         </> : <p role="status" className="mt-5 text-body leading-copy text-muted">{scope.universeUnavailable ? "이 지역의 랭킹은 아직 공개되지 않았어요." : "현재 선택한 지역의 공개 TOP1000에서 순위와 시가총액을 확인하지 못했어요. 랭킹 검색에서 단지 상태를 확인해 주세요."}</p>}

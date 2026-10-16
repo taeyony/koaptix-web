@@ -15,7 +15,8 @@ const sections = [
 export function HomeV2Navigation({ universeCode }: { universeCode: string }) {
   const [active, setActive] = useState("");
   const navRef = useRef<HTMLElement>(null);
-  const { bookmarks, isLoaded } = useBookmarks();
+  const { bookmarks, isLoaded, primaryComplexId } = useBookmarks();
+  const visibleSections = primaryComplexId ? [{ id: "my-apartment", label: "내 아파트" }, ...sections] : sections;
   useEffect(() => {
     const main = navRef.current?.closest<HTMLElement>("main");
     let stopPending = () => {};
@@ -27,7 +28,7 @@ export function HomeV2Navigation({ universeCode }: { universeCode: string }) {
       stopPending();
       const id = window.location.hash.slice(1);
       setActive(id);
-      if (!sections.some(section => section.id === id) || !main) return;
+      if (!(id === "my-apartment" || sections.some(section => section.id === id)) || !main) return;
       const target = document.getElementById(id);
       if (!target) return;
       let frame = 0;
@@ -56,7 +57,7 @@ export function HomeV2Navigation({ universeCode }: { universeCode: string }) {
     window.addEventListener("hashchange", sync);
     window.addEventListener("popstate", sync);
     return () => { stopPending(); headerObserver.disconnect(); window.removeEventListener("hashchange", sync); window.removeEventListener("popstate", sync); };
-  }, [universeCode]);
+  }, [universeCode, primaryComplexId]);
 
   return (
     <nav ref={navRef} aria-label="주요 메뉴" className="ko-home-navigation sticky top-0 z-30 border-b border-[var(--ko-border)] bg-[var(--ko-bg)] px-5 sm:px-8 lg:px-12">
@@ -66,7 +67,7 @@ export function HomeV2Navigation({ universeCode }: { universeCode: string }) {
           <Link href="/play" prefetch={false} className="shrink-0 rounded-lg bg-[var(--ko-accent-soft)] px-3 py-2 font-bold text-accent hover:underline">우리 아파트 몇 등? ↗</Link>
           <Link href={`/ranking?universe=${encodeURIComponent(universeCode)}`} className="shrink-0 py-1 text-muted hover:text-accent">랭킹</Link>
           <Link href={`/map?universe=${encodeURIComponent(universeCode)}`} prefetch={false} className="shrink-0 py-1 text-muted hover:text-accent">상세 지도 ↗</Link>
-          {sections.map(({ id, label }) => (
+          {visibleSections.map(({ id, label }) => (
             <a key={id} href={`#${id}`} aria-current={active === id ? "location" : undefined}
               onClick={event => {
                 event.preventDefault();
