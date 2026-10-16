@@ -3,6 +3,7 @@ import { getLatestRankBoard } from "./queries";
 import { getUniverseLabel, resolveUniverseRequest } from "./universes";
 import { resolveSidoFromUniverseCode } from "./districtIdentity";
 import type { DbLatestRankBoardWeeklyRow } from "./types";
+import { getComparisonFacts } from "./comparisonFacts";
 
 export const PUBLIC_SITE_ORIGIN = "https://www.koaptix.com";
 
@@ -35,4 +36,11 @@ export const getPublicPageComplex = cache(async (id: string, code: string) => {
     const [row] = await getLatestRankBoard(scope.requestedUniverseCode, 1, { complexId: id }, { timeoutMs: 4000 });
     return row && isPublicPageRow(row) ? row : null;
   } catch { return null; }
+});
+
+export const getPublicPageComparison = cache(async (leftId: string, rightId: string, code: string) => {
+  if (leftId === rightId || !/^[1-9]\d*$/.test(leftId) || !/^[1-9]\d*$/.test(rightId)) return null;
+  const rows = await Promise.all([getPublicPageComplex(leftId, code), getPublicPageComplex(rightId, code)]);
+  if (rows.some(row => !row) || String(rows[0]?.complex_id) !== leftId || String(rows[1]?.complex_id) !== rightId || rows.some(row => row?.universe_code !== code)) return null;
+  return getComparisonFacts(rows);
 });

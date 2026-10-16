@@ -8,6 +8,7 @@ import { commonRankDelta } from "../../lib/koaptix/weeklyRankComparison";
 import { publicComplexName } from "../../lib/koaptix/rankingPresentation";
 import { formatPublicLocation } from "../../lib/koaptix/districtIdentity";
 import type { RankingItem } from "../../lib/koaptix/types";
+import { getComparisonFacts } from "../../lib/koaptix/comparisonFacts";
 
 type ComparisonSheetProps = {
   open: boolean;
@@ -270,10 +271,12 @@ export default function ComparisonSheet({ open, items, onClose, onRemoveItem, on
   const sharePath = leftCode && leftCode === rightCode && leftDate === rightDate && isComparisonDate(leftDate) &&
     !resolveUniverseRequest(leftCode, { capability: "ranking" }).universeUnavailable
     ? buildComparisonSharePath([readString(leftItem, ["complexId", "complex_id"]) ?? "", readString(rightItem, ["complexId", "complex_id"]) ?? ""], leftCode, leftDate) : null;
+  const facts = getComparisonFacts(items.slice(0, 2));
 
-  async function copyComparison() {
+  async function copyComparison(summary = false) {
     if (!sharePath) return;
-    try { await navigator.clipboard.writeText(new URL(sharePath, window.location.origin).toString()); setCopiedPath(sharePath); setCopyError(false); }
+    const url = new URL(sharePath, window.location.origin).toString();
+    try { await navigator.clipboard.writeText(summary && facts ? `${facts.summary}\n${url}` : url); setCopiedPath((summary ? "summary:" : "") + sharePath); setCopyError(false); }
     catch { setCopyError(true); }
   }
 
@@ -296,13 +299,17 @@ export default function ComparisonSheet({ open, items, onClose, onRemoveItem, on
                 {sharedDate && sharedDate !== leftDate ? <p role="status" className="mt-2 text-caption text-amber-300">공유 당시 기준일은 {sharedDate}예요. 지금은 현재 공개된 {leftDate ?? "최신"} 자료로 비교합니다.</p> : null}
               </div>
               <div className="flex items-center gap-2">
-                {sharePath ? <button type="button" onClick={copyComparison} className="min-h-11 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-control font-semibold text-cyan-200">{copiedPath === sharePath ? "복사 완료" : "비교 링크 복사"}</button> : null}
+                {sharePath ? <button type="button" onClick={() => void copyComparison()} className="min-h-11 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-control font-semibold text-cyan-200">{copiedPath === sharePath ? "복사 완료" : "비교 링크 복사"}</button> : null}
                 {onClear ? <button type="button" onClick={onClear} className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-cyan-400/30 hover:text-cyan-300">초기화</button> : null}
                 <button type="button" onClick={onClose} className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-cyan-400/30 hover:text-cyan-300">닫기</button>
               </div>
             </div>
             {copyError ? <p role="status" className="mt-2 text-caption text-amber-300">링크를 복사하지 못했어요. 브라우저의 클립보드 허용 상태를 확인해 주세요.</p> : copiedPath === sharePath && sharePath ? <p role="status" className="mt-2 text-caption text-cyan-200">비교 링크를 복사했어요. 다시 열면 공개 자료를 확인하며, 갱신되면 기준일이 달라질 수 있어요.</p> : null}
             {sharePath ? <a className="ko-text-link mt-2 inline-flex min-h-10 items-center text-control text-cyan-200" href={sharePath}>비교 링크 열기 ↗</a> : null}
+            {facts && sharePath ? <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-control">
+              <p className="text-slate-200">{facts.differenceLabel}</p>
+              <button type="button" className="ko-text-link min-h-11 text-cyan-200" onClick={() => void copyComparison(true)}>{copiedPath === `summary:${sharePath}` ? "비교 요약 복사 완료" : "기준일·비교 요약 복사"}</button>
+            </div> : null}
           </div>
           <div className="max-h-[78vh] overflow-y-auto overscroll-contain" onWheelCapture={(event) => event.stopPropagation()}>
             {!leftItem || !rightItem ? (

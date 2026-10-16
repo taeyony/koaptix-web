@@ -19,6 +19,9 @@ type HomeV2SearchProps = {
   universeCode: string;
   presentation?: "default" | "landing";
   examples?: { name: string; query?: string; complexId?: string }[];
+  inputId?: string;
+  label?: string;
+  onSelectRankedItem?: (item: RankingItem) => void;
 };
 
 type SearchPayload = RegionAliasApiMetadata & {
@@ -54,8 +57,12 @@ export function HomeV2Search({
   universeCode,
   presentation = "default",
   examples = [],
+  inputId = "home-v2-search",
+  label = "우리 단지 찾기",
+  onSelectRankedItem,
 }: HomeV2SearchProps) {
   const isLanding = presentation === "landing";
+  const resultsId = `${inputId}-results`;
   const searchRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -164,12 +171,13 @@ export function HomeV2Search({
       ...(state.payload.globalItems ?? []),
     ]
       .filter((item) => {
+        if (onSelectRankedItem && item.universeCode !== universeCode) return false;
         if (!item.complexId || seen.has(item.complexId)) return false;
         seen.add(item.complexId);
         return true;
       })
       .slice(0, 5);
-  }, [state]);
+  }, [state, onSelectRankedItem, universeCode]);
 
   const discoveryItems =
     state.status === "ready"
@@ -224,16 +232,17 @@ export function HomeV2Search({
 
   return (
     <div ref={searchRef} data-presentation={isLanding ? "landing" : undefined} className="relative mt-6 max-w-2xl">
-      <label htmlFor="home-v2-search" className="mb-2 block text-control font-semibold text-ink">
-        우리 단지 찾기
+      <label htmlFor={inputId} className="mb-2 block text-control font-semibold text-ink">
+        {label}
       </label>
       <form ref={formRef} action="/ranking" onSubmit={isLanding ? (event) => {
+        if (onSelectRankedItem) { event.preventDefault(); setDismissed(false); }
         if ((inputRef.current?.value ?? query).trim().length < 2) { event.preventDefault(); inputRef.current?.focus(); }
       } : undefined} className="flex items-center gap-2 rounded-xl border border-[var(--ko-border)] bg-surface px-4 py-2 focus-within:border-accent focus-within:ring-1 focus-within:ring-[var(--ko-focus)]">
         <input type="hidden" name="universe" value={universeCode} />
         <input
           ref={inputRef}
-          id="home-v2-search"
+          id={inputId}
           name="q"
           value={query}
           onChange={(event) => changeQuery(event.target.value)}
@@ -245,7 +254,7 @@ export function HomeV2Search({
           enterKeyHint={isLanding ? "search" : undefined}
           placeholder="아파트 이름이나 지역을 입력해 보세요"
           autoComplete="off"
-          aria-controls="home-v2-search-results"
+          aria-controls={resultsId}
           aria-busy={state.status === "loading"}
           onKeyDown={(event) => {
             if (isLanding && event.key === "Enter" && event.nativeEvent.isComposing) event.preventDefault();
@@ -257,7 +266,7 @@ export function HomeV2Search({
           className="min-w-0 flex-1 bg-transparent text-lg text-ink outline-none placeholder:text-muted"
         />
         {query ? <button type="button" aria-label="검색어 지우기" onClick={() => changeQuery("")} className="ko-icon-button text-sm text-muted">×</button> : null}
-        <button type="submit" aria-label="전체 랭킹에서 검색" className="shrink-0 rounded-lg bg-[var(--ko-accent-soft)] px-4 text-control font-semibold text-accent">
+        <button type="submit" aria-label={onSelectRankedItem ? `${label} 검색` : "전체 랭킹에서 검색"} className="shrink-0 rounded-lg bg-[var(--ko-accent-soft)] px-4 text-control font-semibold text-accent">
           검색
         </button>
       </form>
@@ -285,9 +294,9 @@ export function HomeV2Search({
 
       {showResults ? (
         <div
-          id="home-v2-search-results"
+          id={resultsId}
           role="region"
-          aria-label="검색 결과"
+          aria-label={onSelectRankedItem ? `${label} 검색 결과` : "검색 결과"}
           aria-live="polite"
           aria-busy={state.status === "loading"}
           style={{
@@ -311,13 +320,8 @@ export function HomeV2Search({
           ) : null}
           {state.status === "ready" ? (
             <>
-              {rankedItems.map((item) => (
-                <Link
-                  key={item.complexId}
-                  href={rankingHref(item)}
-                  data-result-kind={isLanding ? "ranked" : undefined}
-                  className="flex items-center justify-between gap-4 border-b border-[var(--ko-border)] py-3 last:border-b-0 hover:text-accent"
-                >
+              {rankedItems.map((item) => {
+                const contents = <>
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold text-ink">
                       {publicComplexName(item.name)}
@@ -339,8 +343,12 @@ export function HomeV2Search({
                       {item.snapshotDate ? <span className="block text-caption">{item.snapshotDate} 기준</span> : null}
                     </span>
                   )}
-                </Link>
-              ))}
+                </>;
+                return onSelectRankedItem ? <button key={item.complexId} type="button" data-result-kind="ranked" aria-label={`${publicComplexName(item.name)} 비교 단지로 선택`}
+                  onClick={() => { onSelectRankedItem(item); changeQuery(""); setDismissed(true); }}
+                  className="flex w-full flex-col items-stretch gap-2 border-b border-[var(--ko-border)] py-3 text-left last:border-b-0 hover:text-accent">{contents}</button>
+                  : <Link key={item.complexId} href={rankingHref(item)} data-result-kind={isLanding ? "ranked" : undefined} className="flex items-center justify-between gap-4 border-b border-[var(--ko-border)] py-3 last:border-b-0 hover:text-accent">{contents}</Link>;
+              })}
               {clarificationChoices.length ? <p className="ko-copy py-2 text-sm text-muted">{state.message}</p> : null}
               {clarificationChoices.map((choice) => choice.compatibility === "INCOMPATIBLE"
                 ? <Link key={choice.canonicalRegionCode} href={`/ranking?${new URLSearchParams({ universe: "KOREA_ALL", q: choice.replacementQuery })}`} className="block border-b border-[var(--ko-border)] py-3 text-xs text-accent">전국에서 {choice.qualifiedNameKo} 검색 ↗</Link>
@@ -366,7 +374,7 @@ export function HomeV2Search({
               ))}
               {!rankedItems.length && !discoveryItems.length && !clarificationChoices.length ? (
                 <p data-search-empty={isLanding ? true : undefined} className="py-4 text-xs text-muted">
-                  {state.message || (isLanding
+                  {state.message || (onSelectRankedItem ? "선택한 지역의 공개 순위에서 찾지 못했어요. 비교 지역이나 검색어를 바꿔 보세요." : isLanding
                     ? "일치하는 공개 결과를 아직 찾지 못했어요. 단지명과 지역 이름을 함께 입력해 보세요."
                     : "일치하는 공개 결과가 없습니다.")}
                 </p>

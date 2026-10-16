@@ -12,13 +12,14 @@ function load(source, dependencies = {}) {
   const output = ts.transpileModule(source, { compilerOptions: {
     target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
-  runInNewContext(output, { module, exports: module.exports, require: (id) => {
+  runInNewContext(output, { module, exports: module.exports, URLSearchParams, require: (id) => {
     if (!(id in dependencies)) throw new Error("Unexpected dependency: " + id);
     return dependencies[id];
   } });
   return module.exports;
 }
 const universes = load(read("src/lib/koaptix/universes.ts"));
+const complexShare = load(read("src/lib/koaptix/complexShare.ts"));
 function HomeV2Search() { return null; }
 function Link() { return null; }
 function pageWith(reader) {
@@ -26,12 +27,14 @@ function pageWith(reader) {
     react: React, "react/jsx-runtime": jsxRuntime,
     "next/link": { default: Link },
     "../../components/home/v2/HomeV2Search": { HomeV2Search },
+    "../../components/home/PlayMatchup": { PlayMatchup: () => null },
     "../../components/home/SearchProgress": { SearchProgress: () => null },
     "../../components/home/ThemeToggle": { ThemeToggle: () => null },
     "../../components/home/FormulaExplainer": { default: () => null },
     "../../lib/formatters": { formatKrwCompact: (value) => String(value) },
     "../../lib/koaptix/queries": { getLatestRankBoard: reader },
     "../../lib/koaptix/universes": universes,
+    "../../lib/koaptix/complexShare": complexShare,
     "./play.module.css": { default: {} },
   }).default;
 }
@@ -81,8 +84,9 @@ test("pending preview uses the existing bounded reader and preserves its actual 
   const ready = await pending;
   assert.equal(ready.props["data-state"], "ready");
   const contents = nodes(ready);
-  assert.deepEqual(contents.filter((node) => node.type === Link).map((node) => node.props.href),
+  assert.deepEqual(contents.filter((node) => node.type === Link && node.props.href.startsWith("/complex/")).map((node) => node.props.href),
     rows.map((row) => `/complex/${row.complex_id}`));
+  assert.match(contents.find(node => node.type === Link && node.props.href.includes("compare=")).props.href, /compare=100%2C101&comparisonDate=2026-08-31/);
   assert.equal(contents.find((node) => node.type === "time").props.dateTime, "2026-08-31");
   for (const row of rows) assert.ok(contents.some((node) => node.type === "strong" && text(node).endsWith(String(row.market_cap_krw))));
 });

@@ -17,7 +17,8 @@ const universes = load("src/lib/koaptix/universes.ts");
 const identity = load("src/lib/koaptix/districtIdentity.ts");
 const fixture = { complex_id: 5037, apt_name_ko: "잠실엘스", rank_all: 2, market_cap_krw: 18915350000802, universe_code: "KOREA_ALL", snapshot_date: "2026-08-31", published_at: "2026-10-15T00:22:12Z" };
 function publicPages(reader) {
-  return load("src/lib/koaptix/publicPageData.ts", { react: { cache: fn => fn }, "./queries": { getLatestRankBoard: reader }, "./universes": universes, "./districtIdentity": identity });
+  return load("src/lib/koaptix/publicPageData.ts", { react: { cache: fn => fn }, "./queries": { getLatestRankBoard: reader }, "./universes": universes, "./districtIdentity": identity,
+    "./comparisonFacts": { getComparisonFacts: () => { throw new Error("Pair read not expected for single-complex SEO"); } } });
 }
 
 test("comparison links carry exactly two IDs, scope and the actual date", () => {
@@ -75,7 +76,7 @@ test("sitemap lists actual public IDs, not discovery/master or query permutation
 
 test("regional metadata keeps its scope and never labels a regional rank as national", async () => {
   const regional = { ...fixture, universe_code: "SGG_11710" };
-  const metadata = load("src/lib/koaptix/metadata.ts", { "./publicPageData": { getPublicPageComplex: async () => regional, PUBLIC_SITE_ORIGIN: "https://www.koaptix.com", publicRegionLabel: () => "서울 송파구" } });
+  const metadata = load("src/lib/koaptix/metadata.ts", { "./complexShare": share, "./publicPageData": { getPublicPageComplex: async () => regional, PUBLIC_SITE_ORIGIN: "https://www.koaptix.com", publicRegionLabel: () => "서울 송파구" } });
   const result = await metadata.buildComplexMetadata("5037", "SGG_11710");
   assert.match(result.description, /서울 송파구 공개 랭킹 2위/);
   assert.doesNotMatch(result.description, /전국 공개 랭킹/);

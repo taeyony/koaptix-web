@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { HomeV2Search } from "../../components/home/v2/HomeV2Search";
+import { PlayMatchup } from "../../components/home/PlayMatchup";
 import { SearchProgress } from "../../components/home/SearchProgress";
 import { ThemeToggle } from "../../components/home/ThemeToggle";
 import FormulaExplainer from "../../components/home/FormulaExplainer";
@@ -9,6 +10,7 @@ import { formatKrwCompact } from "../../lib/formatters";
 import { getLatestRankBoard } from "../../lib/koaptix/queries";
 import type { DbLatestRankBoardWeeklyRow } from "../../lib/koaptix/types";
 import { getRankingUniverseRegistry } from "../../lib/koaptix/universes";
+import { buildComparisonSharePath } from "../../lib/koaptix/complexShare";
 import styles from "./play.module.css";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +57,8 @@ async function PlayRankingPreview() {
   const champion = top.find((row) => row.rank_all === 1);
   const remaining = top.filter((row) => row !== champion);
   const date = top[0]?.snapshot_date?.slice(0, 10) ?? null;
+  const runnerUp = top.find(row => row.rank_all === 2);
+  const quickMatchup = champion && runnerUp && date ? buildComparisonSharePath([String(champion.complex_id), String(runnerUp.complex_id)], "KOREA_ALL", date) : null;
 
   return (
     <div data-testid="play-top-preview" data-state={top.length ? "ready" : "unavailable"}>
@@ -93,6 +97,7 @@ async function PlayRankingPreview() {
           <a className={styles.textLink} href="/play#play-top-title">미리보기 다시 불러오기 ↻</a>
         </div>
       )}
+      {quickMatchup ? <Link href={quickMatchup} prefetch={false} className={`${styles.textLink} mt-4 inline-flex min-h-11 items-center`}>{champion?.apt_name_ko} vs {runnerUp?.apt_name_ko} · 두 단지 바로 비교 ↗</Link> : null}
     </div>
   );
 }
@@ -137,6 +142,11 @@ export default function PlayPage() {
             <PlayRankingPreview />
           </Suspense>
           <p className={styles.scopeNote}>공개 대상 단지 안에서의 순위입니다. 전국 모든 아파트가 포함된 것은 아니며, 집 한 채의 가격이나 거주자의 자산 순위가 아닙니다.</p>
+        </section>
+
+        <section id="matchup" className={styles.section} aria-labelledby="play-matchup-title">
+          <div className={styles.sectionHeading}><div><p className={styles.kicker}>단지 맞대결</p><h2 id="play-matchup-title" className={styles.sectionTitle}>어느 단지의 시총이 더 클까?</h2><p className={styles.scopeNote}>궁금한 두 아파트를 고르고, 결과를 친구에게 공유해 보세요.</p></div></div>
+          <PlayMatchup />
         </section>
 
         <section className={styles.section} aria-labelledby="play-region-title">

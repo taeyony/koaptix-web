@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { getPublicPageComplex, PUBLIC_SITE_ORIGIN, publicRegionLabel } from "./publicPageData";
+import { getPublicPageComplex, getPublicPageComparison, PUBLIC_SITE_ORIGIN, publicRegionLabel } from "./publicPageData";
+import { buildComparisonSharePath } from "./complexShare";
 
 const METADATA_BASE = new URL(PUBLIC_SITE_ORIGIN);
 
@@ -112,4 +113,20 @@ export async function buildComplexMetadata(
   } catch {
     return { ...getDefaultMetadata(), robots: { index: false, follow: true } };
   }
+}
+
+export async function buildComparisonMetadata(ids: readonly string[], universeCode: string, sharedDate?: string): Promise<Metadata | null> {
+  if (ids.length !== 2) return null;
+  const facts = await getPublicPageComparison(ids[0], ids[1], universeCode);
+  if (!facts) return null;
+  const date = facts.publication.snapshot_date;
+  const sharePath = buildComparisonSharePath(ids, universeCode, sharedDate ?? date);
+  if (!sharePath) return null;
+  const title = `${facts.title} | KOAPTIX 단지 비교`;
+  const changed = sharedDate && sharedDate !== date ? `공유 당시 ${sharedDate} · 현재 공개 ${date} 기준. ` : "";
+  const description = `${changed}${facts.scopeLabel} · ${date} 기준 · ${facts.differenceLabel} 단지 전체의 추정 가치이며 집 한 채의 가격이 아닙니다.`;
+  const imagePath = `/ranking/share-image?${new URLSearchParams({ universe: universeCode, compare: ids.join(","), comparisonDate: date, publication: facts.publication.publication_event_id })}`;
+  return { metadataBase: METADATA_BASE, title, description, alternates: { canonical: sharePath }, robots: { index: false, follow: true },
+    openGraph: { title, description, url: sharePath, type: "website", images: [{ url: imagePath, width: 1200, height: 630, alt: `${facts.title} · ${date} 기준 단지 전체 추정 시가총액 비교` }] },
+    twitter: { card: "summary_large_image", title, description, images: [imagePath] } };
 }

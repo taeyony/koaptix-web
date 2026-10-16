@@ -8,6 +8,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getPublicPageBoard, PUBLIC_SITE_ORIGIN, publicRegionLabel } from "../../lib/koaptix/publicPageData";
 import { formatKrwCompact } from "../../lib/formatters";
+import { parseComparisonIds, isComparisonDate } from "../../lib/koaptix/complexShare";
+import { buildComparisonMetadata } from "../../lib/koaptix/metadata";
 
 import {
   DEFAULT_UNIVERSE_CODE,
@@ -53,6 +55,12 @@ async function resolveSearchParams(
 export async function generateMetadata({ searchParams }: { searchParams?: Promise<SearchParamsShape> }): Promise<Metadata> {
   const params = await resolveSearchParams(searchParams);
   const scope = resolveUniverseRequest(pickSingleParam(params?.universe), { capability: "ranking" });
+  const ids = parseComparisonIds(pickSingleParam(params?.compare));
+  const sharedDate = pickSingleParam(params?.comparisonDate);
+  if (ids.length === 2 && !scope.universeUnavailable) {
+    const comparison = await buildComparisonMetadata(ids, scope.requestedUniverseCode, isComparisonDate(sharedDate) ? sharedDate : undefined);
+    if (comparison) return comparison;
+  }
   const label = publicRegionLabel(scope.requestedUniverseCode);
   const filtered = Object.keys(params ?? {}).some(key => key !== "universe");
   const canonical = scope.requestedUniverseCode === DEFAULT_UNIVERSE_CODE ? "/ranking" : `/ranking?${new URLSearchParams({ universe: scope.requestedUniverseCode })}`;
