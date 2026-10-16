@@ -4,10 +4,9 @@ import Link from "next/link";
 import type { HomeIndexChartPayload } from "../../../lib/koaptix/queries";
 import { LAUNCH_COPY } from "../BetaDisclosure";
 import FormulaExplainer from "../FormulaExplainer";
-import { CapitalMapV2 } from "./CapitalMapV2";
+import { HomeV2MarketOverview } from "./HomeV2MarketOverview";
 import { HomeV2LiveBoard } from "./HomeV2LiveBoard";
 import { HomeV2Search } from "./HomeV2Search";
-import { HomeV2IndexPanel as IndexPanel } from "./HomeV2IndexPanel";
 import { HomeV2Navigation } from "./HomeV2Navigation";
 
 type HomeV2TerminalProps = {
@@ -104,8 +103,7 @@ export function HomeV2Terminal({
           <Suspense fallback={<p className="py-7 text-xs text-muted">랭킹 준비 중</p>}>
             <HomeV2LiveBoard key={universeCode} universeCode={universeCode} universeLabel={universeLabel} universeUnavailable={universeUnavailable} />
           </Suspense>
-          <CapitalMapV2 key={universeCode} universeCode={universeCode} universeLabel={universeLabel} universeUnavailable={universeUnavailable} />
-          <IndexPanel key={`index-${universeCode}`} index={index} />
+          <HomeV2MarketOverview key={universeCode} index={index} universeCode={universeCode} universeLabel={universeLabel} universeUnavailable={universeUnavailable} />
         </div>
       </div>
 

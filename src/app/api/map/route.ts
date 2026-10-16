@@ -119,6 +119,8 @@ type MapDistrictItem = {
   marketCapChangePct7d?: number | null;
   comparableComplexCount?: number;
   comparisonDate?: string | null;
+  comparableCurrentMarketCapKrw?: number;
+  comparablePreviousMarketCapKrw?: number;
   count: number;
 
   boardCount: number;
@@ -950,7 +952,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = createServerSupabase();
-    const payload = await fetchMapPayload(supabase, universeCode, limit, !completeTop1000 && searchParams.get("include_changes") === "1", completeTop1000);
+    const payload = await fetchMapPayload(supabase, universeCode, limit, searchParams.get("include_changes") === "1", completeTop1000);
 
     return NextResponse.json(
       {

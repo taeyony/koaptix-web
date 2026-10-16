@@ -14,3 +14,18 @@ export function summarizeIndexRecords(rows: readonly IndexRecord[]): IndexRecord
   }
   return ranges;
 }
+
+/** Change-log view: retain missing observation days explicitly when equal values span a gap. */
+export function summarizeIndexChanges(rows: readonly IndexRecord[]) {
+  const changes: (IndexRecordRange & { unrecordedDays: number; previousGapDays: number })[] = [];
+  for (const range of summarizeIndexRecords(rows)) {
+    const last = changes.at(-1);
+    const gap = last ? Math.round((Date.parse(range.snapshotDate + "T00:00:00Z") - Date.parse(last.endDate + "T00:00:00Z")) / 86_400_000) : 0;
+    if (last && last.value === range.value && last.componentComplexCount === range.componentComplexCount) {
+      last.endDate = range.endDate;
+      last.recordCount += range.recordCount;
+      last.unrecordedDays += Math.max(0, gap - 1);
+    } else changes.push({ ...range, unrecordedDays: 0, previousGapDays: gap });
+  }
+  return changes;
+}

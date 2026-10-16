@@ -5,11 +5,12 @@ import type { HomeIndexChartPayload } from "../../../lib/koaptix/queries";
 import { getHomeUniverseRegistry, getUniverseLabel } from "../../../lib/koaptix/universes";
 import { KOAPTIX_OFFICIAL_BASE_DATE } from "../../../types/koaptix";
 import { HomeV2SectionHeading } from "./HomeV2SectionHeading";
-import { summarizeIndexRecords } from "../../../lib/koaptix/indexRecordSummary";
+import { summarizeIndexChanges } from "../../../lib/koaptix/indexRecordSummary";
+import type { PublishedMapSummary } from "../../../lib/koaptix/mapPresentation";
 
 const numberFormat = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 });
 
-type DisplayRecord = Pick<HomeIndexChartPayload["rows"][number], "snapshotDate" | "value" | "componentComplexCount"> & { endDate?: string; recordCount?: number };
+type DisplayRecord = Pick<HomeIndexChartPayload["rows"][number], "snapshotDate" | "value" | "componentComplexCount"> & { endDate?: string; recordCount?: number; unrecordedDays?: number; previousGapDays?: number };
 
 function IndexRecordsTable({ records, label }: { records: readonly DisplayRecord[]; label: string }) {
   return (
@@ -27,6 +28,8 @@ function IndexRecordsTable({ records, label }: { records: readonly DisplayRecord
             <th scope="row" className="px-3 py-3 font-medium">
               {row.snapshotDate}
               {(row.recordCount ?? 1) > 1 ? <><br />~ {row.endDate}<span className="block font-normal text-muted">동일 값 {row.recordCount}건</span></> : null}
+              {row.unrecordedDays ? <span className="block font-normal text-muted">기간 중 기록 없는 날 {row.unrecordedDays}일</span> : null}
+              {(row.previousGapDays ?? 0) > 31 ? <span className="block font-normal text-muted">이전 기록과 {row.previousGapDays}일 간격</span> : null}
             </th>
             <td className="px-3 py-3 text-right">{numberFormat.format(row.value)}</td>
             <td className="px-3 py-3 text-right">{row.componentComplexCount?.toLocaleString("ko-KR") ?? "확인 중"}개</td>
@@ -37,14 +40,14 @@ function IndexRecordsTable({ records, label }: { records: readonly DisplayRecord
   );
 }
 
-export function HomeV2IndexPanel({ index }: { index: HomeIndexChartPayload }) {
+export function HomeV2IndexPanel({ index, summary, summaryStatus = "loading" }: { index: HomeIndexChartPayload; summary?: PublishedMapSummary | null; summaryStatus?: "loading" | "ready" | "error" | "unavailable" }) {
   const router = useRouter();
   const rows = index.rows;
-  const ranges = summarizeIndexRecords(rows);
+  const ranges = summarizeIndexChanges(rows);
   const options = getHomeUniverseRegistry().filter(item => item.scope === "MACRO");
 
   return (
-    <section id="index" tabIndex={-1} style={{ scrollMarginTop: "10rem" }} data-testid="public-service-index" className="order-3 min-w-0 border-b border-[var(--ko-border)] py-8 lg:order-3 lg:border-b-0 lg:border-l lg:px-8">
+    <section id="index" tabIndex={-1} data-testid="public-service-index" className="order-3 min-w-0 border-b border-[var(--ko-border)] py-8 lg:order-3 lg:border-b-0 lg:border-l lg:px-8">
       <HomeV2SectionHeading title="KOAPTIX 지수" note={index.renderedUniverseLabel} />
       <label className="mt-4 flex items-center gap-3 text-caption font-semibold text-muted">
         표시 지역
@@ -57,9 +60,17 @@ export function HomeV2IndexPanel({ index }: { index: HomeIndexChartPayload }) {
       </label>
 
       <div className="mt-5 rounded-xl border border-[var(--ko-border)] bg-[var(--ko-accent-soft)] p-4" data-testid="official-index-status">
-        <p className="text-control font-semibold text-ink">공식 기준 · {KOAPTIX_OFFICIAL_BASE_DATE} = 1,000</p>
-        <p className="mt-3 text-section font-bold text-ink">공식 추이는 아직 검증 중이에요</p>
-        <p className="ko-copy mt-2 text-sm text-muted">날짜별 거래와 계산 대상을 확인 중이에요. 검증되지 않은 구간은 비워 둡니다.</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-control font-bold text-ink">공개 랭킹 표본 현황</p>
+          <span className="rounded-full border border-[var(--ko-border)] px-3 py-1 text-caption font-semibold text-accent">공식 지수 검증 중</span>
+        </div>
+        {summary && summary.universeCode === index.requestedUniverseCode ? <dl className="mt-4 grid grid-cols-2 gap-4 tabular-nums" data-testid="index-public-summary">
+          <div><dt className="text-caption text-muted">공개 자료 기준일</dt><dd className="mt-1 text-control font-semibold text-ink">{summary.snapshotDate}</dd></div>
+          <div><dt className="text-caption text-muted">공개 표본 단지</dt><dd className="mt-1 text-control font-semibold text-ink">{summary.complexCount.toLocaleString("ko-KR")}개</dd></div>
+          <div className="col-span-2"><dt className="text-caption text-muted">표본 시가총액 합계</dt><dd className="mt-1 text-section font-bold text-ink">{numberFormat.format(summary.totalMarketCapKrw / 1e12)}조원</dd></div>
+        </dl> : <p className="mt-4 text-sm text-muted" role="status">{summaryStatus === "loading" ? "선택한 지역의 공개 집계를 확인하고 있어요…" : "선택한 지역의 공개 집계를 불러오지 못했어요. 지역별 지도에서 다시 시도해 주세요."}</p>}
+        <p className="ko-copy mt-3 text-caption text-muted">위 합계는 공개 랭킹 표본의 현황이며 공식 지수 값이 아닙니다.</p>
+        <p className="mt-2 text-caption text-muted">공식 기준 · {KOAPTIX_OFFICIAL_BASE_DATE} = 1,000 · 공식 추이는 아직 검증 중이에요</p>
       </div>
       <details className="mt-4 text-caption text-muted">
         <summary className="cursor-pointer underline underline-offset-4">지수 계산 방법과 공개 상태</summary>
@@ -71,8 +82,12 @@ export function HomeV2IndexPanel({ index }: { index: HomeIndexChartPayload }) {
           <summary className="cursor-pointer text-control font-semibold text-ink">과거 참고 지수 기록 {rows.length}개 보기</summary>
           <p className="ko-copy mt-3 text-caption text-muted">별도 기준인 {index.baseDate} = {index.baseValue.toLocaleString("ko-KR")} 기록이에요. {KOAPTIX_OFFICIAL_BASE_DATE} 기준 공식 지수와 다릅니다.</p>
           <p className="ko-copy mt-2 text-caption text-muted">포함 단지가 날짜마다 달라질 수 있어요. 값의 차이를 집값 상승률로 해석하거나 선으로 연결하지 않아요.</p>
-          <p className="mt-3 text-caption text-muted">{rows.length}개 원본 기록 · {ranges.length}개 구간으로 요약 · 마지막 기록 {rows.at(-1)?.snapshotDate}</p>
-          <IndexRecordsTable records={ranges} label="과거 참고 지수 기록 표" />
+          <p className="mt-3 text-caption text-muted">{rows.length}개 원본 기록 · 값이 바뀐 {ranges.length}개 구간으로 요약 · 마지막 기록 {rows.at(-1)?.snapshotDate}</p>
+          <IndexRecordsTable records={ranges.slice(-5)} label="최근 과거 참고 지수 기록 표" />
+          {ranges.length > 5 ? <details className="mt-4">
+            <summary className="cursor-pointer text-caption font-semibold underline underline-offset-4">과거 기록 더보기 · 이전 {ranges.length - 5}개 구간</summary>
+            <IndexRecordsTable records={ranges.slice(0, -5)} label="이전 과거 참고 지수 기록 표" />
+          </details> : null}
           <details className="mt-4">
             <summary className="cursor-pointer text-caption font-semibold underline underline-offset-4">원본 {rows.length}건 모두 보기</summary>
             <IndexRecordsTable records={rows} label="과거 참고 지수 원본 기록" />

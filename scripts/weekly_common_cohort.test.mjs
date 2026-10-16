@@ -14,7 +14,7 @@ function load(file, deps = {}) {
 const comparison = load("weeklyRankComparison");
 const { buildCommonRankComparisons: build, commonRankDelta, commonRankTransition, needsMarketCapReview } = comparison;
 const { sortRankingItems, selectMovementHighlights } = load("rankingPresentation", { "./weeklyRankComparison": comparison });
-const { summarizeIndexRecords } = load("indexRecordSummary");
+const { summarizeIndexRecords, summarizeIndexChanges } = load("indexRecordSummary");
 const date = "2026-08-31";
 const source = () => [20, 5, 30, null].map((rank, i) => ({ complex_id: String(i + 1), rank_all: i + 1, previous_rank_all: rank, source_previous_snapshot_date: "2026-08-24" }));
 const item = (id, value) => ({ complexId: id, rank: Number(id), rankDelta7d: 5000, snapshotDate: date, weeklyRankComparison: value });
@@ -81,4 +81,26 @@ test("rounded-equal values, gaps, and constituent changes remain separate index 
   ];
   assert.equal(summarizeIndexRecords(rows).length, 4);
   assert.equal(summarizeIndexRecords([]).length, 0);
+});
+
+
+test("change-log summaries compress identical observations while exposing gaps and preserving raw counts", () => {
+  const rows = ["2026-04-12", "2026-04-14", "2026-04-15"].map(snapshotDate => ({ snapshotDate, value: 12317.1493, componentComplexCount: 13426 }));
+  const before = JSON.stringify(rows), result = summarizeIndexChanges(rows);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].recordCount, 3);
+  assert.equal(result[0].unrecordedDays, 1);
+  assert.equal(result[0].endDate, "2026-04-15");
+  assert.equal(JSON.stringify(rows), before);
+});
+
+test("constituent changes, exact value differences and long gaps remain explicit in the change-log", () => {
+  const result = summarizeIndexChanges([
+    { snapshotDate: "2025-01-31", value: 1241.0702, componentComplexCount: 502 },
+    { snapshotDate: "2026-04-12", value: 12317.1493, componentComplexCount: 13426 },
+    { snapshotDate: "2026-04-14", value: 12317.1494, componentComplexCount: 13426 },
+    { snapshotDate: "2026-04-15", value: 12317.1494, componentComplexCount: 13427 },
+  ]);
+  assert.equal(result.length, 4);
+  assert.ok(result[1].previousGapDays > 400);
 });

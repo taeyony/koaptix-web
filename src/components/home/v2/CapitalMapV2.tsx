@@ -8,6 +8,7 @@ import { HomeV2SectionHeading } from "./HomeV2SectionHeading";
 import { getRankingUniverseRegistry, getUniverseLabel } from "../../../lib/koaptix/universes";
 import { getDistrictRankingHref } from "../../../lib/koaptix/districtRankingHref";
 import { resolveSidoFromUniverseCode } from "../../../lib/koaptix/districtIdentity";
+import { summarizePublishedMap, type PublishedMapSummary } from "../../../lib/koaptix/mapPresentation";
 
 type MapItem = {
   name: string;
@@ -68,7 +69,7 @@ function totalLabel(value: number): string {
     : "—";
 }
 
-export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable }: { universeCode: string; universeLabel: string; universeUnavailable: boolean }) {
+export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable, onSummary }: { universeCode: string; universeLabel: string; universeUnavailable: boolean; onSummary?: (summary: PublishedMapSummary | null) => void }) {
   const enabledUniverses = getRankingUniverseRegistry();
   const selectedSido = resolveSidoFromUniverseCode(universeCode);
   const [retryKey, setRetryKey] = useState(0);
@@ -100,11 +101,13 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
           );
         }
         if (active) {
+          onSummary?.(summarizePublishedMap(payload, universeCode));
           setState({ status: "ready", payload, message: null });
         }
       })
       .catch((error: unknown) => {
         if (active) {
+          onSummary?.(null);
           setState({
             status: "error",
             payload: null,
@@ -122,7 +125,7 @@ export function CapitalMapV2({ universeCode, universeLabel, universeUnavailable 
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [retryKey, universeCode, universeUnavailable]);
+  }, [retryKey, universeCode, universeUnavailable, onSummary]);
 
   const regions =
     state.status === "ready" ? (state.payload.items ?? []).slice(0, 7) : [];
