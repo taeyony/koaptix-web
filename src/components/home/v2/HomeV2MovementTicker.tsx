@@ -17,6 +17,17 @@ export function HomeV2MovementTicker({ items, snapshotDate, universeLabel, unive
   const [focused, setFocused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const tickerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const ticker = tickerRef.current;
+    const main = ticker?.closest<HTMLElement>("main.home-v2");
+    if (!ticker || !main) return;
+    const updateHeight = () => main.style.setProperty("--ko-ticker-height", `${Math.ceil(ticker.getBoundingClientRect().height)}px`);
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(ticker);
+    updateHeight();
+    return () => { observer.disconnect(); main.style.removeProperty("--ko-ticker-height"); };
+  }, [items.length]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const sync = () => setReducedMotion(media.matches);
@@ -36,8 +47,8 @@ export function HomeV2MovementTicker({ items, snapshotDate, universeLabel, unive
     </Link>
   ));
   return (
-    <section aria-label="공개 단지 순위·시총 변동" data-testid="movement-ticker"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--ko-border)] bg-surface px-4 py-3 text-ink shadow-[var(--ko-shadow)]">
+    <section ref={tickerRef} aria-label="공개 단지 순위·시총 변동" data-testid="movement-ticker"
+      className="ko-home-ticker fixed inset-x-0 bottom-0 z-30 border-t border-[var(--ko-border)] bg-surface px-4 py-3 text-ink shadow-[var(--ko-shadow)]">
       <div className="mx-auto max-w-home">
         <div className="mb-2 flex items-center justify-between gap-3">
           <p className="text-caption font-semibold text-muted"><span className="text-accent">같은 단지끼리 주간 비교</span> · {universeLabel} · {snapshotDate} 기준</p>

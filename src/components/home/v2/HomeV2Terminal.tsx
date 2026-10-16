@@ -54,7 +54,7 @@ export function HomeV2Terminal({
     ? `이 합계는 ${currentnessDate} 기준, 전국에서 별도로 집계한 ${aggregateComplexCount!.toLocaleString("ko-KR")}개 단지의 추정 가치를 더한 참고 값이에요. 아래 랭킹·지도에 나온 단지의 합계와는 다릅니다.`
     : "합계의 기준 날짜와 포함된 단지를 확인하지 못했어요. 랭킹과 지도는 각 영역에 적힌 날짜와 범위를 확인해 주세요.";
   return (
-    <main className="home-v2 min-h-screen bg-[var(--ko-bg)] pb-52 text-ink antialiased sm:pb-36 xl:pb-24" data-universe-code={universeCode} data-universe-unavailable={universeUnavailable ? "true" : "false"}>
+    <main className="home-v2 min-h-screen bg-[var(--ko-bg)] text-ink antialiased" data-universe-code={universeCode} data-universe-unavailable={universeUnavailable ? "true" : "false"}>
       <a href="#koaptix-500" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-surface focus:p-3 focus:text-ink">랭킹으로 바로가기</a>
       <HomeV2Navigation universeCode={universeCode} />
       <header className="relative z-20 isolate border-b border-[var(--ko-border)] px-5 pt-5 sm:px-8 lg:px-12">

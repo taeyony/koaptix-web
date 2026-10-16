@@ -149,7 +149,6 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
 
   const items = state.items;
   const boardDate = state.status === "ready" ? state.metadata.latestBoardDate ?? state.metadata.snapshot_date ?? null : null;
-  const tickerItems = useMemo(() => selectMovementHighlights(items, boardDate, "common"), [items, boardDate]);
   const needsNationalWatchlist = isLoaded && bookmarks.length > 0 && universeCode !== "KOREA_ALL";
   const watchlistPending = needsNationalWatchlist && nationalWatchlistState === "pending";
   const watchlistError = state.status === "error" || (needsNationalWatchlist && nationalWatchlistState === "error");
@@ -185,6 +184,10 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
         .slice(0, 2),
     [items],
   );
+  const tickerItems = useMemo(() => {
+    const cardIds = new Set([...rising, ...falling].map(item => item.complexId));
+    return selectMovementHighlights(items.filter(item => !cardIds.has(item.complexId)), boardDate, "common");
+  }, [items, boardDate, rising, falling]);
   const knownMovement = items.filter((item) => Number.isFinite(commonRankDelta(item)));
   const movementCounts = {
     rising: knownMovement.filter((item) => (commonRankDelta(item) ?? 0) > 0)
@@ -340,7 +343,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
         ) : null}
       </section>
 
-      <section className="order-4 border-b border-[var(--ko-border)] py-8 lg:order-4 lg:border-b-0 lg:border-l lg:pl-7">
+      <section data-testid="movement-highlights" className="order-4 border-b border-[var(--ko-border)] py-8 lg:order-4 lg:border-b-0 lg:border-l lg:pl-7">
         {rising.length || falling.length ? <>
         <HomeV2SectionHeading
           title="같은 단지끼리 순위가 바뀐 곳"

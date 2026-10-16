@@ -59,8 +59,8 @@
   --ko-backdrop: rgb(2 6 23 / 70%);
   --ko-map-surface: #12333e;
   --ko-map-line: #718096;
-  --ko-map-height: clamp(17.5rem, 22vw, 21rem);
-  --ko-map-max-width: 18rem;
+  --ko-map-height: clamp(20rem, 28vw, 24rem);
+  --ko-map-max-width: 24rem;
   --ko-chart-grid: #334155;
   --ko-shadow: 0 8px 24px rgb(11 31 53 / 6%);
 }
