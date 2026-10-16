@@ -22,6 +22,8 @@ import type {
 } from "./types";
 import { requireUniformUniverseServicePublication } from "./currentness";
 import { buildCommonRankComparisons, previousWeekDate, type CommonRankSourceRow } from "./weeklyRankComparison";
+import { hasComparableCapEvidence, type CapSnapshotEvidence, type CapComponentEvidence } from "./weeklyCapComparison";
+import { parsePublicAddress, isLegalDongName } from "./districtIdentity";
 import {
   KOAPTIX_OFFICIAL_BASE_DATE,
   KOAPTIX_PUBLIC_EXPOSURE_BLOCKED,
@@ -178,14 +180,7 @@ function buildWeeklyDeltaPayload(
   }
 
   const previousRank = toNumber(previous.rank_all, currentRank);
-  const previousMarketCap = toNumber(previous.market_cap_krw, currentMarketCap);
-
   const rankDelta7d = previousRank - currentRank;
-  const marketCapDelta7d = currentMarketCap - previousMarketCap;
-  const marketCapDeltaPct7d =
-    previousMarketCap > 0
-      ? Number(((marketCapDelta7d / previousMarketCap) * 100).toFixed(2))
-      : 0;
 
   const rankMovement: WeeklyDerivedPayload["rank_movement"] =
     rankDelta7d > 0 ? "UP" : rankDelta7d < 0 ? "DOWN" : "SAME";
@@ -194,8 +189,10 @@ function buildWeeklyDeltaPayload(
     history_snapshot_date: previous.snapshot_date ?? null,
     previous_rank_all: previousRank,
     rank_delta_7d: rankDelta7d,
-    market_cap_delta_7d: marketCapDelta7d,
-    market_cap_delta_pct_7d: marketCapDeltaPct7d,
+    // This detail path has no matching calculation evidence. The dated public
+    // board reader supplies capital differences only after verification.
+    market_cap_delta_7d: null,
+    market_cap_delta_pct_7d: null,
     rank_movement: rankMovement,
   };
 }
@@ -305,6 +302,31 @@ export async function getExactWeeklyMarketCapComparisonMap(
 
     if (error) throw error;
 
+    // A previous total alone does not establish the same calculation basis.
+    // Short-circuit on absent prior snapshots before reading any components.
+    const previousEvidence = await withLocalQueryTimeout(supabase.from("apt_market_cap_snapshot")
+      .select("snapshot_date,complex_id,market_cap_krw,total_household_count,priced_household_count,total_cluster_count,priced_cluster_count,calculation_version,price_method_summary")
+      .eq("snapshot_date", previousSnapshotDate).in("complex_id", complexIds).limit(complexIds.length), 1200, "WEEKLY_CAP_EVIDENCE_TIMEOUT");
+    if (previousEvidence.error || !previousEvidence.data?.length) return new Map();
+    const eligibleIds = previousEvidence.data.map(row => Number(row.complex_id));
+    const currentEvidence = await withLocalQueryTimeout(supabase.from("apt_market_cap_snapshot")
+      .select("snapshot_date,complex_id,market_cap_krw,total_household_count,priced_household_count,total_cluster_count,priced_cluster_count,calculation_version,price_method_summary")
+      .eq("snapshot_date", normalizedBoardDate).in("complex_id", eligibleIds).limit(eligibleIds.length), 1200, "WEEKLY_CAP_EVIDENCE_TIMEOUT");
+    if (currentEvidence.error) return new Map();
+    const components: CapComponentEvidence[] = [];
+    for (let offset = 0; offset < 20000; offset += 1000) {
+      const page = await withLocalQueryTimeout(supabase.from("apt_market_cap_cluster_component_snapshot")
+        .select("snapshot_date,complex_id,area_cluster_id,household_count,representative_price_krw,cluster_market_cap_krw,component_status,calculation_version", { count: "exact" })
+        .in("snapshot_date", [previousSnapshotDate, normalizedBoardDate]).in("complex_id", eligibleIds)
+        .order("snapshot_date").order("complex_id").order("area_cluster_id").range(offset, offset + 999), 1200, "WEEKLY_CAP_COMPONENT_TIMEOUT");
+      if (page.error || page.count == null || page.count > 20000) return new Map();
+      components.push(...((page.data ?? []) as CapComponentEvidence[]));
+      if (components.length === page.count) break;
+      if (!page.data?.length || components.length > page.count || offset + 1000 >= 20000) return new Map();
+    }
+    const currentById = new Map((currentEvidence.data ?? []).map(row => [String(row.complex_id), row as CapSnapshotEvidence]));
+    const previousById = new Map(previousEvidence.data.map(row => [String(row.complex_id), row as CapSnapshotEvidence]));
+
     const comparisons = new Map<string, ExactWeeklyMarketCapComparison>();
     for (const row of (data ?? []) as DbRankHistoryRow[]) {
       const key = row.complex_id == null ? "" : String(row.complex_id);
@@ -320,6 +342,8 @@ export async function getExactWeeklyMarketCapComparisonMap(
       ) {
         continue;
       }
+
+      if (!hasComparableCapEvidence(currentById.get(key), previousById.get(key), components, currentMarketCap, previousMarketCap)) continue;
 
       const marketCapDelta7d = currentMarketCap - previousMarketCap;
       const marketCapDeltaPct7d = Number(
@@ -367,11 +391,19 @@ async function fetchWeeklyComparisonByComplexId(
   }
 }
 
-async function fetchRegionFallbackMap(
+export async function fetchRegionFallbackMap(
   supabase: ReturnType<typeof createServerSupabase>,
   complexIds: number[]
 ): Promise<Map<string, RegionFallbackRow>> {
   if (complexIds.length === 0) return new Map();
+
+  if (complexIds.length > 200) {
+    const result = new Map<string, RegionFallbackRow>();
+    const chunks = Array.from({ length: Math.ceil(complexIds.length / 200) }, (_, i) => complexIds.slice(i * 200, (i + 1) * 200));
+    const pages = await Promise.all(chunks.map(chunk => fetchRegionFallbackMap(supabase, chunk)));
+    for (const page of pages) for (const [id, row] of page) result.set(id, row);
+    return result;
+  }
 
   try {
     const [{ data: regionMapData, error: regionMapError }, { data: aptComplexData, error: aptComplexError }] =
@@ -456,7 +488,9 @@ async function fetchRegionFallbackMap(
 
     const result = new Map<string, RegionFallbackRow>();
 
-    for (const row of regionMapRows) {
+    const joinedRows = [...regionMapRows, ...aptComplexRows.filter(apt => !regionMapRows.some(row => String(row.complex_id) === String(apt.complex_id)))
+      .map(apt => ({ complex_id: apt.complex_id, sgg_cd: null, lawd_cd: null, sigungu_name: null, umd_nm: null }))];
+    for (const row of joinedRows) {
       const key = row.complex_id == null ? "" : String(row.complex_id);
       if (!key || result.has(key)) continue;
 
@@ -472,6 +506,7 @@ async function fetchRegionFallbackMap(
       const byRegionId =
         aptComplex?.region_id != null ? regionDimById.get(aptComplex.region_id) ?? null : null;
       const parsedAddress = parseSigunguFromAddress(aptComplex?.address_jibun ?? null);
+      const publicAddress = parsePublicAddress(aptComplex?.address_jibun);
 
       result.set(key, {
         complex_id: row.complex_id,
@@ -484,7 +519,7 @@ async function fetchRegionFallbackMap(
           byCode?.full_name_ko ??
           byRegionId?.full_name_ko ??
           parsedAddress.sigungu_full_name,
-        umd_nm: row.umd_nm ?? null,
+        umd_nm: isLegalDongName(row.umd_nm) ? row.umd_nm : publicAddress.legalDongName || null,
         address_jibun: aptComplex?.address_jibun ?? null,
       });
     }
@@ -789,7 +824,7 @@ export async function getComplexDetailById(
   );
 
   const resolvedSigungu = liveRow.sigungu_name ?? regionFallback?.sigungu_name ?? null;
-  const resolvedDong = liveRow.legal_dong_name ?? regionFallback?.umd_nm ?? null;
+  const resolvedDong = isLegalDongName(liveRow.legal_dong_name) ? liveRow.legal_dong_name : regionFallback?.umd_nm ?? null;
   const resolvedSigunguFull =
     regionFallback?.sigungu_full_name ??
     resolvedSigungu ??
@@ -800,6 +835,7 @@ export async function getComplexDetailById(
     sigungu_name: resolvedSigungu,
     sigungu_full_name: resolvedSigunguFull,
     legal_dong_name: resolvedDong,
+    address_jibun: regionFallback?.address_jibun ?? null,
     location_search_label: [
       resolvedSigunguFull,
       resolvedSigungu,

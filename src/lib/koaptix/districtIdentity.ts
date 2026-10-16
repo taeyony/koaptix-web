@@ -127,6 +127,37 @@ function normalizeAdministrativeLabel(value: unknown): string {
     .replace(/\s+/g, " ");
 }
 
+export function isLegalDongName(value: unknown): value is string {
+  return typeof value === "string" && /^[가-힣]/.test(value.trim()) && /(?:읍|면|동|리|가)$/.test(value.trim());
+}
+
+function shortSido(code: CanonicalSidoIdentity | null): string {
+  return SIDO_ALIAS_ENTRIES.find(([label, sido]) => sido === code && label.length === 2)?.[0] ?? "";
+}
+
+/** Parse administrative words, never a lot number as a dong. Sejong has no gu. */
+export function parsePublicAddress(value: unknown) {
+  const tokens = normalizeAdministrativeLabel(value).replace(/^대한민국\s+/, "").split(" ");
+  const sido = resolveCanonicalSidoLabel(tokens[0]);
+  if (!sido) return { cityName: "", sigunguName: "", legalDongName: "" };
+  const rest = tokens.slice(1).filter(token => resolveCanonicalSidoLabel(token) !== sido);
+  const dongIndex = rest.findIndex(isLegalDongName);
+  const district = (dongIndex < 0 ? rest : rest.slice(0, dongIndex)).filter(token => /[가-힣].*[시군구]$/.test(token));
+  return {
+    cityName: shortSido(sido),
+    sigunguName: sido === "SEJONG_ALL" ? "" : [...new Set(district)].join(" "),
+    legalDongName: dongIndex < 0 ? "" : rest[dongIndex],
+  };
+}
+
+export function formatPublicLocation(item: Pick<RankingItem, "sigunguName" | "legalDongName"> & { cityName?: string | null; universeCode?: string }) {
+  const parsed = parsePublicAddress([item.cityName, item.sigunguName, item.legalDongName].filter(Boolean).join(" "));
+  const city = parsed.cityName || shortSido(resolveSidoFromUniverseCode(item.universeCode));
+  const district = parsed.sigunguName || (city === "세종" ? "" : normalizeAdministrativeLabel(item.sigunguName));
+  const dong = isLegalDongName(item.legalDongName) ? item.legalDongName.trim() : parsed.legalDongName;
+  return [...new Set([city, district, dong].filter(Boolean))].join(" ") || "위치 정보 확인 중";
+}
+
 function resolveCanonicalSidoLabel(
   value: unknown,
 ): CanonicalSidoIdentity | null {

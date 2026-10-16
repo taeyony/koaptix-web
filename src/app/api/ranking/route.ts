@@ -17,9 +17,11 @@ import {
   getExactWeeklyMarketCapComparisonMap,
   getCommonWeeklyRankComparisons,
   getLatestRankBoard,
+  fetchRegionFallbackMap,
   toNullableNumber,
 } from "../../../lib/koaptix/queries";
 import { requireUniformUniverseServicePublication } from "../../../lib/koaptix/currentness";
+import { formatPublicLocation, parsePublicAddress, isLegalDongName } from "../../../lib/koaptix/districtIdentity";
 import type {
   DbLatestRankBoardWeeklyRow,
   KoaptixUniverseServicePublicationIdentity,
@@ -76,6 +78,7 @@ type RankingBoardRow = DbLatestRankBoardWeeklyRow & {
   snapshot_date?: string | null;
   snapshotDate?: string | null;
   sigungu_full_name?: string | null;
+  city_name?: string;
   location_search_label?: string | null;
   total_household_count?: NullableNumberLike;
   households?: NullableNumberLike;
@@ -387,15 +390,8 @@ function toRankingItem(
   const sigunguName = row.sigungu_name ?? "";
   const legalDongName = row.legal_dong_name ?? "";
   const name = row.apt_name_ko ?? row.name ?? "";
-  const locationLabel = [
-    row.location_search_label,
-    row.sigungu_full_name,
-    sigunguName,
-    legalDongName,
-    name,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const cityName = row.city_name || parsePublicAddress(row.sigungu_full_name).cityName;
+  const locationLabel = formatPublicLocation({ cityName, sigunguName, legalDongName, universeCode: fallbackUniverseCode });
   const searchText = [name, sigunguName, legalDongName, locationLabel]
     .filter(Boolean)
     .join(" ")
@@ -421,6 +417,7 @@ function toRankingItem(
 
     legalDongName,
     legal_dong_name: legalDongName,
+    cityName,
 
     marketCapKrw,
     market_cap_krw: marketCapKrw,
@@ -513,18 +510,24 @@ export async function GET(request: NextRequest) {
     const identity = requireUniformUniverseServicePublication(rows, universeCode);
     const latestBoardDate = deriveLatestBoardDate(rows);
     const includeCommonComparison = request.nextUrl.searchParams.get("comparison") === "common";
-    const [weeklyCapComparisonByComplexId, commonComparison] = await Promise.all([
+    const [weeklyCapComparisonByComplexId, commonComparison, regions] = await Promise.all([
       latestBoardDate ? getExactWeeklyMarketCapComparisonMap(latestBoardDate, rows) : Promise.resolve(new Map()),
       includeCommonComparison
         ? getCommonWeeklyRankComparisons(rows).catch(() => null)
         : Promise.resolve(null),
+      fetchRegionFallbackMap(createRankingRouteSupabase(), rows.map(row => Number(row.complex_id))),
     ]);
     const rowsWithWeeklyCap = rows.map((row) => {
       const complexId = row.complex_id == null ? "" : String(row.complex_id);
       const comparison = weeklyCapComparisonByComplexId.get(complexId);
+      const region = regions.get(complexId);
+      const address = parsePublicAddress(region?.address_jibun);
 
       return {
         ...row,
+        city_name: address.cityName || parsePublicAddress(region?.sigungu_full_name).cityName,
+        sigungu_name: row.sigungu_name || region?.sigungu_name || "",
+        legal_dong_name: isLegalDongName(row.legal_dong_name) ? row.legal_dong_name : region?.umd_nm || "",
         history_snapshot_date: comparison?.history_snapshot_date ?? null,
         market_cap_delta_7d: comparison?.market_cap_delta_7d ?? null,
         market_cap_delta_pct_7d:

@@ -61,6 +61,7 @@ export type DbRankHistoryRow = {
 };
 
 export type DbComplexDetailSheetBaseRow = {
+  address_jibun?: string | null;
   complex_id: number | string | null;
   apt_name_ko: string | null;
   rank_all: number | null;

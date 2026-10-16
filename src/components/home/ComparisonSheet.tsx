@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { buildComparisonSharePath, isComparisonDate } from "../../lib/koaptix/complexShare";
 import { resolveUniverseRequest, getUniverseLabel } from "../../lib/koaptix/universes";
 import { commonRankDelta } from "../../lib/koaptix/weeklyRankComparison";
+import { publicComplexName } from "../../lib/koaptix/rankingPresentation";
+import { formatPublicLocation } from "../../lib/koaptix/districtIdentity";
 import type { RankingItem } from "../../lib/koaptix/types";
 
 type ComparisonSheetProps = {
@@ -70,13 +72,13 @@ function readNumber(value: unknown, keys: string[]): number | null {
 
 // 🚨 잼이사 튜닝: 우리 데이터 규격(RankingItem)에 맞게 이름표(Key)를 정확히 꽂았습니다!
 function getComplexName(item: unknown): string {
-  return readString(item, ["name", "complex_name", "apt_name"]) ?? "선택 단지";
+  return publicComplexName(readString(item, ["name", "complex_name", "apt_name"]) ?? "선택 단지");
 }
 
 function getLocationText(item: unknown): string {
   const district = readString(item, ["sigunguName", "sigungu_name"]);
   const dong = readString(item, ["legalDongName", "legal_dong_name"]);
-  if (district || dong) return [district, dong].filter(Boolean).join(" ");
+  if (district || dong) return formatPublicLocation({ sigunguName: district ?? "", legalDongName: dong ?? "", cityName: readString(item, ["cityName"]), universeCode: readString(item, ["universeCode", "universe_code"]) ?? undefined });
   return readString(item, ["locationLabel", "district_name"]) ?? "-";
 }
 
@@ -176,7 +178,7 @@ function buildMetricRows(leftItem: unknown, rightItem: unknown): MetricDefinitio
       compare: "higher",
     },
     {
-      label: common ? "주간 비교 · 공통 단지 내" : "공표 순위 차이",
+      label: common ? "기록 간 순위 · 공통 단지 내" : "공표 순위 차이",
       leftValue: leftMomentum,
       rightValue: rightMomentum,
       displayLeft: leftMomentum === null ? "비교 자료 없음" : `${formatSigned(leftMomentum)}계단`,

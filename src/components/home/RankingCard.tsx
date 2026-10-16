@@ -3,6 +3,8 @@
 import { formatMarketCapKrw } from "../../lib/formatters";
 import type { RankMovement, RankingItem } from "../../lib/koaptix/types";
 import { commonRankDelta, commonRankMovement, commonRankTransition, needsMarketCapReview } from "../../lib/koaptix/weeklyRankComparison";
+import { formatPublicLocation } from "../../lib/koaptix/districtIdentity";
+import { publicComplexName } from "../../lib/koaptix/rankingPresentation";
 
 interface RankingCardProps {
   item: RankingItem;
@@ -97,14 +99,8 @@ export function RankingCard({
       ? "지난주와 비교할 자료가 없어요"
       : null;
 
-  const locationText =
-    item.sigunguName && item.legalDongName
-      ? `${item.sigunguName} ${item.legalDongName}`
-      : item.sigunguName
-        ? item.sigunguName
-        : item.legalDongName
-          ? `위치 정보 보강 중 · ${item.legalDongName}`
-          : "위치 정보 없음";
+  const locationText = formatPublicLocation(item);
+  const displayName = publicComplexName(item.name);
 
   if (variant === "full-board") {
     const movement = getAuthoritativeMovement(item);
@@ -194,8 +190,8 @@ export function RankingCard({
                   {isBookmarked ? "★" : "☆"}
                 </button>
               )}
-              <h3 className="min-w-0 line-clamp-2 break-words text-sm font-semibold text-slate-100 transition-colors [overflow-wrap:break-word] group-hover:text-white sm:line-clamp-1 sm:text-base">
-                {item.name}
+              <h3 title={displayName !== item.name ? `원문 명칭: ${item.name} · 부가 명칭 확인 중` : undefined} className="min-w-0 break-words text-body font-semibold text-slate-100 transition-colors [overflow-wrap:break-word] group-hover:text-white">
+                {displayName}
               </h3>
             </div>
           </div>
@@ -225,7 +221,7 @@ export function RankingCard({
               <p className="mt-1 text-sm font-semibold tabular-nums text-slate-100 sm:text-base">
                 {formatMarketCapKrw(item.marketCapKrw)}
               </p>
-              {weeklyCapPercent !== null && (
+              {weeklyCapPercent !== null ? (
                 <p
                   className={`mt-1 text-xs font-bold tabular-nums ${
                     weeklyCapPercent > 0
@@ -240,7 +236,7 @@ export function RankingCard({
                   {formatSignedWeeklyPercent(weeklyCapPercent)}
                   {needsMarketCapReview(item) ? <span className="block font-medium text-muted">큰 시총 변동 · 계산 입력 확인 필요</span> : null}
                 </p>
-              )}
+              ) : <p className="mt-1 text-caption text-muted" data-testid="ranking-cap-unverified">변화율 · 비교 자료 확인 중</p>}
             </div>
 
             <div
@@ -248,9 +244,9 @@ export function RankingCard({
               data-testid="ranking-weekly-rank-movement"
             >
               <p className="text-caption font-semibold uppercase tracking-label opacity-70">
-                {"weeklyRankComparison" in item ? "주간 비교 · 공통 단지 내" : "공표 순위 차이"}
+                {"weeklyRankComparison" in item ? "기록 간 순위 · 공통 단지 내" : "공표 순위 차이"}
               </p>
-              <p className="mt-1 truncate text-caption font-medium tabular-nums opacity-80 sm:text-xs">
+              <p className="mt-1 break-words text-caption font-medium tabular-nums opacity-80 sm:text-xs">
                 {movementContext}
               </p>
               <p className="mt-1 text-sm font-extrabold tabular-nums sm:text-base">

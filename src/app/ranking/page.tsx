@@ -50,12 +50,6 @@ async function resolveSearchParams(
   return input ? await input : undefined;
 }
 
-function getUniverseResolutionLabel(
-  resolution: ReturnType<typeof resolveUniverseRequest>,
-) {
-  return resolution.registryItem?.label ?? resolution.requestedUniverseCode;
-}
-
 export async function generateMetadata({ searchParams }: { searchParams?: Promise<SearchParamsShape> }): Promise<Metadata> {
   const params = await resolveSearchParams(searchParams);
   const scope = resolveUniverseRequest(pickSingleParam(params?.universe), { capability: "ranking" });
@@ -67,6 +61,20 @@ export async function generateMetadata({ searchParams }: { searchParams?: Promis
   return { metadataBase: new URL(PUBLIC_SITE_ORIGIN), title, description,
     alternates: { canonical }, openGraph: { title, description, url: canonical },
     robots: { index: !scope.universeUnavailable && !filtered, follow: true } };
+}
+
+async function PublicRankingPreview({ universeCode }: { universeCode: string }) {
+  const preview = await getPublicPageBoard(universeCode, 5);
+  if (!preview.length) return null;
+  return <details className="mt-4 rounded-xl border border-[var(--ko-border)] bg-surface p-4 text-ink" data-testid="regional-ranking-preview">
+    <summary className="cursor-pointer text-control font-semibold">{publicRegionLabel(universeCode)} 상위 단지 빠른보기 · {preview[0].snapshot_date} 기준</summary>
+    <ol className="mt-3 divide-y divide-[var(--ko-border)]">
+      {preview.map(row => <li key={String(row.complex_id)} className="flex items-center justify-between gap-3 py-4 text-body">
+        <Link className="ko-text-link font-semibold" href={`/complex/${row.complex_id}${universeCode === DEFAULT_UNIVERSE_CODE ? "" : `?universe=${universeCode}`}`}>{row.rank_all}위 · {row.apt_name_ko}</Link>
+        <span className="shrink-0 tabular-nums">{formatKrwCompact(row.market_cap_krw)}</span>
+      </li>)}
+    </ol>
+  </details>;
 }
 
 export default async function RankingPage({
@@ -90,9 +98,6 @@ export default async function RankingPage({
   const initialComplexId =
     pickSingleParam(resolvedSearchParams?.complexId)?.trim() || null;
 
-  // 🚨 지차장 지시 B: Label 추출 및 홈으로 돌아갈 경로(현재 유니버스 유지) 생성
-  const universeLabel = getUniverseResolutionLabel(universeResolution);
-
   const homeHref =
     universeCode === DEFAULT_UNIVERSE_CODE
       ? "/"
@@ -101,7 +106,6 @@ export default async function RankingPage({
   // Keep the ranking HTML shell lightweight; the client board keeps the TOP1000
   // contract by fetching the full payload through /api/ranking after hydration.
   const items: RankingItem[] = [];
-  const preview = universeUnavailable ? [] : await getPublicPageBoard(universeCode, 5);
 
   return (
     <main
@@ -120,36 +124,11 @@ export default async function RankingPage({
       <div className="mx-auto w-full min-w-0 max-w-board space-y-2 overflow-x-hidden">
         <section className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-700/50 bg-[#0b1118] shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_rgba(0,0,0,0.4)]">
           <div className="min-w-0 max-w-full border-b border-slate-800/80 px-3 py-2.5 lg:px-4 lg:py-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 max-w-full flex-1 basis-64">
-                <p className="text-caption uppercase tracking-label text-slate-400">
-                  아파트 시가총액 랭킹
-                </p>
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2">
+              <div className="min-w-0 max-w-full">
                 <h1 className="ko-section-title mt-1 break-words text-section font-bold tracking-heading text-white [overflow-wrap:break-word] sm:text-xl lg:text-2xl">
                   전체 아파트 순위
                 </h1>
-
-                {/* 🚨 지차장 지시 C: 헤더 설명에 현재 유니버스 배지 추가 */}
-                <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                  <p className="min-w-0 max-w-full ko-copy break-words text-sm text-slate-300 [overflow-wrap:break-word] sm:text-sm">
-                    {LAUNCH_COPY.rankingSubtitle}
-                  </p>
-                  <span className="max-w-full break-words rounded-full border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-caption uppercase tracking-label text-slate-300 [overflow-wrap:break-word]">
-                    {universeLabel}
-                  </span>
-                </div>
-
-                <div
-                  className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
-                  data-testid="ranking-weekly-movement-hero"
-                >
-                  <span className="text-caption font-bold uppercase tracking-label text-cyan-300">
-                    이번 주 순위 변화
-                  </span>
-                  <span className="font-medium text-slate-200 sm:text-sm">
-                    지난주보다 순위가 얼마나 달라졌는지 확인해 보세요
-                  </span>
-                </div>
 
               </div>
 
@@ -163,21 +142,15 @@ export default async function RankingPage({
                   홈으로
                 </Link>
               </div>
+              <div className="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption">
+                <span className="font-semibold text-accent">공개 테스트 중</span>
+                <p className="text-muted">단지 전체의 추정 가치 · 공개 대상 최대 1,000개</p>
+              </div>
             </div>
           </div>
         </section>
 
         <section className="min-h-0">
-          {preview.length ? <details className="mb-3 rounded-2xl border border-[var(--ko-border)] bg-surface p-4 text-ink" data-testid="regional-ranking-preview">
-            <summary className="cursor-pointer text-control font-semibold">{publicRegionLabel(universeCode)} 상위 단지 빠른보기 · {preview[0].snapshot_date} 기준</summary>
-            <p className="mt-3 text-caption text-muted">공개 랭킹 상위 {preview.length}개예요. 아래 전체 랭킹에서 검색·비교·주간 변동 정렬을 이용할 수 있어요.</p>
-            <ol className="mt-3 divide-y divide-[var(--ko-border)]">
-              {preview.map(row => <li key={String(row.complex_id)} className="flex items-center justify-between gap-3 py-4 text-body">
-                <Link className="ko-text-link font-semibold" href={`/complex/${row.complex_id}${universeCode === DEFAULT_UNIVERSE_CODE ? "" : `?universe=${universeCode}`}`}>{row.rank_all}위 · {row.apt_name_ko}</Link>
-                <span className="shrink-0 tabular-nums">{formatKrwCompact(row.market_cap_krw)}</span>
-              </li>)}
-            </ol>
-          </details> : null}
           <Suspense
             fallback={
               <div className="h-[70vh] w-full animate-pulse rounded-2xl border border-slate-700/50 bg-[#0b1118]" />
@@ -186,7 +159,7 @@ export default async function RankingPage({
             <RankingBoardClient
               items={items}
               initialUniverseCode={universeCode}
-              title="이번 주 순위 변화"
+              title="공개 랭킹"
               apiBasePath="/api/ranking"
               boardLimit={1000}
               emptyMessage="선택한 지역에는 아직 공개된 랭킹이 없어요. 다른 지역도 찾아보세요."
@@ -195,6 +168,14 @@ export default async function RankingPage({
               presentation="weekly-movement-full-board"
             />
           </Suspense>
+          <details className="mt-3 rounded-xl border border-[var(--ko-border)] bg-surface p-3 text-caption text-muted">
+            <summary className="cursor-pointer font-semibold text-ink">계산·비교 기준 및 이용 안내</summary>
+            <div className="mt-3 max-w-copy space-y-2 leading-copy">
+              <p>{LAUNCH_COPY.estimatedMarketCap}</p><p>{LAUNCH_COPY.compactBeta}</p>
+              <p>순위 차이는 두 날짜에 모두 포함된 단지끼리 비교합니다. 시총 변화율은 양쪽의 계산 방식과 면적별 세대수 구성이 확인된 경우에만 표시합니다.</p>
+            </div>
+          </details>
+          {!universeUnavailable ? <Suspense fallback={null}><PublicRankingPreview universeCode={universeCode} /></Suspense> : null}
         </section>
       </div>
     </main>

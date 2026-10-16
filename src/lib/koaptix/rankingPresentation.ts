@@ -4,6 +4,16 @@ import { commonRankDelta } from "./weeklyRankComparison";
 const integerFormat = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 });
 const percentFormat = new Intl.NumberFormat("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** Preserve the source name; omit an unfinished qualifier from its short label. */
+export function publicComplexName(name: string): string {
+  let depth = 0, opening = -1;
+  for (let i = 0; i < name.length; i += 1) {
+    if (name[i] === "(") { if (depth === 0) opening = i; depth += 1; }
+    if (name[i] === ")") depth = Math.max(0, depth - 1);
+  }
+  return depth > 0 && opening > 0 ? name.slice(0, opening).trim() : name;
+}
+
 export type RankingSort = "rank" | "rank-up" | "rank-down" | "cap-up" | "cap-down";
 export function parseRankingSort(value: string | null | undefined): RankingSort {
   return value === "rank-up" || value === "rank-down" || value === "cap-up" || value === "cap-down" ? value : "rank";

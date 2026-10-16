@@ -19,6 +19,7 @@ import type {
 import { KOAPTIX_OFFICIAL_BASE_DATE } from "../../types/koaptix";
 import { getUniverseLabel } from "../../lib/koaptix/universes";
 import { commonRankDelta, commonRankTransition, needsMarketCapReview } from "../../lib/koaptix/weeklyRankComparison";
+import { publicComplexName } from "../../lib/koaptix/rankingPresentation";
 
 const ComplexHistoryMiniChart = dynamic(
   () =>
@@ -91,10 +92,6 @@ function formatPercent(value: number): string {
   if (value > 0) return `+${value.toFixed(2)}%`;
   if (value < 0) return `${value.toFixed(2)}%`;
   return "0.00%";
-}
-
-function formatDeltaUnavailable(): string {
-  return "비교 자료 없음";
 }
 
 function formatRankDelta(delta: number): string {
@@ -425,7 +422,8 @@ export function ComplexDetailSheet({
     return createPortal(emptyContent, document.body);
   }
 
-  const title = detail?.name ?? item?.name ?? "단지 상세 정보";
+  const sourceName = detail?.name ?? item?.name ?? "단지 상세 정보";
+  const title = publicComplexName(sourceName);
   const location = (detail?.locationLabel ?? item?.locationLabel) || "위치 정보 없음";
   const rank = detail?.rank ?? item?.rank ?? null;
   const marketCap = detail?.marketCapKrw ?? item?.marketCapKrw ?? 0;
@@ -446,12 +444,8 @@ export function ComplexDetailSheet({
   const displayRankDelta7d = usesCommonComparison && item ? commonRankDelta(item) : weeklyComparisonAvailable
     ? detail?.rankDelta7dNullable ?? rankDelta7d ?? 0
     : null;
-  const displayMarketCapDelta7d = weeklyComparisonAvailable
-    ? detail?.marketCapDelta7dNullable ?? marketCapDelta7d ?? 0
-    : null;
-  const displayMarketCapDeltaPct7d = weeklyComparisonAvailable
-    ? detail?.marketCapDeltaPct7dNullable ?? marketCapDeltaPct7d ?? 0
-    : null;
+  const displayMarketCapDelta7d = item?.marketCapDelta7d ?? detail?.marketCapDelta7dNullable ?? null;
+  const displayMarketCapDeltaPct7d = item?.marketCapDeltaPct7d ?? detail?.marketCapDeltaPct7dNullable ?? null;
   const householdCount = detail?.householdCount ?? item?.households ?? null;
   const approvalYear = detail?.approvalYear ?? item?.buildYear ?? null;
   const ageYears = detail?.ageYears ?? item?.ageYears ?? null;
@@ -481,7 +475,7 @@ export function ComplexDetailSheet({
                 <p className="text-caption uppercase tracking-label text-cyan-300/70 sm:text-xs">
                   단지 상세 정보
                 </p>
-                <h3 id="complex-detail-title" className="mt-1 truncate text-xl font-semibold tracking-heading sm:text-2xl">
+                <h3 id="complex-detail-title" title={title !== sourceName ? `원문 명칭: ${sourceName} · 부가 명칭 확인 중` : undefined} className="mt-1 break-words text-xl font-semibold tracking-heading sm:text-2xl">
                   {title}
                 </h3>
                 <p className="mt-1 truncate text-sm text-white/50 sm:text-control">
@@ -547,11 +541,11 @@ export function ComplexDetailSheet({
               />
               <Metric label="추정 시가총액" value={formatMarketCapKrw(marketCap)} />
               <Metric
-                label={usesCommonComparison ? "주간 비교 · 공통 단지 내" : "공표 순위 차이"}
+                label={usesCommonComparison ? "기록 간 순위 · 공통 단지 내" : "공표 순위 차이"}
                 value={
                   displayRankDelta7d != null
                     ? formatRankDelta(displayRankDelta7d)
-                    : formatDeltaUnavailable()
+                    : "비교 자료 확인 중"
                 }
                 tone={
                   displayRankDelta7d != null
@@ -564,7 +558,7 @@ export function ComplexDetailSheet({
                 value={
                   displayMarketCapDeltaPct7d != null
                     ? formatPercent(displayMarketCapDeltaPct7d)
-                    : formatDeltaUnavailable()
+                    : "비교 자료 확인 중"
                 }
                 tone={
                   displayMarketCapDeltaPct7d != null

@@ -149,8 +149,8 @@ const MOVEMENT_FILTER_OPTIONS: Array<{
   label: string;
 }> = [
   { key: "ALL", label: "전체" },
-  { key: "UP", label: "▲ 상승" },
-  { key: "DOWN", label: "▼ 하락" },
+  { key: "UP", label: "순위 ▲" },
+  { key: "DOWN", label: "순위 ▼" },
   { key: "NEW", label: "새로 진입" },
 ];
 
@@ -190,7 +190,7 @@ function normalizeRankMovement(item: RankingItem): RankMovement | null {
 
 function formatSnapshotDate(value: string | null): string | null {
   const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return match ? `${match[1]}.${match[2]}.${match[3]}` : null;
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
 }
 
 function getRankValue(item: RankingItem): number | null {
@@ -572,6 +572,7 @@ export function RankingBoardClient({
 
   const [comparisonItems, setComparisonItems] = useState<RankingItem[]>([]);
   const [rankingSort, setRankingSort] = useState<RankingSort>(() => parseRankingSort(searchParams?.get("sort")));
+  const [listPage, setListPage] = useState({ key: "", count: 50 });
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const comparisonRestoreRef = useRef("");
   const [comparisonLinkError, setComparisonLinkError] = useState<{ key: string; message: string } | null>(null);
@@ -1320,6 +1321,12 @@ export function RankingBoardClient({
     shouldSuppressSearchResults,
   ]);
 
+  const listPageKey = JSON.stringify([boardUniverseCode, boardDeliveryMeta.latestBoardDate, selectedMovementFilter,
+    selectedTierFilter, districtQueryLocal, searchQuery, rankingSort, showBookmarksOnly]);
+  const listVisibleCount = isWeeklyMovementFullBoard ? listPage.key === listPageKey ? listPage.count : 50 : filteredItems.length;
+  const visibleItems = isWeeklyMovementFullBoard ? filteredItems.slice(0, listVisibleCount) : filteredItems;
+  const hasCapComparisons = presentationBoardItems.some(item => typeof item.marketCapDeltaPct7d === "number" && Number.isFinite(item.marketCapDeltaPct7d));
+
   const filteredZeroMessage = useMemo(() => {
     if (presentationBoardItems.length === 0 || filteredItems.length > 0) {
       return null;
@@ -1577,6 +1584,37 @@ export function RankingBoardClient({
                 : "gap-3 p-4 lg:p-5"
           }`}
         >
+          {isWeeklyMovementFullBoard ? <>
+            <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(160px,0.9fr)_minmax(200px,1.4fr)_minmax(190px,1fr)]" data-testid="ranking-toolbar">
+              <UniverseSelector value={boardUniverseCode} options={universeOptions} onChange={handleUniverseChange} density="toolbar" />
+              <label className="min-w-0"><span className="sr-only">아파트 이름·지역 검색</span><input aria-label="아파트 이름·지역 검색" aria-busy={isDiscoverySearchPending} placeholder="아파트 이름·지역 검색" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} className="min-h-11 w-full rounded-lg border border-[var(--ko-border)] bg-surface px-3 py-2 text-input text-ink outline-none focus:border-accent" /></label>
+              <label className="min-w-0"><span className="sr-only">랭킹 정렬</span><select aria-label="랭킹 정렬" className="ko-index-select min-h-11 w-full rounded-lg border border-[var(--ko-border)] px-3 py-2 text-control font-semibold" value={rankingSort} onChange={event => setRankingSort(parseRankingSort(event.target.value))}>
+                <option value="rank">시가총액 순위순</option><option value="rank-up">순위가 많이 오른 순</option><option value="rank-down">순위가 많이 내린 순</option><option value="cap-up" disabled={!hasCapComparisons}>시총 증가율순{hasCapComparisons ? "" : " · 비교 준비 중"}</option><option value="cap-down" disabled={!hasCapComparisons}>시총 감소율순{hasCapComparisons ? "" : " · 비교 준비 중"}</option>
+              </select></label>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="공통 단지 순위 비교" data-testid="ranking-movement-filters">
+                {MOVEMENT_FILTER_OPTIONS.map(movement => <button key={movement.key} type="button" data-movement-filter={movement.key.toLowerCase()} aria-pressed={selectedMovementFilter === movement.key} onClick={() => setSelectedMovementFilter(movement.key)} className={`min-h-11 rounded-lg border px-3 py-2 text-control font-semibold ${selectedMovementFilter === movement.key ? "border-accent bg-[var(--ko-accent-soft)] text-accent" : "border-[var(--ko-border)] bg-surface text-muted"}`}>{movement.label}</button>)}
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-caption text-muted">
+                {formattedLatestBoardDate ? <span data-testid="ranking-freshness">기준일 {formattedLatestBoardDate}</span> : null}
+                {isBoardLoading || boardDeliveryMeta.source === "client_pending" ? <span role="status">랭킹 불러오는 중</span> : null}
+                <span aria-live="polite" data-testid="ranking-visible-count">표시 {visibleItems.length}개 / 검색·필터 결과 {filteredItems.length}개 / 전체 {presentationBoardItems.length}개</span>
+              </div>
+            </div>
+            <details className="text-caption text-muted" data-testid="ranking-extra-filters">
+              <summary className="w-fit cursor-pointer py-1 font-semibold text-ink">등급·관심 단지 필터{selectedTierFilter !== "ALL" || showBookmarksOnly || districtQueryLocal ? " · 적용 중" : ""}</summary>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {enableTierFilters ? TIER_FILTER_OPTIONS.map(tier => <button key={tier.key} type="button" aria-pressed={selectedTierFilter === tier.key} onClick={() => setSelectedTierFilter(tier.key)} className={`min-h-10 rounded-lg border px-3 py-2 text-control ${selectedTierFilter === tier.key ? "border-accent text-accent" : "border-[var(--ko-border)] text-muted"}`}>{tier.label}</button>) : null}
+                <button type="button" aria-pressed={showBookmarksOnly} onClick={() => setShowBookmarksOnly(value => !value)} className="min-h-10 rounded-lg border border-[var(--ko-border)] px-3 py-2 text-control">★ 관심 단지만{showBookmarksOnly ? " · 켜짐" : ""}</button>
+                {districtQueryLocal ? <button type="button" onClick={clearDistrict} className="min-h-10 rounded-lg border border-[var(--ko-border)] px-3 py-2 text-control">{activeDistrictLabel} 조건 지우기 ×</button> : null}
+              </div>
+            </details>
+            <p className="text-caption text-muted">순위 차이는 두 기록의 공통 단지끼리 비교해요. 시총 변화율은 계산 근거가 확인된 경우에만 표시해요.</p>
+            {liveBoardError ? <p role="alert" className="text-caption text-down">{liveBoardError}</p> : null}
+            {comparisonLinkError?.key === comparisonRequestKey ? <p role="alert" className="text-caption text-down">{comparisonLinkError.message}</p> : null}
+            {isSuppressingStaleBoard ? <p data-testid="ranking-board-degraded-state" className="text-caption text-muted">선택한 지역의 랭킹을 불러오고 있어요.</p> : null}
+          </> : <>
           <div
             className={
               isHomeFlagship
@@ -1882,6 +1920,7 @@ export function RankingBoardClient({
             <span>표시 {filteredItems.length}개</span>
             <span>전체 {presentationBoardItems.length}개</span>
           </div>
+          </>}
         </div>
 
         <div
@@ -1894,7 +1933,7 @@ export function RankingBoardClient({
               }`}
           >
             {renderRegionResolutionNotice()}
-            {isBoardLoading && presentationBoardItems.length === 0 ? (
+            {(isBoardLoading || boardDeliveryMeta.source === "client_pending") && presentationBoardItems.length === 0 ? (
               <div aria-busy="true" className="flex h-32 items-center justify-center"><SearchProgress label="공개 랭킹을 불러오고 있어요" /></div>
             ) : liveBoardError && presentationBoardItems.length === 0 ? (
               <div
@@ -1908,7 +1947,7 @@ export function RankingBoardClient({
               <div aria-busy="true" className="flex h-32 items-center justify-center"><SearchProgress /></div>
             ) : filteredItems.length > 0 || otherRegionSearchItems.length > 0 ? (
               <div className="flex flex-col gap-2 pb-2">
-                {filteredItems.map((item) => (
+                {visibleItems.map((item) => (
                   <RankingCard
                     key={item.complexId}
                     item={item}
@@ -1934,6 +1973,7 @@ export function RankingBoardClient({
                     }}
                   />
                 ))}
+                {isWeeklyMovementFullBoard && visibleItems.length < filteredItems.length ? <button type="button" data-testid="ranking-load-more" onClick={() => setListPage({ key: listPageKey, count: listVisibleCount + 50 })} className="min-h-12 rounded-xl border border-[var(--ko-border)] bg-surface px-4 py-3 text-control font-semibold text-accent">50개 더 보기 · {filteredItems.length - visibleItems.length}개 남음</button> : null}
                 {otherRegionSearchItems.length > 0 ? (
                   <section aria-label="다른 지역의 공개 검색 결과" className="rounded-xl border border-[var(--ko-border)] bg-surface p-4">
                     <h3 className="text-control font-semibold text-ink">다른 지역의 공개 결과에서 찾았어요</h3>

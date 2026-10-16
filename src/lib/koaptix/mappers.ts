@@ -1,4 +1,5 @@
 import { decorateRankingTiers } from "./tiers";
+import { formatPublicLocation, parsePublicAddress } from "./districtIdentity";
 import type {
   ChartPoint,
   ComplexDetail,
@@ -138,8 +139,8 @@ export function mapLatestRankBoardRow(
   );
 
   const rankDelta7d = toNumber(row.rank_delta_7d, 0);
-  const marketCapDelta7d = toNumber(row.market_cap_delta_7d, 0);
-  const marketCapDeltaPct7d = toNumber(row.market_cap_delta_pct_7d, 0);
+  const marketCapDelta7d = toNullableNumber(row.market_cap_delta_7d);
+  const marketCapDeltaPct7d = toNullableNumber(row.market_cap_delta_pct_7d);
 
   const highMarketCap52w = toNullableNumber(row.high_market_cap_52w);
   const recoveryRate52w = deriveRecoveryRate52w(
@@ -212,7 +213,8 @@ export function mapComplexDetailRow(
 
   const sigunguName = toText(row.sigungu_name);
   const legalDongName = toText(row.legal_dong_name);
-  const locationLabel = buildLocationLabel(sigunguName, legalDongName);
+  const cityName = parsePublicAddress(row.address_jibun).cityName;
+  const locationLabel = formatPublicLocation({ cityName, sigunguName, legalDongName });
 
   const approvalYear = toNullableNumber(row.approval_year);
   const currentYear = new Date().getFullYear();

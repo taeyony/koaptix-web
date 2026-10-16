@@ -17,7 +17,7 @@ type UniverseSelectorProps = {
   value?: string;
   options: UniverseOption[];
   onChange: (nextCode: string) => void;
-  density?: "default" | "compact";
+  density?: "default" | "compact" | "toolbar";
 };
 
 const RECENT_STORAGE_KEY = "koaptix_recent_universe_codes_v1";
@@ -209,7 +209,8 @@ export default function UniverseSelector({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [recentCodes, setRecentCodes] = useState<string[]>([]);
-  const isCompact = density === "compact";
+  const isCompact = density !== "default";
+  const isToolbar = density === "toolbar";
 
   const sortedOptions = useMemo(() => {
     return [...options].sort(sortUniverseOptions);
@@ -500,12 +501,16 @@ export default function UniverseSelector({
   return (
     <div
       ref={rootRef}
-      className={`relative flex w-full min-w-0 max-w-full flex-col overflow-x-hidden ${
+      className={`relative flex w-full min-w-0 max-w-full flex-col ${isToolbar ? "overflow-visible" : "overflow-x-hidden"} ${
         isCompact ? "gap-2" : "gap-3"
       }`}
       data-universe-selector-density={density}
     >
-      <div
+      {isToolbar ? <button type="button" onClick={() => setIsOpen(previous => !previous)} aria-expanded={isOpen} aria-controls={finderId}
+        data-testid="universe-finder-toggle" className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-[var(--ko-border)] bg-surface px-3 py-2 text-control text-ink">
+        <span className="text-muted">지역</span><strong data-testid="current-universe-label" data-universe-code={currentDisplayCode} data-universe-unavailable={currentValueUnavailable ? "true" : "false"}>{currentDisplayLabel}</strong><span aria-hidden="true">⌄</span>
+      </button> : null}
+      {!isToolbar && <div
         className={
           isCompact
             ? "hidden max-w-full items-center gap-2 sm:flex sm:flex-wrap"
@@ -530,7 +535,7 @@ export default function UniverseSelector({
             시군구 / 광역 찾기
           </button>
         )}
-      </div>
+      </div>}
 
       {!isCompact && contextualRecentOptions.length > 0 && (
         <div className="flex max-w-full flex-wrap items-center gap-2">
@@ -541,7 +546,7 @@ export default function UniverseSelector({
         </div>
       )}
 
-      <div
+      {!isToolbar && <div
         className={`min-w-0 max-w-full rounded-xl border border-slate-700/60 bg-slate-900/50 px-3 ${
           isCompact ? "py-1.5" : "py-2"
         }`}
@@ -586,7 +591,7 @@ export default function UniverseSelector({
             {isOpen ? "닫기" : "찾기"}
           </button>
         </div>
-      </div>
+      </div>}
 
       {!isCompact && (
       <div className="flex max-w-full flex-wrap items-center gap-1.5 text-caption uppercase tracking-label text-slate-500">
@@ -628,7 +633,7 @@ export default function UniverseSelector({
           id={finderId}
           role="region"
           aria-label="지역 찾기"
-          className="relative mt-2 w-full overflow-hidden rounded-2xl border border-slate-700/70 bg-[#0b1118] shadow-[0_18px_40px_rgba(0,0,0,0.45)]"
+          className={`${isToolbar ? "absolute left-0 top-full z-40 mt-2 w-[min(36rem,calc(100vw-3rem))]" : "relative mt-2 w-full"} overflow-hidden rounded-2xl border border-slate-700/70 bg-[#0b1118] shadow-[0_18px_40px_rgba(0,0,0,0.45)]`}
         >
           <div className="border-b border-slate-800/80 p-3">
             <input

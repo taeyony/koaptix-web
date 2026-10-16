@@ -13,11 +13,12 @@ import { DISCOVERY_SEARCH_REQUEST_TIMEOUT_MS } from "../../../lib/koaptix/discov
 import { formatKrwCompact } from "../../../lib/formatters";
 import { getUniverseLabel } from "../../../lib/koaptix/universes";
 import { SearchProgress } from "../SearchProgress";
+import { publicComplexName } from "../../../lib/koaptix/rankingPresentation";
 
 type HomeV2SearchProps = {
   universeCode: string;
   presentation?: "default" | "landing";
-  examples?: { name: string; complexId: string }[];
+  examples?: { name: string; query?: string; complexId?: string }[];
 };
 
 type SearchPayload = RegionAliasApiMetadata & {
@@ -264,14 +265,14 @@ export function HomeV2Search({
         두 글자 이상 입력해 주세요. 순위가 없는 단지는 ‘순위 준비 중’으로 표시해요.
       </p>
       {isLanding && examples.length > 0 ? (
-        <div data-search-examples role="group" aria-label="공개 단지 검색 예시" className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="text-caption text-muted">예시</span>
+        <div data-search-examples role="group" aria-label="단지명·지역명 검색 예시" className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-caption text-muted">검색 예시</span>
           {examples.map((example) => (
             <button
-              key={example.complexId}
+              key={example.query ?? example.name}
               type="button"
               onClick={() => {
-                changeQuery(example.name);
+                changeQuery(example.query ?? example.name);
                 inputRef.current?.focus();
               }}
               className="rounded-full border border-[var(--ko-border)] px-3 py-2 text-control font-semibold text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ko-focus)]"
@@ -319,7 +320,7 @@ export function HomeV2Search({
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold text-ink">
-                      {item.name}
+                      {publicComplexName(item.name)}
                     </span>
                     <span className="mt-0.5 block truncate text-caption text-muted">
                       {item.locationLabel || "지역 확인 중"}

@@ -6,6 +6,8 @@ import { runInNewContext } from "node:vm";
 import { ModuleKind, transpileModule } from "typescript";
 import * as indexContract from "../src/types/koaptix";
 import * as weeklyComparison from "../src/lib/koaptix/weeklyRankComparison";
+import * as capComparison from "../src/lib/koaptix/weeklyCapComparison";
+import * as districtIdentity from "../src/lib/koaptix/districtIdentity";
 
 import {
   requirePublicationIdentity,
@@ -237,7 +239,7 @@ test("TOP1000 V1 preserves authoritative weekly movement and exact-date cap sema
   const types = readSource("src/lib/koaptix/types.ts");
 
   assert.match(page, /전체 아파트 순위/);
-  assert.match(page, /이번 주 순위 변화/);
+  assert.match(page, /계산·비교 기준 및 이용 안내/);
   assert.match(page, /presentation="weekly-movement-full-board"/);
 
   assert.match(
@@ -270,6 +272,7 @@ test("TOP1000 V1 preserves authoritative weekly movement and exact-date cap sema
   assert.match(exactCapHelper, /shiftSeoulDateString\(normalizedBoardDate, -7\)/);
   assert.match(exactCapHelper, /\.eq\("snapshot_date", previousSnapshotDate\)/);
   assert.match(exactCapHelper, /\.in\("complex_id", complexIds\)/);
+  assert.match(exactCapHelper, /hasComparableCapEvidence\(/);
   assert.doesNotMatch(exactCapHelper, /getWeeklyAnchorDate/);
   assert.doesNotMatch(exactCapHelper, /rank_delta|rank_movement/);
   assert.match(route, /getExactWeeklyMarketCapComparisonMap\(latestBoardDate, rows\)/);
@@ -345,6 +348,8 @@ test("common-cohort reader requires complete pages and the same exact-week publi
         if (name === "@supabase/supabase-js") return { createClient: () => client };
         if (name === "./currentness") return { requireUniformUniverseServicePublication };
         if (name === "./weeklyRankComparison") return weeklyComparison;
+        if (name === "./weeklyCapComparison") return capComparison;
+        if (name === "./districtIdentity") return districtIdentity;
         if (name === "./universes") return {};
         if (name === "../../types/koaptix") return indexContract;
         throw new Error("Unexpected comparison dependency: " + name);
@@ -422,6 +427,8 @@ function loadIndexHistoryFixture() {
       if (name === "./universes") return { DEFAULT_UNIVERSE_CODE: "KOREA_ALL", resolveServiceUniverseCode: (code: string) => code, getUniverseLabel: () => "대한민국 전체" };
       if (name === "./currentness") return {};
       if (name === "./weeklyRankComparison") return {};
+      if (name === "./weeklyCapComparison") return capComparison;
+      if (name === "./districtIdentity") return districtIdentity;
       if (name === "../../types/koaptix") return indexContract;
       throw new Error("Unexpected history dependency: " + name);
     },
