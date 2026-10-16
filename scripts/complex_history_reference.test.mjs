@@ -9,6 +9,12 @@ import ts from "typescript";
 const readerUrl = new URL("../src/lib/koaptix/complexHistoryReference.ts", import.meta.url);
 const dataUrl = new URL("../src/lib/koaptix/data/complex-history-reference-20261015.json", import.meta.url);
 const data = JSON.parse(readFileSync(dataUrl, "utf8"));
+// Reconstruct the inherited series for assertions about the earlier recovery.
+// Only this explicitly recorded set of formerly empty 2024 cells is removed.
+const inheritedSeries = structuredClone(data.series);
+for (const [id, index] of data.provenance.official2024GapRecovery.addedPointIndexes) {
+  inheritedSeries[id][index] = null;
+}
 const code = ts.transpileModule(readFileSync(readerUrl, "utf8"), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, esModuleInterop: true },
 }).outputText;
@@ -61,8 +67,8 @@ test("all packaged references preserve every date, exact amount and null gap", (
       else positive++;
     }
   }
-  assert.equal(positive, 41181);
-  assert.equal(empty, 63033);
+  assert.equal(positive, 54131);
+  assert.equal(empty, 50083);
   assert.equal(selected.source.expectedPointCount, 33);
   assert.equal(selected.source.sourceNote, "현재 확인된 세대수와 가용 거래를 기준으로 재계산한 참고 이력이며, 당시 공표값이나 전국의 완전한 과거 이력이 아닙니다.");
 });
@@ -99,18 +105,55 @@ test("the full restoration preserves every current anchor and every date after N
   assert.equal(proof.officialIndexGenesisHoldPreserved, true);
   const changed = new Set(proof.changedComplexIds.map(String));
   assert.equal(changed.size, 1742);
-  const unchanged = Object.fromEntries(Object.entries(data.series).filter(([id]) => !changed.has(id)));
+  const unchanged = Object.fromEntries(Object.entries(inheritedSeries).filter(([id]) => !changed.has(id)));
   assert.equal(hash(unchanged), "8469742F55C072CD4BD04E09E553234AFFAFAFB7C43FC4515CA36D67BFBFF603");
   assert.equal(hash(unchanged), proof.unchangedSeriesSha256);
   // These hashes were independently checked against the deployed parent.
   assert.equal(hash(Object.fromEntries(Object.entries(data.series).map(([id, values]) => [id, values.at(-1)]))),
     "864FCEA39282D9194CC362D34EBA4E4A18234946D398509C897B24797D36EFE4");
-  assert.equal(hash(Object.fromEntries(Object.entries(data.series).map(([id, values]) => [id, values.slice(12)]))),
+  assert.equal(hash(Object.fromEntries(Object.entries(inheritedSeries).map(([id, values]) => [id, values.slice(12)]))),
     "06A926FAC03A5F0AC614272C14A15CC10FB9B9DC8287032FBE34DCCB3C9E4927");
-  assert.equal(Object.values(data.series).filter(values => values[0] !== null).length, 1787);
+  assert.equal(Object.values(inheritedSeries).filter(values => values[0] !== null).length, 1787);
+});
+
+test("70,015 verified official transactions fill only 12,950 previously empty 2024 cells", () => {
+  const proof = data.provenance.official2024GapRecovery;
+  assert.equal(proof.approvalScopeDigest, "297F80B979FF156D2F98064C217606723D43E47EB4C1164C75BB402588C0FD48");
+  assert.equal(proof.parentApprovalScopeDigest, "74C81B398A4C82151910A5E424693D2C5BB9794B1D6A0248E488718EDA18572C");
+  assert.equal(proof.committedTrades, 70015);
+  assert.equal(proof.currentScopeCommittedTrades, 55015);
+  assert.equal(proof.priorScopeCommittedTrades, 15000);
+  assert.equal(proof.existingPositivePointsChanged, 0);
+  assert.equal(proof.currentAnchorChanges, 0);
+  assert.equal(proof.latestSourceOnlyForNewPoints, true);
+  assert.equal(proof.addedPointIndexes.length, 12950);
+  assert.equal(new Set(proof.addedPointIndexes.map(([id, index]) => `${id}:${index}`)).size, 12950);
+  for (const [id, index] of proof.addedPointIndexes) {
+    assert.ok(index >= 0 && index <= 12);
+    assert.ok(data.dates[index].startsWith("2024-"));
+    assert.ok(Number.isSafeInteger(data.series[id][index]) && data.series[id][index] > 0);
+  }
+  // Frozen independently from the deployed parent's entire series. This also
+  // proves every preexisting positive value and every non-2024 cell survives.
+  assert.equal(crypto.createHash("sha256").update(JSON.stringify(inheritedSeries)).digest("hex").toUpperCase(),
+    "F472EFD674AD48EA7F6E46CA7B835990F5D65DD013339B16182F34183466F854");
+  assert.equal(Object.values(data.series).filter(values => values[0] !== null).length, 2125);
+  assert.equal(proof.addedPointIndexes.filter(([, index]) => index === 0).length, 338);
+  // Freeze all 995 values added by the prior partial execution as well.
+  assert.equal(proof.priorPartialAddedPointIndexes.length, 995);
+  const priorPartialSeries = structuredClone(inheritedSeries);
+  for (const [id, index] of proof.priorPartialAddedPointIndexes) {
+    priorPartialSeries[id][index] = data.series[id][index];
+  }
+  assert.equal(crypto.createHash("sha256").update(JSON.stringify(priorPartialSeries)).digest("hex").toUpperCase(),
+    "F4ED45E1B53A907A9A5D360680BF768594FE4578BD128EAA5E401CB7A06E6638");
 });
 
 test("newly supported history is visible while unsupported intervals stay empty", () => {
+  const restored = load()([306666], { 306666: anchor("306666") });
+  assert.equal(restored.metadataById[306666].availableFrom, "2024-01-01");
+  assert.ok(restored.rowsById[306666].slice(0, 13).every(row => row.market_cap_krw > 0));
+  assert.equal(restored.rowsById[306666][6].market_cap_krw, 1016751666340);
   const selected = load()([5262, 2765], { 5262: anchor("5262"), 2765: anchor("2765") });
   assert.equal(selected.metadataById[5262].availableFrom, "2024-05-31");
   assert.equal(selected.rowsById[5262][5].market_cap_krw, 2707470000030);
