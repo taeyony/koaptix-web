@@ -22,6 +22,7 @@ type HomeV2SearchProps = {
   inputId?: string;
   label?: string;
   onSelectRankedItem?: (item: RankingItem) => void;
+  inlineResults?: boolean;
 };
 
 type SearchPayload = RegionAliasApiMetadata & {
@@ -60,6 +61,7 @@ export function HomeV2Search({
   inputId = "home-v2-search",
   label = "우리 단지 찾기",
   onSelectRankedItem,
+  inlineResults = false,
 }: HomeV2SearchProps) {
   const isLanding = presentation === "landing";
   const resultsId = `${inputId}-results`;
@@ -259,6 +261,7 @@ export function HomeV2Search({
           onKeyDown={(event) => {
             if (isLanding && event.key === "Enter" && event.nativeEvent.isComposing) event.preventDefault();
             if (event.key === "Escape") {
+              if (showResults) event.stopPropagation();
               if (isLanding) setDismissed(true);
               else changeQuery("");
             }
@@ -299,12 +302,12 @@ export function HomeV2Search({
           aria-label={onSelectRankedItem ? `${label} 검색 결과` : "검색 결과"}
           aria-live="polite"
           aria-busy={state.status === "loading"}
-          style={{
+          style={inlineResults ? undefined : {
             top: popupLayout.above ? "auto" : isLanding ? popupLayout.top : "calc(100% + var(--ko-space-1))",
             bottom: popupLayout.above ? (isLanding ? popupLayout.bottom : "calc(100% + 8px)") : "auto",
             maxHeight: popupLayout.maxHeight,
           }}
-          className="absolute left-0 right-0 z-30 overflow-y-auto overscroll-contain border border-[var(--ko-border)] bg-surface p-3 shadow-[0_18px_45px_rgba(15,23,42,0.13)]"
+          className={`${inlineResults ? "relative mt-3 max-h-80" : "absolute left-0 right-0 z-30"} overflow-y-auto overscroll-contain border border-[var(--ko-border)] bg-surface p-3 shadow-[0_18px_45px_rgba(15,23,42,0.13)]`}
         >
           {state.status === "loading" ? (
             <SearchProgress />

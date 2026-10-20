@@ -24,25 +24,50 @@ function alias(row: Record<string, unknown>, keys: string[], stringify = false):
   return normalized[0];
 }
 
+function comparisonRow(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Missing comparison row");
+  const row = value as Record<string, unknown>;
+  const complexId = alias(row, ["complexId", "complex_id"], true);
+  const name = alias(row, ["name", "apt_name_ko"]);
+  const rank = Number(alias(row, ["rank", "rank_all"]));
+  const cap = Number(alias(row, ["marketCapKrw", "market_cap_krw"]));
+  const code = alias(row, ["universeCode", "universe_code"]);
+  if (typeof complexId !== "string" || !/^[1-9]\d*$/.test(complexId) || typeof name !== "string" || !name.trim() ||
+      !Number.isSafeInteger(rank) || rank < 1 || rank > 1000 || !Number.isSafeInteger(cap) || cap <= 0 || typeof code !== "string") throw new Error("Invalid comparison value");
+  const scope = resolveUniverseRequest(code, { capability: "ranking" });
+  if (scope.universeUnavailable || scope.requestedUniverseCode !== code) throw new Error("Unavailable comparison scope");
+  return { ...row, complexId, name: publicComplexName(name), rank, marketCapKrw: cap,
+    universe_code: code, snapshot_date: alias(row, ["snapshotDate", "snapshot_date"]) };
+}
+
+/** UI handoff only; the destination must recheck this exact public selection. */
+export function getComparisonStartPath(value: unknown): string | null {
+  try {
+    const row = comparisonRow(value);
+    const publication = requireUniformUniverseServicePublication([row]);
+    return `/ranking?${new URLSearchParams({
+      universe: publication.universe_code,
+      compareWith: row.complexId,
+      comparisonDate: publication.snapshot_date,
+      comparisonEvent: publication.publication_event_id,
+    })}`;
+  } catch { return null; }
+}
+
+export function publicRankScopeLabel(code?: string | null): string {
+  const scope = resolveUniverseRequest(code, { capability: "ranking" });
+  if (!code || !scope.registryItem || scope.requestedUniverseCode !== code) return "공개 순위 · 범위 확인 중";
+  if (code === "KOREA_ALL") return "전국 공개 순위";
+  const province = resolveSidoFromUniverseCode(code);
+  const label = getUniverseLabel(code).replace(/\s*전체$/, "");
+  return `${code.startsWith("SGG_") && province ? `${getUniverseLabel(province).replace(/\s*전체$/, "")} ` : ""}${label} 공개 순위`;
+}
+
 /** Only describe two actual rows of the same public publication. */
 export function getComparisonFacts(values: readonly unknown[]): ComparisonFacts | null {
   if (values.length !== 2) return null;
   try {
-    const rows = values.map(value => {
-      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Missing comparison row");
-      const row = value as Record<string, unknown>;
-      const complexId = alias(row, ["complexId", "complex_id"], true);
-      const name = alias(row, ["name", "apt_name_ko"]);
-      const rank = Number(alias(row, ["rank", "rank_all"]));
-      const cap = Number(alias(row, ["marketCapKrw", "market_cap_krw"]));
-      const code = alias(row, ["universeCode", "universe_code"]);
-      if (typeof complexId !== "string" || !/^[1-9]\d*$/.test(complexId) || typeof name !== "string" || !name.trim() ||
-          !Number.isSafeInteger(rank) || rank < 1 || rank > 1000 || !Number.isSafeInteger(cap) || cap <= 0 || typeof code !== "string") throw new Error("Invalid comparison value");
-      const scope = resolveUniverseRequest(code, { capability: "ranking" });
-      if (scope.universeUnavailable || scope.requestedUniverseCode !== code) throw new Error("Unavailable comparison scope");
-      return { ...row, complexId, name: publicComplexName(name), rank, marketCapKrw: cap,
-        universe_code: code, snapshot_date: alias(row, ["snapshotDate", "snapshot_date"]) };
-    });
+    const rows = values.map(comparisonRow);
     if (rows[0].complexId === rows[1].complexId || rows[0].rank === rows[1].rank) return null;
     const publication = requireUniformUniverseServicePublication(rows);
     const [left, right] = rows;

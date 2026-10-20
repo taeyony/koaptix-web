@@ -8,6 +8,7 @@ import { formatKrwCompact } from "../../../lib/formatters";
 import FormulaExplainer from "../../../components/home/FormulaExplainer";
 import { ThemeToggle } from "../../../components/home/ThemeToggle";
 import { MyHomeActions } from "../../../components/home/MyHomeActions";
+import { getComparisonStartPath, publicRankScopeLabel } from "../../../lib/koaptix/comparisonFacts";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function ComplexSharePage({
   const row = await getPublicPageComplex(resolvedParams.id, code);
   const detailHref = `/ranking?${new URLSearchParams({ universe: code, complexId: resolvedParams.id })}`;
   const households = Number(row?.household_count);
+  const comparisonHref = row ? getComparisonStartPath(row) : null;
   return <main className="min-h-screen bg-[var(--ko-bg)] px-4 py-6 text-ink sm:px-8" data-testid="public-complex-page">
     <div className="mx-auto max-w-4xl">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--ko-border)] pb-5">
@@ -51,12 +53,14 @@ export default async function ComplexSharePage({
         {row ? <>
           <p className="mt-4 text-body text-muted">{[row.sigungu_name, row.legal_dong_name].filter(Boolean).join(" ")} · <time dateTime={row.snapshot_date}>{row.snapshot_date} 기준</time></p>
           <dl className="mt-8 grid gap-4 sm:grid-cols-3">
-            {[{ label: `${code === "KOREA_ALL" ? "전국" : publicRegionLabel(code)} 공개 순위`, value: `${Number(row.rank_all).toLocaleString("ko-KR")}위` },
+            {[{ label: publicRankScopeLabel(row.universe_code), value: `${Number(row.rank_all).toLocaleString("ko-KR")}위`, date: row.snapshot_date },
               { label: "단지 전체 추정 시가총액", value: formatKrwCompact(row.market_cap_krw) },
               { label: "세대수", value: Number.isSafeInteger(households) && households > 0 ? `${households.toLocaleString("ko-KR")}세대` : "확인 중" }].map(metric =>
-                <div key={metric.label} className="rounded-2xl border border-[var(--ko-border)] bg-surface p-5"><dt className="text-control text-muted">{metric.label}</dt><dd className="mt-3 text-2xl font-bold tabular-nums">{metric.value}</dd></div>)}
+                <div key={metric.label} className="rounded-2xl border border-[var(--ko-border)] bg-surface p-5"><dt className="text-control text-muted">{metric.label}</dt><dd className="mt-3 text-2xl font-bold tabular-nums">{metric.value}</dd>{metric.date ? <dd className="mt-2 text-caption text-muted"><time dateTime={metric.date}>{metric.date}</time> 기준</dd> : null}</div>)}
           </dl>
           <MyHomeActions complexId={resolvedParams.id} name={row.apt_name_ko ?? "내 아파트"} locationLabel={[row.sigungu_name, row.legal_dong_name].filter(Boolean).join(" ")} universeCode={code} publication={row} />
+          {comparisonHref ? <Link href={comparisonHref} prefetch={false} className="mt-5 inline-flex min-h-12 items-center rounded-xl border border-[var(--ko-border)] bg-[var(--ko-accent-soft)] px-5 font-semibold text-accent">이 단지와 비교하기</Link>
+            : <p className="mt-5 text-caption text-muted">공개 순위·지역·기준일이 확인된 단지만 비교할 수 있어요.</p>}
           <p className="mt-6 max-w-copy text-body leading-copy text-muted">실제 거래와 면적별 세대수를 바탕으로 계산한 단지 전체의 추정 가치예요. 집 한 채의 가격이나 실제 자금 유입액을 뜻하지 않습니다.</p>
           <div className="mt-6"><FormulaExplainer /></div>
         </> : <p role="status" className="mt-5 text-body leading-copy text-muted">{scope.universeUnavailable ? "이 지역의 랭킹은 아직 공개되지 않았어요." : "현재 선택한 지역의 공개 TOP1000에서 순위와 시가총액을 확인하지 못했어요. 랭킹 검색에서 단지 상태를 확인해 주세요."}</p>}

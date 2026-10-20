@@ -21,6 +21,7 @@ import type {
 import type { UniverseOption } from "../../lib/koaptix/universes";
 import { useBookmarks } from "../../hooks/useBookmarks";
 import ComparisonSheet from "./ComparisonSheet";
+import { getComparisonFacts, getComparisonStartPath } from "../../lib/koaptix/comparisonFacts";
 import { parseRankingSort, sortRankingItems, type RankingSort } from "../../lib/koaptix/rankingPresentation";
 import { commonRankMovement } from "../../lib/koaptix/weeklyRankComparison";
 import { parseComparisonIds, isComparisonDate } from "../../lib/koaptix/complexShare";
@@ -555,8 +556,10 @@ export function RankingBoardClient({
   const comparisonRestoreRef = useRef("");
   const [comparisonLinkError, setComparisonLinkError] = useState<{ key: string; message: string } | null>(null);
   const requestedComparison = searchParams?.get("compare") ?? "";
+  const requestedComparisonSeed = searchParams?.get("compareWith") ?? "";
   const requestedComparisonDate = searchParams?.get("comparisonDate") ?? null;
-  const comparisonRequestKey = `${boardUniverseCode}:${requestedComparison}`;
+  const requestedComparisonEvent = searchParams?.get("comparisonEvent") ?? null;
+  const comparisonRequestKey = `${boardUniverseCode}:${requestedComparison}:${requestedComparisonSeed}:${requestedComparisonDate}:${requestedComparisonEvent}`;
 
   const [complexDetail, setComplexDetail] = useState<ComplexDetail | null>(
     null,
@@ -1000,6 +1003,8 @@ export function RankingBoardClient({
 
         if (cancelled) return;
         setBoardItems(nextPayload.items);
+        // Keep the selected publication intact. New search results must satisfy
+        // the existing comparison contract before replacing a selected row.
         setBoardDeliveryMeta(nextPayload.delivery);
         setStaleBoardUniverseCode(null);
       } catch (error) {
@@ -1073,6 +1078,7 @@ export function RankingBoardClient({
         boardCacheRef.current[getBoardCacheKey(normalizedNext)];
 
       setComparisonItems([]);
+      setIsComparisonOpen(false);
       setComplexDetail(null);
       setComplexDetailError(null);
       setSelectedComplexId(null);
@@ -1110,6 +1116,8 @@ export function RankingBoardClient({
         params.delete("complexId");
         params.delete("compare");
         params.delete("comparisonDate");
+        params.delete("compareWith");
+        params.delete("comparisonEvent");
 
         if (normalizedNext === DEFAULT_UNIVERSE_CODE) {
           params.delete("universe");
@@ -1122,20 +1130,17 @@ export function RankingBoardClient({
   }
 
   const toggleComparisonItem = useCallback((item: RankingItem) => {
-    replaceUrlParams(params => { params.delete("compare"); params.delete("comparisonDate"); });
-    setComparisonItems((prev) => {
-      const isAlreadyIn = prev.some((p) => p.complexId === item.complexId);
-      if (isAlreadyIn)
-        return prev.filter((p) => p.complexId !== item.complexId);
-      if (prev.length < 2) return [...prev, item];
-      return [prev[1], item];
-    });
-  }, [replaceUrlParams]);
+    replaceUrlParams(params => { params.delete("compare"); params.delete("compareWith"); params.delete("comparisonDate"); params.delete("comparisonEvent"); });
+    const isAlreadyIn = comparisonItems.some(p => p.complexId === item.complexId);
+    setComparisonItems(isAlreadyIn ? comparisonItems.filter(p => p.complexId !== item.complexId)
+      : comparisonItems.length < 2 ? [...comparisonItems, item] : [comparisonItems[1], item]);
+    if (!isAlreadyIn) setIsComparisonOpen(true);
+  }, [replaceUrlParams, comparisonItems]);
 
-  useEffect(() => {
-    if (comparisonItems.length === 2) setIsComparisonOpen(true);
-    else setIsComparisonOpen(false);
-  }, [comparisonItems.length]);
+  function changeComparisonItems(next: RankingItem[]) {
+    replaceUrlParams(params => { params.delete("compare"); params.delete("compareWith"); params.delete("comparisonDate"); params.delete("comparisonEvent"); });
+    setComparisonItems(next);
+  }
 
   const clearDistrict = useCallback(() => {
     replaceUrlParams((params) => {
@@ -1168,10 +1173,27 @@ export function RankingBoardClient({
   }, [boardDeliveryMeta, boardItems, boardUniverseCode]);
 
   useEffect(() => {
-    if (!requestedComparison) { comparisonRestoreRef.current = ""; return; }
+    if (!requestedComparison && !requestedComparisonSeed) { comparisonRestoreRef.current = ""; return; }
     if (isBoardLoading || boardDeliveryMeta.source === "client_pending" ||
       boardDeliveryMeta.renderedUniverseCode !== boardUniverseCode || comparisonRestoreRef.current === comparisonRequestKey) return;
     comparisonRestoreRef.current = comparisonRequestKey;
+    if (requestedComparisonSeed) {
+      const item = presentationBoardItems.find(row => row.complexId === requestedComparisonSeed);
+      const exact = !requestedComparison && item && getComparisonStartPath(item) === `/ranking?${new URLSearchParams({
+        universe: boardUniverseCode, compareWith: requestedComparisonSeed,
+        comparisonDate: requestedComparisonDate ?? "", comparisonEvent: requestedComparisonEvent ?? "",
+      })}`;
+      startTransition(() => {
+        if (!exact) {
+          setComparisonLinkError({ key: comparisonRequestKey, message: `선택한 단지의 ${requestedComparisonDate && isComparisonDate(requestedComparisonDate) ? `${requestedComparisonDate} 기준 ` : ""}공개 자료를 현재 랭킹에서 확인하지 못했어요. 다른 지역·기준일로 바꾸지 않았어요. 현재 공개 순위를 확인한 뒤 다시 비교해 주세요.` });
+          return;
+        }
+        setComparisonLinkError(null);
+        setComparisonItems([item]);
+        setIsComparisonOpen(true);
+      });
+      return;
+    }
     const ids = parseComparisonIds(requestedComparison);
     const selected = ids.map(id => presentationBoardItems.find(item => item.complexId === id));
     if (ids.length !== 2 || selected.some(item => !item)) {
@@ -1183,7 +1205,7 @@ export function RankingBoardClient({
       setComparisonItems(selected as RankingItem[]);
       setIsComparisonOpen(true);
     });
-  }, [requestedComparison, comparisonRequestKey, boardUniverseCode, boardDeliveryMeta, presentationBoardItems, isBoardLoading]);
+  }, [requestedComparison, requestedComparisonSeed, requestedComparisonDate, requestedComparisonEvent, comparisonRequestKey, boardUniverseCode, boardDeliveryMeta, presentationBoardItems, isBoardLoading]);
 
   const filteredItems = useMemo(() => {
     if (shouldSuppressSearchResults) return [];
@@ -2001,13 +2023,12 @@ export function RankingBoardClient({
       <ComparisonSheet
         open={isComparisonOpen}
         items={comparisonItems}
+        universeCode={boardUniverseCode}
+        onChangeItems={changeComparisonItems}
         sharedDate={isComparisonDate(requestedComparisonDate) && parseComparisonIds(requestedComparison).length === 2 && parseComparisonIds(requestedComparison).every(id => comparisonItems.some(item => item.complexId === id)) ? requestedComparisonDate : null}
         onClose={() => setIsComparisonOpen(false)}
-        onRemoveItem={(item: any) => toggleComparisonItem(item)}
-        onClear={() => {
-          setComparisonItems([]);
-          setIsComparisonOpen(false);
-        }}
+        onRemoveItem={item => changeComparisonItems(comparisonItems.filter(row => row !== item))}
+        onClear={() => changeComparisonItems([])}
       />
 
       <ComplexDetailSheet
@@ -2017,6 +2038,13 @@ export function RankingBoardClient({
         detail={selectedDetail}
         loading={isComplexDetailLoading}
         error={complexDetailError}
+        onCompare={item => {
+          const other = comparisonItems.find(row => row.complexId !== item.complexId && getComparisonFacts([item, row]));
+          setComparisonItems(other ? [item, other] : [item]);
+          replaceUrlParams(params => { params.delete("complexId"); params.delete("compare"); params.delete("compareWith"); params.delete("comparisonDate"); params.delete("comparisonEvent"); });
+          setSelectedComplexId(null);
+          setIsComparisonOpen(true);
+        }}
         onClose={() => {
           replaceUrlParams((params) => {
             params.delete("complexId");
@@ -2027,12 +2055,12 @@ export function RankingBoardClient({
         }}
       />
 
-      {comparisonItems.length === 2 && !isComparisonOpen && (
+      {comparisonItems.length > 0 && !isComparisonOpen && !selectedComplexId && (
         <button
           onClick={() => setIsComparisonOpen(true)}
-          className="fixed bottom-6 left-1/2 z-[990] -translate-x-1/2 rounded-full border border-slate-700 bg-slate-950/95 px-4 py-2 text-xs font-medium text-slate-200 shadow-2xl backdrop-blur transition hover:border-cyan-400/30 hover:text-cyan-300"
+          className="fixed bottom-6 left-1/2 z-[990] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 rounded-2xl border border-slate-700 bg-slate-950/95 px-4 py-3 text-control font-medium text-slate-200 shadow-2xl backdrop-blur transition hover:border-cyan-400/30 hover:text-cyan-300"
         >
-          비교 다시 열기
+          <span role="status">{comparisonItems.length === 1 ? `${comparisonItems[0].name} 선택됨 · 비교할 단지를 하나 더 골라주세요` : "2/2개 선택 · 비교 다시 열기"}</span>
         </button>
       )}
     </>

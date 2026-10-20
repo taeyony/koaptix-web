@@ -23,7 +23,7 @@ function loader(overrides = {}) {
     const code = ts.transpileModule(readFileSync(file, "utf8"), { compilerOptions: {
       target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
     } }).outputText;
-    runInNewContext(code, { module, exports: module.exports, URL, URLSearchParams, Request, Response, require(name) {
+    runInNewContext(code, { module, exports: module.exports, URL, URLSearchParams, Request, Response, document: { body: {} }, require(name) {
       if (overrides[name]) return overrides[name];
       if (name === "next/link") return { __esModule: true, default: ({ href, children, prefetch, ...props }) => React.createElement("a", { href, ...props }, children) };
       if (!name.startsWith(".")) return require(name);
@@ -36,7 +36,7 @@ function loader(overrides = {}) {
   return load;
 }
 const load = loader();
-const { getComparisonFacts, getMatchupSelectionPath } = load(lib("comparisonFacts.ts"));
+const { getComparisonFacts, getMatchupSelectionPath, getComparisonStartPath, publicRankScopeLabel } = load(lib("comparisonFacts.ts"));
 const publication = {
   generation_id: "733d03e6-e029-449b-a748-26c4b032df05", publication_version: 2,
   publication_event_id: "90f8bd8d-9a97-44df-834c-8c23c4077d40", published_at: "2026-10-15T00:22:12.07608+00:00",
@@ -85,6 +85,82 @@ test("selection creates only an existing two-ID comparison route and rejects dup
   for (const pair of [[first], [first, first], [first, { ...second, universeCode: "SEOUL_ALL" }], [first, { ...second, snapshotDate: "2026-08-24" }], [first, { ...second, snapshotDate: "2026-02-30" }]]) {
     assert.equal(getMatchupSelectionPath(pair, "KOREA_ALL"), null);
   }
+});
+
+test("single-detail comparison handoff pins the actual ID, region, date and publication; missing identity fails closed", () => {
+  const regional = { ...left, universe_code: "GWANGJU_ALL", snapshot_date: "2026-07-03", rank_all: 183 };
+  const query = new URL(getComparisonStartPath(regional), "http://localhost").searchParams;
+  assert.equal(query.get("compareWith"), "5084");
+  assert.equal(query.get("universe"), "GWANGJU_ALL");
+  assert.equal(query.get("comparisonDate"), "2026-07-03");
+  assert.equal(query.get("comparisonEvent"), publication.publication_event_id);
+  for (const bad of [{ ...regional, universe_code: undefined }, { ...regional, snapshot_date: undefined },
+    { ...regional, publication_event_id: undefined }, { ...regional, universeCode: "KOREA_ALL" }, { ...regional, rank_all: null }]) {
+    assert.equal(getComparisonStartPath(bad), null);
+  }
+  assert.equal(publicRankScopeLabel("GWANGJU_ALL"), "광주 공개 순위");
+  assert.equal(publicRankScopeLabel("KOREA_ALL"), "전국 공개 순위");
+  assert.match(publicRankScopeLabel(undefined), /범위 확인 중/);
+  assert.match(publicRankScopeLabel("UNKNOWN"), /범위 확인 중/);
+});
+
+test("comparison sheet preserves the anchor through replacement/removal, rejects duplicates and mixed publications, and separates close from clear", () => {
+  const client = row => ({ ...row, complexId: String(row.complex_id), name: row.apt_name_ko, rank: row.rank_all,
+    marketCapKrw: row.market_cap_krw, marketCapTrillionKrw: row.market_cap_krw / 1e12,
+    universeCode: row.universe_code, snapshotDate: row.snapshot_date });
+  const a = client(left), b = client(right);
+  const c = client({ ...right, complex_id: 5085, apt_name_ko: "테스트 상대", rank_all: 3 });
+  let selected = [a], closed = false, index = 0;
+  const state = [];
+  function FakeSearch() { return null; }
+  const scoped = loader({
+    react: { ...React, useEffect() {}, useId: () => "comparison-test", useRef: () => ({ current: null }),
+      useState(initial) { const n = index++; if (!(n in state)) state[n] = n === 0 ? true : initial;
+        return [state[n], value => { state[n] = typeof value === "function" ? value(state[n]) : value; }]; } },
+    "react-dom": { createPortal: value => value },
+    [path.join(root, "src/components/home/v2/HomeV2Search")]: { HomeV2Search: FakeSearch },
+  });
+  // Portal target only; no browser/network/DB used.
+  const file = path.join(root, "src/components/home/ComparisonSheet.tsx");
+  // The portal target is evaluated only at render time in the VM.
+  const component = scoped(file).default;
+  const props = () => ({ open: true, items: selected, universeCode: "KOREA_ALL",
+    onClose: () => { closed = true; }, onClear: () => { selected = []; },
+    onRemoveItem: item => { selected = selected.filter(row => row !== item); },
+    onChangeItems: next => { selected = next; } });
+  const render = () => { index = 0; return component(props()); };
+  let tree = render();
+  assert.match(nodes(tree).find(node => node.props.role === "status").props.children, /헬리오시티 선택됨/);
+  let search = nodes(tree).find(node => node.type === FakeSearch);
+  search.props.onSelectRankedItem(a);
+  assert.equal(selected.length, 1);
+  search.props.onSelectRankedItem({ ...b, snapshot_date: "2026-07-03", snapshotDate: "2026-07-03" });
+  assert.equal(selected.length, 1);
+  search.props.onSelectRankedItem(b);
+  tree = render();
+  assert.ok(nodes(tree).some(node => node.props["data-testid"] === "comparison-metrics"));
+  const slots = nodes(tree).filter(node => node.props["data-testid"]?.startsWith("comparison-slot-"));
+  nodes(slots[1]).find(node => node.type === "button" && node.props.children === "다른 단지로 교체").props.onClick();
+  tree = render();
+  search = nodes(tree).find(node => node.type === FakeSearch);
+  assert.equal(selected[1].complexId, b.complexId, "replacement keeps the old opponent until a valid result is selected");
+  search.props.onSelectRankedItem(c);
+  assert.equal(selected[0], a);
+  assert.equal(selected[1], c);
+  tree = render();
+  nodes(tree).find(node => node.props["aria-label"] === "테스트 상대 비교에서 제거").props.onClick();
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0], a);
+  tree = render();
+  nodes(tree).find(node => node.type === "button" && node.props.children === "닫기").props.onClick();
+  assert.equal(closed, true);
+  assert.equal(selected[0], a);
+  nodes(tree).find(node => node.type === "button" && node.props.children === "초기화").props.onClick();
+  assert.equal(selected.length, 0);
+  selected = [a, { ...b, publication_version: 3 }];
+  tree = render();
+  assert.equal(nodes(tree).some(node => node.props["data-testid"] === "comparison-metrics"), false);
+  assert.equal(nodes(tree).some(node => node.type === "button" && node.props.children === "비교 링크 복사"), false);
 });
 
 test("public pair reader reuses exact existing ID reads and rejects a publication change between them", async () => {

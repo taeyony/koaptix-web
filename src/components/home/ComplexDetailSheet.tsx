@@ -17,11 +17,11 @@ import type {
   RankingItem,
 } from "../../lib/koaptix/types";
 import { KOAPTIX_OFFICIAL_BASE_DATE } from "../../types/koaptix";
-import { getUniverseLabel } from "../../lib/koaptix/universes";
 import { commonRankDelta, commonRankTransition, needsMarketCapReview } from "../../lib/koaptix/weeklyRankComparison";
 import { publicComplexName } from "../../lib/koaptix/rankingPresentation";
 import { publicDetailMetrics } from "../../lib/koaptix/complexDetail";
 import { MyHomeActions } from "./MyHomeActions";
+import { getComparisonStartPath, publicRankScopeLabel } from "../../lib/koaptix/comparisonFacts";
 
 const ComplexHistoryMiniChart = dynamic(
   () =>
@@ -44,6 +44,7 @@ type ComplexDetailSheetProps = {
   loading: boolean;
   error: string | null;
   onClose: () => void;
+  onCompare?: (item: RankingItem) => void;
 };
 
 type ToastState = {
@@ -147,10 +148,12 @@ function Metric({
   label,
   value,
   tone,
+  date,
 }: {
   label: string;
   value: string;
   tone?: string;
+  date?: string;
 }) {
   return (
     <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3 sm:p-4">
@@ -160,6 +163,7 @@ function Metric({
       <p className={`mt-1 text-base font-semibold tabular-nums sm:text-lg ${tone ?? ""}`}>
         {value}
       </p>
+      {date ? <p className="mt-2 text-caption text-muted"><time dateTime={date}>{date}</time> 기준</p> : null}
     </div>
   );
 }
@@ -197,6 +201,7 @@ export function ComplexDetailSheet({
   loading,
   error,
   onClose,
+  onCompare,
 }: ComplexDetailSheetProps) {
   // 🚨 순간이동을 위한 마운트 상태를 추가합니다!
   const [isMounted, setIsMounted] = useState(false);
@@ -441,8 +446,10 @@ export function ComplexDetailSheet({
     : null;
   const displayMarketCapDelta7d = marketCapDelta7d ?? null;
   const displayMarketCapDeltaPct7d = marketCapDeltaPct7d ?? null;
-  const snapshotDate = item?.snapshotDate ?? detail?.publication.snapshot_date;
-  const universeCode = item?.universeCode ?? detail?.publication.universe_code ?? "KOREA_ALL";
+  const snapshotDate = item ? item.snapshotDate : detail?.publication.snapshot_date;
+  const rankUniverseCode = item ? item.universeCode ?? item.universe_code : detail?.publication.universe_code;
+  const universeCode = rankUniverseCode ?? "KOREA_ALL";
+  const canCompare = Boolean(item && getComparisonStartPath(item));
   const householdCount = detail?.householdCount ?? item?.households ?? null;
   const approvalYear = detail?.approvalYear ?? item?.buildYear ?? null;
   const ageYears = detail?.ageYears ?? item?.ageYears ?? null;
@@ -478,7 +485,7 @@ export function ComplexDetailSheet({
                 <p className="mt-1 truncate text-sm text-white/50 sm:text-control">
                   {location}
                 </p>
-                {snapshotDate ? <p className="mt-1 text-caption text-muted">{getUniverseLabel(universeCode)} 공개 순위 · {snapshotDate} 기준</p> : null}
+                {snapshotDate ? <p className="mt-1 text-caption text-muted">{publicRankScopeLabel(rankUniverseCode)} · {snapshotDate} 기준</p> : null}
 
                 {tierBadges.length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -534,10 +541,19 @@ export function ComplexDetailSheet({
             {activeComplexId ? <div className="mb-5"><MyHomeActions complexId={activeComplexId} name={title} locationLabel={location} universeCode={universeCode}
               publication={item ? { ...item, snapshot_date: item.snapshotDate, universe_code: item.universeCode } : detail?.publication} /></div> : null}
 
+            {onCompare ? <div className="mb-5">
+              <button type="button" disabled={!canCompare} onClick={() => { if (item && canCompare) onCompare(item); }}
+                className="inline-flex min-h-12 items-center rounded-xl border border-[var(--ko-border)] bg-[var(--ko-accent-soft)] px-5 text-control font-semibold text-accent disabled:opacity-50">
+                이 단지와 비교하기
+              </button>
+              {!canCompare ? <p className="mt-2 text-caption text-muted">공개 순위·지역·기준일이 확인된 단지만 비교할 수 있어요.</p> : null}
+            </div> : null}
+
             <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
               <Metric
-                label="현재 순위"
+                label={publicRankScopeLabel(rankUniverseCode)}
                 value={rank != null ? `#${formatPlainNumber(rank)}` : "-"}
+                date={snapshotDate}
               />
               <Metric label="추정 시가총액" value={formatMarketCapKrw(marketCap)} />
               <Metric

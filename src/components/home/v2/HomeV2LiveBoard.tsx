@@ -121,6 +121,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
           );
         }
         if (active) {
+          // Preserve the publication originally selected for comparison.
           setState({
             status: "ready",
             items: payload.items,
@@ -210,7 +211,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
       ? comparisonItems.filter((row) => row.complexId !== item.complexId)
       : [...comparisonItems.slice(-1), item];
     setComparisonItems(next);
-    setComparisonOpen(next.length === 2);
+    if (next.length > comparisonItems.length) setComparisonOpen(true);
   }
   function detailHref(item: RankingItem) {
     return `/ranking?${new URLSearchParams({ universe: item.universeCode || universeCode, complexId: item.complexId })}`;
@@ -257,7 +258,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
         {universeUnavailable ? <p className="py-6 text-sm text-muted">이 지역의 랭킹은 아직 준비 중이에요. 다른 지역도 찾아보세요.</p> : null}
         {comparisonItems.length ? <div className="sticky top-4 z-20 mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-accent bg-surface p-3 text-control text-ink">
           <span role="status">비교 선택 {comparisonItems.length}/2 · {comparisonItems.map((item) => item.name).join(" · ")}{comparisonItems.length === 1 ? " · 다른 단지의 ‘비교’를 누르면 비교창이 열려요." : ""}</span>
-          <button type="button" disabled={comparisonItems.length !== 2} onClick={() => setComparisonOpen(true)} className="border-b border-accent pb-1 font-semibold text-accent disabled:cursor-not-allowed disabled:opacity-40">두 단지 비교</button>
+          <button type="button" onClick={() => setComparisonOpen(true)} className="border-b border-accent pb-1 font-semibold text-accent">{comparisonItems.length === 1 ? "비교할 상대 찾기" : "두 단지 비교"}</button>
           <button type="button" onClick={() => setComparisonItems([])} className="text-muted">선택 지우기</button>
         </div> : null}
 
@@ -412,7 +413,7 @@ export function HomeV2LiveBoard({ universeCode, universeLabel, universeUnavailab
           </div>
         )}
       </section>
-      {comparisonOpen ? <ComparisonSheet open items={comparisonItems} onClose={() => setComparisonOpen(false)} onRemoveItem={(item) => { toggleComparison(item as RankingItem); setComparisonOpen(false); }} onClear={() => { setComparisonItems([]); setComparisonOpen(false); }} /> : null}
+      {comparisonOpen ? <ComparisonSheet open items={comparisonItems} universeCode={universeCode} onChangeItems={setComparisonItems} onClose={() => setComparisonOpen(false)} onRemoveItem={item => setComparisonItems(previous => previous.filter(row => row !== item))} onClear={() => setComparisonItems([])} /> : null}
       {state.status === "ready" && boardDate && tickerItems.length ? <HomeV2MovementTicker key={universeCode + boardDate} items={tickerItems} snapshotDate={boardDate} universeLabel={universeLabel} universeCode={universeCode} /> : null}
     </Fragment>
   );
