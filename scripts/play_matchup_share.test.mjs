@@ -36,7 +36,7 @@ function loader(overrides = {}) {
   return load;
 }
 const load = loader();
-const { getComparisonFacts, getMatchupSelectionPath, getComparisonStartPath, publicRankScopeLabel } = load(lib("comparisonFacts.ts"));
+const { getComparisonFacts, getMatchupSelectionPath, getComparisonStartPath, publicRankScopeLabel, comparisonScopeLabel } = load(lib("comparisonFacts.ts"));
 const publication = {
   generation_id: "733d03e6-e029-449b-a748-26c4b032df05", publication_version: 2,
   publication_event_id: "90f8bd8d-9a97-44df-834c-8c23c4077d40", published_at: "2026-10-15T00:22:12.07608+00:00",
@@ -76,6 +76,13 @@ test("existing client aliases and regional labels use their own publication rath
   assert.equal(facts.publication.snapshot_date, "2026-07-03");
   assert.match(facts.scopeLabel, /광주.*광산구/);
   assert.equal(facts.left.rank, 2);
+  for (const [code, label] of [["SGG_29155", "광주 남구"], ["SGG_51820", "강원 고성군"], ["SGG_11710", "서울 송파구"], ["SGG_52113", "전북 전주시 덕진구"]]) {
+    assert.equal(comparisonScopeLabel(code), label);
+    assert.equal(publicRankScopeLabel(code), `${label} 공개 순위`);
+    const pair = [left, right].map(row => ({ ...row, universe_code: code }));
+    assert.equal(getComparisonFacts(pair).scopeLabel, label);
+    assert.equal(getComparisonFacts(pair).publication.universe_code, code);
+  }
 });
 
 test("selection creates only an existing two-ID comparison route and rejects duplicate/cross-date/cross-scope pairs", () => {
@@ -210,6 +217,27 @@ function nodes(tree) {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
   return tree && typeof tree === "object" && tree.props ? [tree, ...nodes(tree.props.children)] : [];
 }
+test("standalone details route missing household metadata to the existing scoped detail without inventing a count", async () => {
+  let row = { ...left, universe_code: "GWANGJU_ALL", snapshot_date: "2026-07-03", household_count: null };
+  const scoped = loader({
+    "next/navigation": { notFound() { throw new Error("unexpected notFound"); } },
+    [lib("publicPageData")]: { getPublicPageComplex: async () => row, publicRegionLabel: comparisonScopeLabel },
+    [lib("metadata")]: { buildComplexMetadata() {} },
+    [path.join(root, "src/components/home/FormulaExplainer")]: { __esModule: true, default: () => null },
+    [path.join(root, "src/components/home/ThemeToggle")]: { ThemeToggle: () => null },
+    [path.join(root, "src/components/home/MyHomeActions")]: { MyHomeActions: () => null },
+  });
+  const Page = scoped(path.join(root, "src/app/complex/[id]/page.tsx")).default;
+  const render = () => Page({ params: Promise.resolve({ id: "5084" }), searchParams: Promise.resolve({ universe: "GWANGJU_ALL" }) });
+  const tree = await render();
+  const fallback = nodes(tree).find(node => node.props["aria-label"] === "세대수 상세 정보에서 확인");
+  assert.equal(fallback.props.href, "/ranking?universe=GWANGJU_ALL&complexId=5084");
+  assert.equal(nodes(tree).filter(node => node.type === "time").every(node => node.props.dateTime === "2026-07-03"), true);
+  row = { ...row, household_count: 403 };
+  const populated = await render();
+  assert.equal(nodes(populated).some(node => node.props["aria-label"] === "세대수 상세 정보에서 확인"), false);
+  assert.equal(nodes(populated).some(node => node.type === "dd" && node.props.children === "403세대"), true);
+});
 test("matchup UI selects two distinct IDs, clears selections on scope change and keeps unique search IDs", () => {
   const state = [];
   let index = 0;
@@ -221,6 +249,9 @@ test("matchup UI selects two distinct IDs, clears selections on scope change and
   const { PlayMatchup } = scoped(path.join(root, "src/components/home/PlayMatchup.tsx"));
   const render = () => { index = 0; return PlayMatchup(); };
   let tree = render();
+  const options = nodes(tree).filter(node => node.type === "option");
+  assert.equal(options.find(node => node.props.value === "SGG_29155").props.children, "광주 남구");
+  assert.equal(options.find(node => node.props.value === "SGG_51820").props.children, "강원 고성군");
   let searches = nodes(tree).filter(node => node.type === FakeSearch);
   assert.deepEqual(searches.map(node => node.props.inputId), ["play-matchup-0", "play-matchup-1"]);
   const item = row => ({ complexId: String(row.complex_id), name: row.apt_name_ko, universeCode: row.universe_code, snapshotDate: row.snapshot_date });

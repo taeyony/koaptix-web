@@ -55,7 +55,7 @@ export default async function ComplexSharePage({
           <dl className="mt-8 grid gap-4 sm:grid-cols-3">
             {[{ label: publicRankScopeLabel(row.universe_code), value: `${Number(row.rank_all).toLocaleString("ko-KR")}위`, date: row.snapshot_date },
               { label: "단지 전체 추정 시가총액", value: formatKrwCompact(row.market_cap_krw) },
-              { label: "세대수", value: Number.isSafeInteger(households) && households > 0 ? `${households.toLocaleString("ko-KR")}세대` : "확인 중" }].map(metric =>
+              { label: "세대수", value: Number.isSafeInteger(households) && households > 0 ? `${households.toLocaleString("ko-KR")}세대` : <Link href={detailHref} prefetch={false} className="ko-text-link text-body text-accent" aria-label="세대수 상세 정보에서 확인">상세 정보에서 확인 ↗</Link> }].map(metric =>
                 <div key={metric.label} className="rounded-2xl border border-[var(--ko-border)] bg-surface p-5"><dt className="text-control text-muted">{metric.label}</dt><dd className="mt-3 text-2xl font-bold tabular-nums">{metric.value}</dd>{metric.date ? <dd className="mt-2 text-caption text-muted"><time dateTime={metric.date}>{metric.date}</time> 기준</dd> : null}</div>)}
           </dl>
           <MyHomeActions complexId={resolvedParams.id} name={row.apt_name_ko ?? "내 아파트"} locationLabel={[row.sigungu_name, row.legal_dong_name].filter(Boolean).join(" ")} universeCode={code} publication={row} />

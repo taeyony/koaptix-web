@@ -1,6 +1,6 @@
 import { requireUniformUniverseServicePublication, type KoaptixPublicationSelectionIdentity } from "./currentness";
 import { buildComparisonSharePath, isComparisonDate, parseComparisonIds } from "./complexShare";
-import { resolveSidoFromUniverseCode } from "./districtIdentity";
+import { formatPublicLocation } from "./districtIdentity";
 import { publicComplexName } from "./rankingPresentation";
 import { getUniverseLabel, resolveUniverseRequest } from "./universes";
 import { formatKrwCompact } from "../formatters";
@@ -54,13 +54,19 @@ export function getComparisonStartPath(value: unknown): string | null {
   } catch { return null; }
 }
 
+/** Display only: retain the registry code and reuse the existing address formatter. */
+export function comparisonScopeLabel(code: string): string {
+  const label = getUniverseLabel(code);
+  return code.startsWith("SGG_")
+    ? formatPublicLocation({ sigunguName: label, legalDongName: "", universeCode: code })
+    : label;
+}
+
 export function publicRankScopeLabel(code?: string | null): string {
   const scope = resolveUniverseRequest(code, { capability: "ranking" });
   if (!code || !scope.registryItem || scope.requestedUniverseCode !== code) return "공개 순위 · 범위 확인 중";
   if (code === "KOREA_ALL") return "전국 공개 순위";
-  const province = resolveSidoFromUniverseCode(code);
-  const label = getUniverseLabel(code).replace(/\s*전체$/, "");
-  return `${code.startsWith("SGG_") && province ? `${getUniverseLabel(province).replace(/\s*전체$/, "")} ` : ""}${label} 공개 순위`;
+  return `${comparisonScopeLabel(code).replace(/\s*전체$/, "")} 공개 순위`;
 }
 
 /** Only describe two actual rows of the same public publication. */
@@ -71,9 +77,7 @@ export function getComparisonFacts(values: readonly unknown[]): ComparisonFacts 
     if (rows[0].complexId === rows[1].complexId || rows[0].rank === rows[1].rank) return null;
     const publication = requireUniformUniverseServicePublication(rows);
     const [left, right] = rows;
-    const scope = getUniverseLabel(publication.universe_code);
-    const province = resolveSidoFromUniverseCode(publication.universe_code);
-    const scopeLabel = publication.universe_code.startsWith("SGG_") && province ? `${getUniverseLabel(province).replace(/\s*전체$/, "")} ${scope}` : scope;
+    const scopeLabel = comparisonScopeLabel(publication.universe_code);
     const differenceKrw = Math.abs(left.marketCapKrw - right.marketCapKrw);
     const larger = left.marketCapKrw > right.marketCapKrw ? left : right;
     const differenceLabel = differenceKrw === 0 ? "두 단지의 추정 시가총액이 같아요." : `${larger.name}의 추정 시총이 ${formatKrwCompact(differenceKrw)} 더 커요.`;

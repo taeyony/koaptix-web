@@ -1,17 +1,13 @@
 import { cache } from "react";
 import { getLatestRankBoard } from "./queries";
-import { getUniverseLabel, resolveUniverseRequest } from "./universes";
-import { resolveSidoFromUniverseCode } from "./districtIdentity";
+import { resolveUniverseRequest } from "./universes";
 import type { DbLatestRankBoardWeeklyRow } from "./types";
-import { getComparisonFacts } from "./comparisonFacts";
+import { comparisonScopeLabel, getComparisonFacts } from "./comparisonFacts";
 
 export const PUBLIC_SITE_ORIGIN = "https://www.koaptix.com";
 
 export function publicRegionLabel(code: string) {
-  const label = getUniverseLabel(code);
-  const sido = resolveSidoFromUniverseCode(code);
-  return code.startsWith("SGG_") && sido
-    ? `${getUniverseLabel(sido).replace(/\s*전체$/, "")} ${label}` : label;
+  return comparisonScopeLabel(code);
 }
 
 export function isPublicPageRow(row: DbLatestRankBoardWeeklyRow) {

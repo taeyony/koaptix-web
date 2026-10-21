@@ -3,16 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 import { HomeV2Search } from "./v2/HomeV2Search";
-import { getMatchupSelectionPath } from "../../lib/koaptix/comparisonFacts";
-import { getRankingUniverseRegistry, getUniverseLabel } from "../../lib/koaptix/universes";
-import { formatPublicLocation, resolveSidoFromUniverseCode } from "../../lib/koaptix/districtIdentity";
+import { comparisonScopeLabel, getMatchupSelectionPath } from "../../lib/koaptix/comparisonFacts";
+import { getRankingUniverseRegistry } from "../../lib/koaptix/universes";
+import { formatPublicLocation } from "../../lib/koaptix/districtIdentity";
 import type { RankingItem } from "../../lib/koaptix/types";
 
 const regions = getRankingUniverseRegistry();
-function label(code: string) {
-  const province = resolveSidoFromUniverseCode(code);
-  return code.startsWith("SGG_") && province ? `${getUniverseLabel(province).replace(/\s*전체$/, "")} ${getUniverseLabel(code)}` : getUniverseLabel(code);
-}
 
 export function PlayMatchup() {
   const [universeCode, setUniverseCode] = useState("KOREA_ALL");
@@ -33,7 +29,7 @@ export function PlayMatchup() {
       <label className="flex flex-wrap items-center gap-3 text-control font-semibold text-ink">비교 지역
         <select value={universeCode} aria-label="두 단지를 비교할 지역" className="min-h-11 max-w-full rounded-lg border border-[var(--ko-border)] bg-[var(--ko-bg)] px-3 text-ink"
           onChange={event => { setUniverseCode(event.target.value); setSelected([null, null]); setError(null); }}>
-          {regions.map(region => <option key={region.code} value={region.code}>{label(region.code)}</option>)}
+          {regions.map(region => <option key={region.code} value={region.code}>{comparisonScopeLabel(region.code)}</option>)}
         </select>
       </label>
       <span className="text-caption text-muted">1. 지역 선택 → 2. 두 단지 검색 → 3. 비교</span>

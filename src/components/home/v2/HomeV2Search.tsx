@@ -268,7 +268,7 @@ export function HomeV2Search({
           }}
           className="min-w-0 flex-1 bg-transparent text-lg text-ink outline-none placeholder:text-muted"
         />
-        {query ? <button type="button" aria-label="검색어 지우기" onClick={() => changeQuery("")} className="ko-icon-button text-sm text-muted">×</button> : null}
+        {query ? <button type="button" aria-label="검색어 지우기" onClick={() => { changeQuery(""); inputRef.current?.focus(); }} className="ko-icon-button text-sm text-muted">×</button> : null}
         <button type="submit" aria-label={onSelectRankedItem ? `${label} 검색` : "전체 랭킹에서 검색"} className="shrink-0 rounded-lg bg-[var(--ko-accent-soft)] px-4 text-control font-semibold text-accent">
           검색
         </button>
